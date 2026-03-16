@@ -1,0 +1,293 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  super_admin
+  org_admin
+  manager
+  sales_user
+}
+
+enum LeadStatus {
+  new
+  contacted
+  replied
+  meeting_booked
+  qualified
+  disqualified
+  closed_won
+  closed_lost
+}
+
+enum LeadIntent {
+  hot
+  warm
+  cold
+}
+
+enum CampaignStatus {
+  draft
+  active
+  paused
+  completed
+  archived
+}
+
+enum EmailStatus {
+  queued
+  sent
+  opened
+  clicked
+  replied
+  bounced
+  failed
+}
+
+enum ScanStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  website     String?
+  industry    String?
+  logoUrl     String?
+  settings    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  leads       Lead[]
+  campaigns   Campaign[]
+  scanJobs    ScanJob[]
+  services    Service[]
+  apiKeys     ApiKey[]
+}
+
+model User {
+  id             String   @id @default(uuid())
+  organizationId String
+  email          String   @unique
+  name           String
+  passwordHash   String?
+  role           Role     @default(sales_user)
+  avatarUrl      String?
+  googleId       String?  @unique
+  isActive       Boolean  @default(true)
+  lastLoginAt    DateTime?
+  refreshToken   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  assignedLeads  Lead[]       @relation("AssignedLeads")
+  createdLeads   Lead[]       @relation("CreatedLeads")
+  emailsSent     EmailLog[]
+  activityLogs   ActivityLog[]
+  gmailToken     GmailToken?
+}
+
+model Service {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  keywords       String[]
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model Lead {
+  id             String     @id @default(uuid())
+  organizationId String
+  assignedToId   String?
+  createdById    String?
+
+  companyName    String
+  website        String?
+  linkedinUrl    String?
+  industry       String?
+  companySize    String?
+  location       String?
+  description    String?
+
+  contactName    String?
+  contactTitle   String?
+  contactEmail   String?
+  contactLinkedin String?
+
+  techStack      String[]
+  intentSignals  Json[]   @default([])
+  funding        Json?
+  jobPostings    Json[]   @default([])
+
+  leadScore      Int      @default(0)
+  intentScore    Int      @default(0)
+  intentLevel    LeadIntent @default(cold)
+  status         LeadStatus @default(new)
+
+  opportunity    String?
+  aiSummary      String?
+  aiPitch        String?
+  notes          String?
+
+  source         String?
+  sourceUrl      String?
+
+  lastContactedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  assignedTo     User?        @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  createdBy      User?        @relation("CreatedLeads", fields: [createdById], references: [id])
+  emails         EmailLog[]
+  activities     ActivityLog[]
+  campaignLeads  CampaignLead[]
+}
+
+model Campaign {
+  id             String         @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  status         CampaignStatus @default(draft)
+  subject        String?
+  bodyTemplate   String?
+  followUpDays   Int[]          @default([3, 7, 14])
+  settings       Json           @default("{}")
+  sentCount      Int            @default(0)
+  openCount      Int            @default(0)
+  replyCount     Int            @default(0)
+  meetingCount   Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  leads          CampaignLead[]
+  emails         EmailLog[]
+}
+
+model CampaignLead {
+  id         String   @id @default(uuid())
+  campaignId String
+  leadId     String
+  step       Int      @default(0)
+  addedAt    DateTime @default(now())
+
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  lead       Lead     @relation(fields: [leadId], references: [id])
+
+  @@unique([campaignId, leadId])
+}
+
+model EmailLog {
+  id             String      @id @default(uuid())
+  organizationId String?
+  leadId         String?
+  campaignId     String?
+  sentById       String?
+
+  toEmail        String
+  toName         String?
+  subject        String
+  body           String
+  status         EmailStatus @default(queued)
+  provider       String?
+  messageId      String?
+
+  openedAt       DateTime?
+  clickedAt      DateTime?
+  repliedAt      DateTime?
+  bouncedAt      DateTime?
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  lead           Lead?       @relation(fields: [leadId], references: [id])
+  campaign       Campaign?   @relation(fields: [campaignId], references: [id])
+  sentBy         User?       @relation(fields: [sentById], references: [id])
+}
+
+model ScanJob {
+  id             String     @id @default(uuid())
+  organizationId String
+  status         ScanStatus @default(pending)
+  services       String[]
+  targetIndustry String?
+  targetRegion   String?
+  progress       Int        @default(0)
+  leadsFound     Int        @default(0)
+  sources        Json       @default("{}")
+  error          String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime   @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model IntentSignal {
+  id          String   @id @default(uuid())
+  companyName String
+  website     String?
+  signalType  String
+  signalText  String
+  confidence  Int
+  sourceUrl   String?
+  source      String?
+  rawData     Json?
+  processed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model ActivityLog {
+  id             String   @id @default(uuid())
+  organizationId String?
+  userId         String?
+  leadId         String?
+  action         String
+  description    String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  user   User? @relation(fields: [userId], references: [id])
+  lead   Lead? @relation(fields: [leadId], references: [id])
+}
+
+model ApiKey {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  keyHash        String   @unique
+  lastUsedAt     DateTime?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model GmailToken {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
