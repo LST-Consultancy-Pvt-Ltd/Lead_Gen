@@ -1,38 +1,51 @@
 /**
- * discoveryController.js  —  REWRITTEN
+ * discoveryController.js
  *
- * FLOW CHANGE:
- *   OLD: scan → save lead → auto-run SignalHire + Apollo (wastes API credits)
- *   NEW: scan → save lead + company info only
- *        SignalHire / Apollo are triggered MANUALLY by user on the lead detail page
+ * Handles scan lifecycle:
+ *   - startScan         → service/position mode → Google Jobs engine
+ *   - startProductScan  → product mode → AI profile + Google Jobs + organic buyer intent + RFP
  *
- * Background tasks after each lead save (lightweight, no paid enrichment APIs):
- *   Phase 1 — find company LinkedIn URL via SerpAPI
- *   Phase 2 — fetch basic company info via Clearbit (free) + SerpAPI Knowledge Graph
+ * After each lead is saved:
+ *   enrichCompanyInfoAsync runs in background (no SignalHire/Apollo)
+ *   → finds company LinkedIn URL via SerpAPI
+ *   → fetches basic company info via Clearbit (free) + SerpAPI Knowledge Graph
+ *
+ * SignalHire and Apollo are NOT called during scan.
+ * They are triggered manually by user from the lead detail page.
  */
 
 const prisma  = require('../utils/prisma');
 const { success, error } = require('../utils/response');
 const { runDiscoveryScan }        = require('../services/discoveryService');
-const { runProductDiscoveryScan } = require('../services/productDiscoveryService');
-const { findCompanyLinkedin, findDecisionMakerLinkedin, fetchBasicCompanyInfo } =
-  require('../services/linkedinEnrichmentService');
+const { runProductDiscoveryScan, generateProductPrompt } = require('../services/productDiscoveryService');
+const {
+  findCompanyLinkedin,
+  findDecisionMakerLinkedin,
+  fetchBasicCompanyInfo,
+} = require('../services/linkedinEnrichmentService');
 const { analyzeLeadIntent } = require('../services/aiService');
 const logger = require('../utils/logger');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// startScan — service / position based
+// POST /discovery/scan  — service / position based
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function startScan(req, res) {
   try {
-    const { targetIndustry, targetRegion, workTypes = [], sources = [] } = req.body;
+    const {
+      targetIndustry = '',
+      targetRegion   = '',
+      workTypes      = [],
+      sources        = [],
+    } = req.body;
 
     const services = await prisma.service.findMany({
       where: { organizationId: req.user.organizationId, isActive: true },
     });
-    if (!services.length)
-      return error(res, 'No services configured. Add at least one service first.', 422);
+
+    if (!services.length) {
+      return error(res, 'No services configured. Add at least one service/position first.', 422);
+    }
 
     const job = await prisma.scanJob.create({
       data: {
@@ -46,84 +59,106 @@ async function startScan(req, res) {
       },
     });
 
+    // Fire and forget — scan runs fully in background
     processScan(
       job.id,
       req.user.organizationId,
       services.map(s => s.name),
       { workTypes, sources, targetIndustry, targetRegion },
-    ).catch(err => logger.error('Scan failed', { jobId: job.id, err: err.message }));
+    ).catch(err =>
+      logger.error('Service scan failed', { jobId: job.id, err: err.message })
+    );
 
     return success(res, { id: job.id, jobId: job.id, status: 'running' }, 'Scan started', 202);
   } catch (err) {
-    logger.error('startScan', { err: err.message });
+    logger.error('startScan error', { err: err.message });
     return error(res, 'Failed to start scan', 500);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// startProductScan — product URL / description / document
+// POST /discovery/scan/product  — product based
+// Accepts any combination of URL + description + document
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function startProductScan(req, res) {
   try {
     const {
-      productType, productUrl, productDescription,
-      productDocumentText, targetIndustry, targetRegion,
-      workTypes = [], sources = [],
+      productType,
+      productUrl,
+      productDescription,
+      productDocumentText,
+      customPrompt,        // optional — user-edited prompt from the preview step
+      targetIndustry = '',
+      targetRegion   = '',
+      workTypes      = [],
+      sources        = [],
     } = req.body;
 
-    if (!productType)
-      return error(res, 'productType is required (url | description | document)', 422);
+    const hasUrl  = !!(productUrl         && productUrl.trim().length > 0);
+    const hasDesc = !!(productDescription  && productDescription.trim().length > 5);
+    const hasDoc  = !!(productDocumentText && productDocumentText.trim().length > 5);
 
-    let productInput;
-    if (productType === 'url') {
-      if (!productUrl) return error(res, 'productUrl is required', 422);
-      productInput = { type: 'url', url: productUrl, content: productDescription || '' };
-    } else if (productType === 'description') {
-      if (!productDescription) return error(res, 'productDescription is required', 422);
-      productInput = { type: 'description', content: productDescription };
-    } else if (productType === 'document') {
-      if (!productDocumentText) return error(res, 'productDocumentText is required', 422);
-      productInput = { type: 'document', content: productDocumentText };
-    } else {
-      return error(res, `Unknown productType: ${productType}`, 422);
+    if (!hasUrl && !hasDesc && !hasDoc) {
+      return error(res, 'Provide at least one: productUrl, productDescription, or productDocumentText', 422);
     }
+
+    // Build product input — pass ALL provided content to the AI for richest profile
+    const productInput = {
+      type:         productType || (hasUrl ? 'url' : hasDoc ? 'document' : 'description'),
+      url:          hasUrl  ? productUrl.trim()          : undefined,
+      description:  hasDesc ? productDescription.trim()  : undefined,
+      docText:      hasDoc  ? productDocumentText.trim() : undefined,
+      customPrompt: customPrompt?.trim() || undefined,  // user-edited prompt overrides AI generation
+      content: [
+        hasDesc ? productDescription.trim() : '',
+        hasDoc  ? productDocumentText.trim().slice(0, 2000) : '',
+      ].filter(Boolean).join('\n\n') || productUrl || '',
+    };
 
     const job = await prisma.scanJob.create({
       data: {
         organizationId: req.user.organizationId,
-        status:   'running',
-        services: [],
+        status:    'running',
+        services:  [],
         targetIndustry,
         targetRegion,
         sources: {
-          workTypes, sources, scanType: 'product', productType,
-          productUrl: productUrl || null,
+          workTypes,
+          sources,
+          scanType:   'product',
+          productType: productInput.type,
+          productUrl:  productUrl || null,
           productDescriptionSnippet: (productDescription || productDocumentText || '').slice(0, 200),
         },
         startedAt: new Date(),
       },
     });
 
-    processProductScan(job.id, req.user.organizationId, productInput, {
-      workTypes, sources, targetIndustry, targetRegion,
-    }).catch(err => logger.error('Product scan failed', { jobId: job.id, err: err.message }));
+    processProductScan(
+      job.id,
+      req.user.organizationId,
+      productInput,
+      { workTypes, sources, targetIndustry, targetRegion },
+    ).catch(err =>
+      logger.error('Product scan failed', { jobId: job.id, err: err.message })
+    );
 
     return success(res, { id: job.id, jobId: job.id, status: 'running' }, 'Product scan started', 202);
   } catch (err) {
-    logger.error('startProductScan', { err: err.message });
+    logger.error('startProductScan error', { err: err.message });
     return error(res, 'Failed to start product scan', 500);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// saveDiscoveredLead
-// Saves company/lead info only — NO SignalHire/Apollo here
-// Kicks off lightweight background enrichment (LinkedIn URL + basic info)
+// Save a discovered lead to DB
+// Deduplicates by company name + website
+// Fires background company-info enrichment (no paid APIs)
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function saveDiscoveredLead(organizationId, dl, services) {
-  // Skip duplicates by company name OR website
+  // Deduplicate
   const existing = await prisma.lead.findFirst({
     where: {
       organizationId,
@@ -135,22 +170,23 @@ async function saveDiscoveredLead(organizationId, dl, services) {
   });
   if (existing) return null;
 
+  // Score the lead (uses fallback if OpenAI unavailable — never blocks)
   const analysis = await analyzeLeadIntent(dl, services);
 
   const lead = await prisma.lead.create({
     data: {
       organizationId,
       companyName:     dl.companyName,
-      website:         dl.website           || null,
-      industry:        dl.industry          || null,
-      location:        dl.location          || null,
-      companySize:     dl.companySize        || null,
-      description:     dl.description       || null,
-      techStack:       dl.techStack         || [],
-      linkedinUrl:     dl.companyLinkedinUrl || dl.linkedinUrl || null,
-      contactName:     dl.contactName       || null,
-      contactTitle:    dl.contactTitle      || null,
-      contactLinkedin: dl.contactLinkedin   || null,
+      website:         dl.website            || null,
+      industry:        dl.industry           || null,
+      location:        dl.location           || null,
+      companySize:     dl.companySize         || null,
+      description:     dl.description        || null,
+      techStack:       dl.techStack          || [],
+      linkedinUrl:     dl.companyLinkedinUrl  || dl.linkedinUrl || null,
+      contactName:     dl.contactName        || null,
+      contactTitle:    dl.contactTitle       || null,
+      contactLinkedin: dl.contactLinkedin    || null,
       intentSignals: [{
         type:       dl.signalType  || 'general',
         text:       dl.signalText  || '',
@@ -167,6 +203,7 @@ async function saveDiscoveredLead(organizationId, dl, services) {
     },
   });
 
+  // Create intent signal record
   await prisma.intentSignal.create({
     data: {
       companyName: dl.companyName,
@@ -178,9 +215,9 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       source:      dl.source,
       processed:   true,
     },
-  }).catch(() => {});
+  }).catch(() => {}); // non-critical
 
-  // Lightweight background enrichment ONLY — no SignalHire/Apollo
+  // Background: find LinkedIn URL + basic company info (free sources only)
   enrichCompanyInfoAsync(lead).catch(err =>
     logger.error('enrichCompanyInfoAsync failed', { leadId: lead.id, err: err.message })
   );
@@ -189,15 +226,14 @@ async function saveDiscoveredLead(organizationId, dl, services) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// enrichCompanyInfoAsync
-// Runs in background after lead save. Finds LinkedIn URL + basic company info.
-// Does NOT call SignalHire or Apollo — those are user-triggered from lead page.
+// Background company info enrichment
+// Runs after each lead is saved — free sources only, no SignalHire/Apollo
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function enrichCompanyInfoAsync(lead) {
   let cur = { ...lead };
 
-  // ── Phase 1: Company LinkedIn URL ────────────────────────────────────────
+  // Phase 1: Find company LinkedIn URL
   if (!cur.linkedinUrl) {
     try {
       const li = await findCompanyLinkedin(cur);
@@ -210,11 +246,11 @@ async function enrichCompanyInfoAsync(lead) {
 
         if (Object.keys(patch).length > 0) {
           cur = await prisma.lead.update({ where: { id: cur.id }, data: patch });
-          logger.info('enrichCompanyInfo: LinkedIn saved', { leadId: cur.id });
+          logger.info('Company LinkedIn saved', { leadId: cur.id });
         }
       }
 
-      // Try targeted decision-maker profile search if still no contactLinkedin
+      // Try decision-maker LinkedIn if still none
       if (!cur.contactLinkedin) {
         const personUrl = await findDecisionMakerLinkedin(cur);
         if (personUrl) {
@@ -222,15 +258,14 @@ async function enrichCompanyInfoAsync(lead) {
             where: { id: cur.id },
             data:  { contactLinkedin: personUrl },
           });
-          logger.info('enrichCompanyInfo: person LinkedIn saved', { leadId: cur.id });
         }
       }
     } catch (err) {
-      logger.warn('enrichCompanyInfo Phase1 error', { leadId: cur.id, err: err.message });
+      logger.warn('LinkedIn enrichment failed', { leadId: cur.id, err: err.message });
     }
   }
 
-  // ── Phase 2: Basic company info (Clearbit free + SerpAPI KG) ─────────────
+  // Phase 2: Basic company info via Clearbit + SerpAPI Knowledge Graph
   if (!cur.industry || !cur.location || !cur.description) {
     try {
       const info = await fetchBasicCompanyInfo(cur);
@@ -243,27 +278,33 @@ async function enrichCompanyInfoAsync(lead) {
 
         if (Object.keys(patch).length > 0) {
           await prisma.lead.update({ where: { id: cur.id }, data: patch });
-          logger.info('enrichCompanyInfo: basic info saved', {
-            leadId: cur.id, fields: Object.keys(patch),
-          });
+          logger.info('Basic company info saved', { leadId: cur.id, fields: Object.keys(patch) });
         }
       }
     } catch (err) {
-      logger.warn('enrichCompanyInfo Phase2 error', { leadId: cur.id, err: err.message });
+      logger.warn('Company info enrichment failed', { leadId: cur.id, err: err.message });
     }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scan processors (background)
+// Scan processors (run in background)
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function processScan(jobId, orgId, services, filters = {}) {
   try {
-    const savedIds  = [];
-    const discovered = await runDiscoveryScan({ id: jobId }, services, filters,
-      async (progress, count) =>
-        prisma.scanJob.update({ where: { id: jobId }, data: { progress, leadsFound: count } }),
+    const savedIds = [];
+
+    const discovered = await runDiscoveryScan(
+      { id: jobId },
+      services,
+      filters,
+      async (progress, count) => {
+        await prisma.scanJob.update({
+          where: { id: jobId },
+          data:  { progress, leadsFound: count },
+        });
+      },
     );
 
     for (const dl of discovered) {
@@ -277,12 +318,19 @@ async function processScan(jobId, orgId, services, filters = {}) {
 
     await prisma.scanJob.update({
       where: { id: jobId },
-      data: { status: 'completed', progress: 100, leadsFound: savedIds.length, completedAt: new Date() },
+      data: {
+        status:      'completed',
+        progress:    100,
+        leadsFound:  savedIds.length,
+        completedAt: new Date(),
+      },
     });
-    logger.info('Scan completed', { jobId, leadsFound: savedIds.length });
+
+    logger.info('Service scan completed', { jobId, leadsFound: savedIds.length });
   } catch (err) {
     await prisma.scanJob.update({
-      where: { id: jobId }, data: { status: 'failed', error: err.message },
+      where: { id: jobId },
+      data:  { status: 'failed', error: err.message },
     }).catch(() => {});
     throw err;
   }
@@ -290,14 +338,22 @@ async function processScan(jobId, orgId, services, filters = {}) {
 
 async function processProductScan(jobId, orgId, productInput, filters = {}) {
   try {
-    const savedIds  = [];
+    const savedIds = [];
+
     const { leads: discovered, profile } = await runProductDiscoveryScan(
-      { id: jobId }, productInput, filters,
-      async (progress, count) =>
-        prisma.scanJob.update({ where: { id: jobId }, data: { progress, leadsFound: count } }),
+      { id: jobId },
+      productInput,
+      filters,
+      async (progress, count) => {
+        await prisma.scanJob.update({
+          where: { id: jobId },
+          data:  { progress, leadsFound: count },
+        });
+      },
     );
 
-    const keywords = [profile?.productSummary || ''].filter(Boolean);
+    const keywords = [profile?.productSummary || profile?.productName || ''].filter(Boolean);
+
     for (const dl of discovered) {
       try {
         const id = await saveDiscoveredLead(orgId, dl, keywords);
@@ -309,19 +365,26 @@ async function processProductScan(jobId, orgId, productInput, filters = {}) {
 
     await prisma.scanJob.update({
       where: { id: jobId },
-      data: { status: 'completed', progress: 100, leadsFound: savedIds.length, completedAt: new Date() },
+      data: {
+        status:      'completed',
+        progress:    100,
+        leadsFound:  savedIds.length,
+        completedAt: new Date(),
+      },
     });
+
     logger.info('Product scan completed', { jobId, leadsFound: savedIds.length });
   } catch (err) {
     await prisma.scanJob.update({
-      where: { id: jobId }, data: { status: 'failed', error: err.message },
+      where: { id: jobId },
+      data:  { status: 'failed', error: err.message },
     }).catch(() => {});
     throw err;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REST controllers
+// REST endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function getScanStatus(req, res) {
@@ -339,9 +402,9 @@ async function getScanStatus(req, res) {
 async function getScanHistory(req, res) {
   try {
     const jobs = await prisma.scanJob.findMany({
-      where: { organizationId: req.user.organizationId },
+      where:   { organizationId: req.user.organizationId },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take:    20,
     });
     return success(res, jobs);
   } catch (err) {
@@ -396,7 +459,7 @@ async function upsertServices(req, res) {
     const created = await prisma.service.createMany({
       data: services.map(s => ({
         organizationId: req.user.organizationId,
-        name:     typeof s === 'string' ? s        : s.name,
+        name:     typeof s === 'string' ? s     : s.name,
         keywords: typeof s === 'string' ? [s.toLowerCase()] : (s.keywords || [s.name.toLowerCase()]),
       })),
     });
@@ -406,8 +469,66 @@ async function upsertServices(req, res) {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /discovery/product/generate-prompt
+// Step 1 of product scan flow:
+//   User fills in product details → clicks "Generate Prompt"
+//   Backend calls AI → returns human-readable prompt
+//   Frontend shows prompt in editable textarea
+//   User reviews/edits → clicks "Scan" → startProductScan runs with the prompt
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function generateProductScanPrompt(req, res) {
+  try {
+    const {
+      productUrl,
+      productDescription,
+      productDocumentText,
+      targetIndustry = '',
+      targetRegion   = '',
+    } = req.body;
+
+    const hasUrl  = !!(productUrl         && productUrl.trim().length > 0);
+    const hasDesc = !!(productDescription  && productDescription.trim().length > 5);
+    const hasDoc  = !!(productDocumentText && productDocumentText.trim().length > 5);
+
+    if (!hasUrl && !hasDesc && !hasDoc) {
+      return error(res, 'Provide at least one: productUrl, productDescription, or productDocumentText', 422);
+    }
+
+    const productInput = {
+      url:         hasUrl  ? productUrl.trim()          : undefined,
+      description: hasDesc ? productDescription.trim()  : undefined,
+      docText:     hasDoc  ? productDocumentText.trim() : undefined,
+      content: [
+        hasDesc ? productDescription.trim() : '',
+        hasDoc  ? productDocumentText.trim().slice(0, 2000) : '',
+      ].filter(Boolean).join('\n\n') || productUrl || '',
+    };
+
+    const result = await generateProductPrompt(productInput, { targetIndustry, targetRegion });
+
+    return success(res, {
+      promptText:  result.promptText,
+      productName: result.productName,
+      buyerType:   result.buyerType,
+      summary:     result.summary,
+    }, 'Prompt generated');
+  } catch (err) {
+    logger.error('generateProductScanPrompt error', { err: err.message });
+    return error(res, 'Failed to generate prompt', 500);
+  }
+}
+
 module.exports = {
-  startScan, startProductScan,
-  getScanStatus, getScanHistory, getActiveScan,
-  getSignals, getServices, upsertServices,
+  startScan,
+  startProductScan,
+  generateProductScanPrompt,
+  getScanStatus,
+  getScanHistory,
+  getActiveScan,
+  getSignals,
+  getServices,
+  upsertServices,
 };

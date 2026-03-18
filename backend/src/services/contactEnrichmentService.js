@@ -78,9 +78,9 @@ async function enrichViaSignalHire(lead) {
   if (lead.contactLinkedin) {
     // Best: specific person profile
     candidate = { linkedin: normalizeLinkedinUrl(lead.contactLinkedin) };
-  } else if (lead.companyLinkedinUrl) {
+  } else if (lead.linkedinUrl) {
     // Company LinkedIn page — SignalHire can find decision-makers from it
-    candidate = { linkedin: normalizeLinkedinUrl(lead.companyLinkedinUrl) };
+    candidate = { linkedin: normalizeLinkedinUrl(lead.linkedinUrl) };
   } else if (domain && lead.contactName) {
     candidate = { name: lead.contactName, current_employer: domain };
   } else if (domain) {
@@ -182,35 +182,53 @@ async function enrichViaApollo(lead) {
     return null;
   }
 
+  // Build search body WITHOUT api_key (goes in header)
   const searchBody = {
-    api_key:  config.apollo.apiKey,
+    page: 1,
     per_page: 1,
   };
 
+  // Company targeting
   if (domain) {
-    searchBody.q_organization_domains = domain;
+    searchBody.organization_domains = [domain];
+  } else if (lead.companyName) {
+    searchBody.organization_names = [lead.companyName];
   }
 
+  // Contact targeting
   if (lead.contactName) {
     searchBody.q_keywords = lead.contactName;
   } else {
-    if (!domain) searchBody.q_organization_name = lead.companyName;
     // Target decision-makers when we have no specific name
     searchBody.person_titles = [
-      'CTO', 'VP Engineering', 'Head of Engineering', 'Head of IT',
-      'IT Manager', 'IT Director', 'Director of Technology',
-      'CEO', 'Founder', 'Co-Founder', 'Managing Director',
+      'CTO', 'Chief Technology Officer',
+      'VP Engineering', 'VP of Engineering',
+      'Head of Engineering', 'Head of IT',
+      'IT Manager', 'IT Director',
+      'Director of Technology', 'Director of IT',
+      'CEO', 'Chief Executive Officer',
+      'Founder', 'Co-Founder',
+      'Managing Director'
     ];
   }
 
-  logger.info('Apollo: starting people search', { domain, company: lead.companyName, leadId: lead.id });
+  logger.info('Apollo: starting people search', { 
+    domain,
+    company: lead.companyName,
+    leadId: lead.id
+  });
 
   try {
     const searchRes = await axios.post(
-      'https://api.apollo.io/v1/mixed_people/search',
+      'https://api.apollo.io/api/v1/mixed_people/api_search',
       searchBody,
       {
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        headers: { 
+          'Cache-Control': 'no-cache',
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
+          'X-Api-Key': config.apollo.apiKey
+        },
         timeout: 15000,
       }
     );
@@ -221,42 +239,92 @@ async function enrichViaApollo(lead) {
       return null;
     }
 
-    // Reveal email if not already returned
+    // Log what Apollo returned
+    logger.info('Apollo: raw person data', { 
+      leadId: lead.id,
+      personId: person.id,
+      firstName: person.first_name,
+      lastName: person.last_name,
+      name: person.name,
+      email: person.email,
+      title: person.title,
+      hasEmailStatus: person.email_status,
+      organizationName: person.organization?.name
+    });
+
+    // Try to get email - Apollo often requires reveal/match call
     let email = person.email ?? null;
+    
     if (!email && person.id) {
       try {
+        logger.info('Apollo: attempting email reveal', { personId: person.id });
+        
         const matchRes = await axios.post(
           'https://api.apollo.io/v1/people/match',
-          { api_key: config.apollo.apiKey, id: person.id, reveal_personal_emails: false },
-          { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+          { 
+            id: person.id,
+            reveal_personal_emails: true  // Changed to true to attempt reveal
+          },
+          {
+            headers: { 
+              'Cache-Control': 'no-cache',
+              'Content-Type': 'application/json',
+              'accept': 'application/json',
+              'X-Api-Key': config.apollo.apiKey
+            },
+            timeout: 10000
+          }
         );
+        
         email = matchRes.data?.person?.email ?? null;
+        logger.info('Apollo: email reveal result', { 
+          personId: person.id,
+          emailFound: !!email,
+          email: email
+        });
       } catch (matchErr) {
-        logger.warn('Apollo: people/match failed', { err: matchErr.message });
+        logger.warn('Apollo: people/match failed', { 
+          err: matchErr.message,
+          responseData: matchErr.response?.data
+        });
       }
+    }
+
+    // Construct full name - try multiple fields
+    let fullName = null;
+    if (person.first_name || person.last_name) {
+      fullName = [person.first_name, person.last_name].filter(Boolean).join(' ');
+    } else if (person.name) {
+      fullName = person.name;
     }
 
     const result = {
       email,
-      phone:       person.phone_numbers?.[0]?.raw_number ?? null,
+      phone: person.phone_numbers?.[0]?.raw_number ?? null,
       linkedinUrl: person.linkedin_url ?? null,
-      name:        [person.first_name, person.last_name].filter(Boolean).join(' ') || null,
-      title:       person.title ?? null,
-      source:      'apollo',
+      name: fullName,
+      title: person.title ?? null,
+      source: 'apollo',
     };
 
-    logger.info('Apollo: contact found', { leadId: lead.id, email: result.email });
+    logger.info('Apollo: final contact result', { 
+      leadId: lead.id,
+      email: result.email,
+      name: result.name,
+      title: result.title,
+      phone: result.phone
+    });
+    
     return result;
   } catch (err) {
-    logger.error('Apollo: search failed', { err: err.message, leadId: lead.id });
+    logger.error('Apollo: search failed', { 
+      err: err.message,
+      responseData: err.response?.data,
+      leadId: lead.id
+    });
     return null;
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Util: also used by old discoveryController.enrichAndSaveLead
-// ─────────────────────────────────────────────────────────────────────────────
-
 async function enrichLeadContacts(lead) {
   const sh = await enrichViaSignalHire(lead);
   if (sh && (sh.email || sh.phone || sh.linkedinUrl)) return sh;

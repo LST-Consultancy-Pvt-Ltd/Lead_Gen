@@ -167,6 +167,8 @@ export const leadsApi = {
 export const discoveryApi = {
   startScan: (data?: any) => api.post('/discovery/scan', data || {}),
   startProductScan: (data?: any) => api.post('/discovery/scan/product', data || {}),
+  // Step 1: generate AI prompt from product inputs — user reviews/edits before scanning
+  generateProductPrompt: (data: any) => api.post('/discovery/product/generate-prompt', data),
   getActiveScan: () => api.get('/discovery/scan/active'),
   getScanStatus: (jobId: string) => api.get(`/discovery/scan/${jobId}`),
   getScans: () => api.get('/discovery/scans'),

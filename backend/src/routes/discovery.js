@@ -7,7 +7,10 @@ router.use(authenticate);
 // Service-based scan
 router.post('/scan', authorize('org_admin', 'manager'), ctrl.startScan);
 
-// Product-based scan (URL / document / description)
+// Generate prompt preview before product scan (Step 1)
+router.post('/product/generate-prompt', authorize('org_admin', 'manager'), ctrl.generateProductScanPrompt);
+
+// Product-based scan with finalized prompt (Step 2)
 router.post('/scan/product', authorize('org_admin', 'manager'), ctrl.startProductScan);
 
 // Active running scan — for progress restore on refresh
