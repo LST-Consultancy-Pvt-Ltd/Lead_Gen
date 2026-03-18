@@ -293,7 +293,7 @@ async function apolloPeopleSearch(params, page = 1) {
   }
   try {
     const { data } = await axios.post(
-      `${APOLLO_BASE}/people/search`,   // use non-deprecated endpoint
+      `${APOLLO_BASE}/mixed_people/api_search`,   // current non-deprecated endpoint
       { page, per_page: 25, ...params },
       {
         headers: {
@@ -322,7 +322,7 @@ async function apolloCompanySearch(params, page = 1) {
   }
   try {
     const { data } = await axios.post(
-      `${APOLLO_BASE}/mixed_companies/search`,
+      `${APOLLO_BASE}/mixed_companies/api_search`,
       { page, per_page: 25, ...params },
       {
         headers: {
@@ -532,11 +532,11 @@ function jobToLead(jr, profile) {
 }
 
 function organicToLead(result, profile) {
-  if (!result.link || isAggregator(result.link)) return null;
-  const website     = normDomain(result.link);
-  const title       = result.title   || '';
-  const snippet     = result.snippet || '';
-  const companyName = title.replace(/[-–|].*$/, '').replace(/\s*(\.com|\.co\.uk|\.net|\.org).*$/i, '').trim().slice(0, 80);
+  if (!result.link) return null;
+  const website = normDomain(result.link);
+  const title   = result.title   || '';
+  const snippet = result.snippet || '';
+  const companyName = title.replace(/[-–|].*$/, '').trim().slice(0, 80);
   if (!companyName || companyName.length < 3) return null;
   return {
     companyName,
@@ -728,10 +728,18 @@ async function scoreBatch(leads, profile) {
     return `${i + 1}. Name: ${l.companyName} | Industry: ${l.industry || '?'} | Desc: ${desc || 'none'}`;
   }).join('\n');
 
-  const systemPrompt = `Classify each company as BUYER or SELLER for the given product.
-BUYER = company that PURCHASES, RENTS, or USES this product for their operations
-SELLER = company that SELLS, MANUFACTURES, RENTS OUT, or DISTRIBUTES the same product (competitor)
-Return ONLY valid JSON: {"results":[{"index":1,"classification":"BUYER","reason":"brief"},...]}}`;
+  const systemPrompt = `Classify each entry as:
+  BUYER = actual company that PURCHASES/USES this product
+  SELLER = company that SELLS/MAKES this product (competitor)  
+  AGGREGATOR = listing site, marketplace, RFP portal, job board — NOT an actual company
+
+For AGGREGATOR entries: if the snippet mentions an actual buyer company, 
+extract it in "extractedCompany" field.
+
+Return JSON: {"results":[
+  {"index":1, "classification":"BUYER", "reason":"..."},
+  {"index":3, "classification":"AGGREGATOR", "extractedCompany":"US Dept of Defense", "reason":"RFP listing site"}
+]}`;
 
   const userPrompt = `Product: ${profile.productSummary}
 Seller signals: ${(profile.sellerSignals || []).join(', ')}

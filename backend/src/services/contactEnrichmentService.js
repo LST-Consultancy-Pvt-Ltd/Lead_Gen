@@ -5,16 +5,15 @@
  *   enrichViaSignalHire(lead)  →  ContactResult | null
  *   enrichViaApollo(lead)      →  ContactResult | null
  *
- * KEY IMPROVEMENTS over previous version:
- *  - SignalHire now tries companyLinkedinUrl (company page search) first,
- *    then contactLinkedin (person profile), then domain, then company name
- *  - Apollo now searches by companyLinkedinUrl domain if available
- *  - Both pass richer candidate data to get better hit rates
+ * Apollo pipeline (mirrors working Python code):
+ *   GET  /organizations/enrich  → org_id   (FREE)
+ *   POST /mixed_people/api_search with organization_ids (FREE)
+ *   POST /people/match with { id: apollo_person_id }    (1 CREDIT)
  *
  * ContactResult {
  *   email       : string | null
  *   phone       : string | null
- *   linkedinUrl : string | null   ← contact person's linkedin
+ *   linkedinUrl : string | null
  *   name        : string | null
  *   title       : string | null
  *   source      : 'signalhire' | 'apollo'
@@ -39,7 +38,6 @@ function extractCompanyDomain(lead) {
   if (lead.website) {
     return lead.website.replace(/^https?:\/\//, '').split('/')[0].replace('www.', '');
   }
-  // Try to derive from companyLinkedinUrl (e.g. linkedin.com/company/techflow-inc → skip)
   if (lead.sourceUrl) {
     try {
       const hostname = new URL(lead.sourceUrl).hostname.replace('www.', '');
@@ -47,6 +45,13 @@ function extractCompanyDomain(lead) {
     } catch { return null; }
   }
   return null;
+}
+
+function normalizeLinkedinUrl(url) {
+  if (!url) return url;
+  if (url.startsWith('http')) return url;
+  if (/^(?:www\.)?linkedin\.com\//i.test(url)) return `https://www.${url.replace(/^www\./, '')}`;
+  return `https://www.linkedin.com/${url.replace(/^\//, '')}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -72,14 +77,11 @@ async function enrichViaSignalHire(lead) {
 
   const domain = extractCompanyDomain(lead);
 
-  // Build best candidate descriptor
   let candidate = null;
 
   if (lead.contactLinkedin) {
-    // Best: specific person profile
     candidate = { linkedin: normalizeLinkedinUrl(lead.contactLinkedin) };
   } else if (lead.linkedinUrl) {
-    // Company LinkedIn page — SignalHire can find decision-makers from it
     candidate = { linkedin: normalizeLinkedinUrl(lead.linkedinUrl) };
   } else if (domain && lead.contactName) {
     candidate = { name: lead.contactName, current_employer: domain };
@@ -112,7 +114,6 @@ async function enrichViaSignalHire(lead) {
       return null;
     }
 
-    // Poll up to 8 × 5s = 40s
     for (let attempt = 0; attempt < 8; attempt++) {
       await new Promise(r => setTimeout(r, 5000));
 
@@ -157,17 +158,93 @@ async function enrichViaSignalHire(lead) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Apollo.io
-//
-// Search priority:
-//   1. domain from website          → most accurate org match
-//   2. domain from companyLinkedin  → e.g. linkedin.com/company/techflow-inc → try techflow.com
-//   3. organization name            → fallback
-//
-// API flow:
-//   POST /v1/mixed_people/search → { people: [...] }
-//   POST /v1/people/match        → reveal email (if not present)
+// 2. Apollo.io — mirrors working Python pipeline:
+//   GET  /organizations/enrich  → org_id (FREE)
+//   POST /mixed_people/api_search with organization_ids (FREE)
+//   POST /people/match with { id } (1 CREDIT)
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function apolloEnrichOrganization(domain, headers) {
+  try {
+    const { data } = await axios.get(
+      'https://api.apollo.io/api/v1/organizations/enrich',
+      { headers, params: { domain }, timeout: 15000 }
+    );
+    const org = data?.organization;
+    if (!org) {
+      logger.info('Apollo: no organization found for domain', { domain });
+      return null;
+    }
+    logger.info('Apollo: org enriched', {
+      domain,
+      orgId: org.id,
+      name: org.name,
+      employees: org.estimated_num_employees,
+    });
+    return org;
+  } catch (err) {
+    logger.warn('Apollo: org enrich failed', { domain, err: err.message });
+    return null;
+  }
+}
+
+async function apolloSearchPeopleByOrgId(orgId, headers, jobTitle = null, perPage = 10) {
+  const payload = {
+    organization_ids: [orgId],
+    per_page: perPage,
+    page: 1,
+  };
+  if (jobTitle) {
+    payload.person_titles = [jobTitle];
+    payload.include_similar_titles = true;
+  }
+
+  try {
+    const { data } = await axios.post(
+      'https://api.apollo.io/api/v1/mixed_people/api_search',
+      payload,
+      { headers, timeout: 15000 }
+    );
+    const people = data?.people || [];
+    logger.info('Apollo: people search by org_id', { orgId, found: people.length });
+    return people;
+  } catch (err) {
+    logger.warn('Apollo: people search by org_id failed', { orgId, err: err.message });
+    return [];
+  }
+}
+
+async function apolloEnrichPersonById(apolloId, headers) {
+  const payload = {
+    id: apolloId,
+    reveal_personal_emails: false,
+    reveal_phone_number: false,
+  };
+
+  try {
+    const { data } = await axios.post(
+      'https://api.apollo.io/api/v1/people/match',
+      payload,
+      { headers, timeout: 15000 }
+    );
+    const person = data?.person;
+    if (!person) return null;
+
+    const org = person.organization || {};
+    return {
+      email:       person.email ?? null,
+      phone:       person.sanitized_phone ?? person.phone_numbers?.[0]?.raw_number ?? null,
+      linkedinUrl: person.linkedin_url ?? null,
+      name:        [person.first_name, person.last_name].filter(Boolean).join(' ') || null,
+      title:       person.title ?? null,
+      source:      'apollo',
+      company:     org.name ?? null,
+    };
+  } catch (err) {
+    logger.warn('Apollo: enrich person by ID failed', { apolloId, err: err.message });
+    return null;
+  }
+}
 
 async function enrichViaApollo(lead) {
   if (!config.apollo?.apiKey) {
@@ -176,166 +253,122 @@ async function enrichViaApollo(lead) {
   }
 
   const domain = extractCompanyDomain(lead);
-
   if (!domain && !lead.companyName) {
     logger.warn('Apollo: no domain or company name', { leadId: lead.id });
     return null;
   }
 
-  // Build search body WITHOUT api_key (goes in header)
-  const searchBody = {
-    page: 1,
-    per_page: 1,
+  const apolloHeaders = {
+    'accept': 'application/json',
+    'Cache-Control': 'no-cache',
+    'Content-Type': 'application/json',
+    'x-api-key': config.apollo.apiKey,
   };
 
-  // Company targeting
+  // ── Step 1: Enrich org by domain → get org_id (FREE) ──
+  let orgId = null;
   if (domain) {
-    searchBody.organization_domains = [domain];
-  } else if (lead.companyName) {
-    searchBody.organization_names = [lead.companyName];
+    const org = await apolloEnrichOrganization(domain, apolloHeaders);
+    orgId = org?.id || null;
   }
 
-  // Contact targeting
-  if (lead.contactName) {
-    searchBody.q_keywords = lead.contactName;
-  } else {
-    // Target decision-makers when we have no specific name
-    searchBody.person_titles = [
-      'CTO', 'Chief Technology Officer',
-      'VP Engineering', 'VP of Engineering',
-      'Head of Engineering', 'Head of IT',
-      'IT Manager', 'IT Director',
-      'Director of Technology', 'Director of IT',
-      'CEO', 'Chief Executive Officer',
-      'Founder', 'Co-Founder',
-      'Managing Director'
-    ];
+  // ── Step 2: Search people by org_id (FREE) ──
+  let people = [];
+  if (orgId) {
+    for (const title of ['CEO', 'CTO', 'Founder', 'Managing Director', 'Director']) {
+      people = await apolloSearchPeopleByOrgId(orgId, apolloHeaders, title, 5);
+      if (people.length > 0) break;
+    }
+    if (people.length === 0) {
+      people = await apolloSearchPeopleByOrgId(orgId, apolloHeaders, null, 10);
+    }
   }
 
-  logger.info('Apollo: starting people search', { 
-    domain,
-    company: lead.companyName,
-    leadId: lead.id
-  });
-
-  try {
-    const searchRes = await axios.post(
-      'https://api.apollo.io/api/v1/mixed_people/api_search',
-      searchBody,
-      {
-        headers: { 
-          'Cache-Control': 'no-cache',
-          'Content-Type': 'application/json',
-          'accept': 'application/json',
-          'X-Api-Key': config.apollo.apiKey
-        },
-        timeout: 15000,
-      }
-    );
-
-    const person = searchRes.data?.people?.[0];
-    if (!person) {
-      logger.info('Apollo: no person found', { domain, leadId: lead.id });
-      return null;
-    }
-
-    // Log what Apollo returned
-    logger.info('Apollo: raw person data', { 
-      leadId: lead.id,
-      personId: person.id,
-      firstName: person.first_name,
-      lastName: person.last_name,
-      name: person.name,
-      email: person.email,
-      title: person.title,
-      hasEmailStatus: person.email_status,
-      organizationName: person.organization?.name
-    });
-
-    // Try to get email - Apollo often requires reveal/match call
-    let email = person.email ?? null;
-    
-    if (!email && person.id) {
-      try {
-        logger.info('Apollo: attempting email reveal', { personId: person.id });
-        
-        const matchRes = await axios.post(
-          'https://api.apollo.io/v1/people/match',
-          { 
-            id: person.id,
-            reveal_personal_emails: true  // Changed to true to attempt reveal
-          },
-          {
-            headers: { 
-              'Cache-Control': 'no-cache',
-              'Content-Type': 'application/json',
-              'accept': 'application/json',
-              'X-Api-Key': config.apollo.apiKey
-            },
-            timeout: 10000
-          }
-        );
-        
-        email = matchRes.data?.person?.email ?? null;
-        logger.info('Apollo: email reveal result', { 
-          personId: person.id,
-          emailFound: !!email,
-          email: email
-        });
-      } catch (matchErr) {
-        logger.warn('Apollo: people/match failed', { 
-          err: matchErr.message,
-          responseData: matchErr.response?.data
-        });
-      }
-    }
-
-    // Construct full name - try multiple fields
-    let fullName = null;
-    if (person.first_name || person.last_name) {
-      fullName = [person.first_name, person.last_name].filter(Boolean).join(' ');
-    } else if (person.name) {
-      fullName = person.name;
-    }
-
-    const result = {
-      email,
-      phone: person.phone_numbers?.[0]?.raw_number ?? null,
-      linkedinUrl: person.linkedin_url ?? null,
-      name: fullName,
-      title: person.title ?? null,
-      source: 'apollo',
+  // Fallback: domain/name search if org_id route failed
+  if (people.length === 0) {
+    logger.info('Apollo: org_id route found no people, falling back to domain/name search', { leadId: lead.id });
+    const searchBody = {
+      page: 1,
+      per_page: 5,
+      person_titles: [
+        'CEO', 'CTO', 'Founder', 'Co-Founder', 'Managing Director',
+        'VP Engineering', 'Head of IT', 'Director',
+      ],
     };
+    if (domain) {
+      searchBody.organization_domains = [domain];
+    } else if (lead.companyName) {
+      searchBody.organization_names = [lead.companyName];
+    }
 
-    logger.info('Apollo: final contact result', { 
-      leadId: lead.id,
-      email: result.email,
-      name: result.name,
-      title: result.title,
-      phone: result.phone
-    });
-    
-    return result;
-  } catch (err) {
-    logger.error('Apollo: search failed', { 
-      err: err.message,
-      responseData: err.response?.data,
-      leadId: lead.id
-    });
+    try {
+      const searchRes = await axios.post(
+        'https://api.apollo.io/api/v1/mixed_people/api_search',
+        searchBody,
+        { headers: apolloHeaders, timeout: 15000 }
+      );
+      people = searchRes.data?.people || [];
+    } catch (err) {
+      logger.error('Apollo: fallback search failed', { err: err.message, leadId: lead.id });
+    }
+  }
+
+  if (!people.length) {
+    logger.info('Apollo: no people found', { leadId: lead.id });
     return null;
   }
+
+  // ── Step 3: Enrich person by Apollo ID (1 CREDIT) ──
+  // Sort: people with has_email=true first
+  const sorted = [...people].sort((a, b) => {
+    if (a.has_email && !b.has_email) return -1;
+    if (!a.has_email && b.has_email) return 1;
+    return 0;
+  });
+
+  for (const person of sorted) {
+    const apolloId = person.id;
+    if (!apolloId) continue;
+
+    logger.info('Apollo: enriching person by ID', {
+      apolloId,
+      name: [person.first_name, person.last_name].filter(Boolean).join(' '),
+      title: person.title,
+      hasEmail: person.has_email,
+      leadId: lead.id,
+    });
+
+    const result = await apolloEnrichPersonById(apolloId, apolloHeaders);
+    if (result && (result.email || result.linkedinUrl)) {
+      logger.info('Apollo: contact found via person ID enrich', {
+        leadId: lead.id,
+        email: result.email,
+        name: result.name,
+      });
+      return result;
+    }
+  }
+
+  // Last fallback: return best search data as-is (no credit spent)
+  const best = sorted[0];
+  const fallback = {
+    email:       best.email ?? null,
+    phone:       best.phone_numbers?.[0]?.raw_number ?? null,
+    linkedinUrl: best.linkedin_url ?? null,
+    name:        [best.first_name, best.last_name_obfuscated || best.last_name].filter(Boolean).join(' ') || null,
+    title:       best.title ?? null,
+    source:      'apollo',
+  };
+  if (fallback.email || fallback.linkedinUrl) return fallback;
+
+  logger.info('Apollo: no usable contact data', { leadId: lead.id });
+  return null;
 }
+
 async function enrichLeadContacts(lead) {
   const sh = await enrichViaSignalHire(lead);
   if (sh && (sh.email || sh.phone || sh.linkedinUrl)) return sh;
   return enrichViaApollo(lead);
-}
-
-function normalizeLinkedinUrl(url) {
-  if (!url) return url;
-  if (url.startsWith('http')) return url;
-  if (/^(?:www\.)?linkedin\.com\//i.test(url)) return `https://www.${url.replace(/^www\./, '')}`;
-  return `https://www.linkedin.com/${url.replace(/^\//, '')}`;
 }
 
 module.exports = { enrichViaSignalHire, enrichViaApollo, enrichLeadContacts, normalizeLinkedinUrl };

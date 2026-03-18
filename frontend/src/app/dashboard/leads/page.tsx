@@ -53,9 +53,9 @@ export default function LeadsPage() {
           <button className="btn-ghost" onClick={handleExport}>
             <Download size={14} /> Export CSV
           </button>
-          <Link href="/dashboard/leads/new" className="btn-primary">
+          {/* <Link href="/dashboard/leads/new" className="btn-primary">
             <Plus size={14} /> Add Lead
-          </Link>
+          </Link> */}
         </div>
       </div>
 

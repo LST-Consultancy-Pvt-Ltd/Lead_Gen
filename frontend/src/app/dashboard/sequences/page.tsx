@@ -3,7 +3,7 @@ import { GitBranch, Plus, CheckCircle2 } from 'lucide-react';
 import { Badge } from '../../../components/ui';
 
 const DEMO_SEQUENCE = {
-  name: 'NetSuite Outreach Sequence',
+  name: 'Outreach Sequence',
   contacts: 42,
   steps: [
     { day: 'Day 1', action: 'Send intro email', template: 'NetSuite Integration Intro', status: 'active' },

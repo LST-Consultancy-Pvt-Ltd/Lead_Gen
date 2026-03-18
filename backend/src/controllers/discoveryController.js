@@ -6,7 +6,7 @@
  *   - startProductScan  → product mode → AI profile + Google Jobs + organic buyer intent + RFP
  *
  * After each lead is saved:
- *   enrichCompanyInfoAsync runs in background (no SignalHire/Apollo)
+ *   runBackgroundEnrichment runs in background after save
  *   → finds company LinkedIn URL via SerpAPI
  *   → fetches basic company info via Clearbit (free) + SerpAPI Knowledge Graph
  *
@@ -18,11 +18,7 @@ const prisma  = require('../utils/prisma');
 const { success, error } = require('../utils/response');
 const { runDiscoveryScan }        = require('../services/discoveryService');
 const { runProductDiscoveryScan, generateProductPrompt } = require('../services/productDiscoveryService');
-const {
-  findCompanyLinkedin,
-  findDecisionMakerLinkedin,
-  fetchBasicCompanyInfo,
-} = require('../services/linkedinEnrichmentService');
+const { runBackgroundEnrichment } = require('../services/leadEnrichmentPipeline');
 const { analyzeLeadIntent } = require('../services/aiService');
 const logger = require('../utils/logger');
 
@@ -217,79 +213,13 @@ async function saveDiscoveredLead(organizationId, dl, services) {
     },
   }).catch(() => {}); // non-critical
 
-  // Background: find LinkedIn URL + basic company info (free sources only)
-  enrichCompanyInfoAsync(lead).catch(err =>
-    logger.error('enrichCompanyInfoAsync failed', { leadId: lead.id, err: err.message })
+  // Background: run full enrichment pipeline (domain, industry, LinkedIn, Clearbit, KG)
+  runBackgroundEnrichment(lead, prisma).catch(err =>
+    logger.error('runBackgroundEnrichment failed', { leadId: lead.id, err: err.message })
   );
 
   return lead.id;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Background company info enrichment
-// Runs after each lead is saved — free sources only, no SignalHire/Apollo
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function enrichCompanyInfoAsync(lead) {
-  let cur = { ...lead };
-
-  // Phase 1: Find company LinkedIn URL
-  if (!cur.linkedinUrl) {
-    try {
-      const li = await findCompanyLinkedin(cur);
-      if (li) {
-        const patch = {};
-        if (li.companyLinkedinUrl && !cur.linkedinUrl)
-          patch.linkedinUrl = li.companyLinkedinUrl;
-        if (li.contactLinkedin && !cur.contactLinkedin)
-          patch.contactLinkedin = li.contactLinkedin;
-
-        if (Object.keys(patch).length > 0) {
-          cur = await prisma.lead.update({ where: { id: cur.id }, data: patch });
-          logger.info('Company LinkedIn saved', { leadId: cur.id });
-        }
-      }
-
-      // Try decision-maker LinkedIn if still none
-      if (!cur.contactLinkedin) {
-        const personUrl = await findDecisionMakerLinkedin(cur);
-        if (personUrl) {
-          cur = await prisma.lead.update({
-            where: { id: cur.id },
-            data:  { contactLinkedin: personUrl },
-          });
-        }
-      }
-    } catch (err) {
-      logger.warn('LinkedIn enrichment failed', { leadId: cur.id, err: err.message });
-    }
-  }
-
-  // Phase 2: Basic company info via Clearbit + SerpAPI Knowledge Graph
-  if (!cur.industry || !cur.location || !cur.description) {
-    try {
-      const info = await fetchBasicCompanyInfo(cur);
-      if (info) {
-        const patch = {};
-        if (info.industry    && !cur.industry)    patch.industry    = info.industry;
-        if (info.location    && !cur.location)    patch.location    = info.location;
-        if (info.companySize && !cur.companySize) patch.companySize = info.companySize;
-        if (info.description && !cur.description) patch.description = info.description;
-
-        if (Object.keys(patch).length > 0) {
-          await prisma.lead.update({ where: { id: cur.id }, data: patch });
-          logger.info('Basic company info saved', { leadId: cur.id, fields: Object.keys(patch) });
-        }
-      }
-    } catch (err) {
-      logger.warn('Company info enrichment failed', { leadId: cur.id, err: err.message });
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Scan processors (run in background)
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function processScan(jobId, orgId, services, filters = {}) {
   try {
