@@ -1,0 +1,579 @@
+{
+  "info": {
+    "name": "CRM Leads API",
+    "description": "Production-ready CRM Leads API with RBAC",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lead_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('jwt_token', response.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@company.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Leads",
+      "item": [
+        {
+          "name": "Get All Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "status",
+                  "value": "new",
+                  "disabled": true
+                },
+                {
+                  "key": "intent",
+                  "value": "hot",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "tech",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Leads with Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads?status=new&intent=hot&search=tech&sortBy=leadScore&sortDir=desc",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "new"
+                },
+                {
+                  "key": "intent",
+                  "value": "hot"
+                },
+                {
+                  "key": "search",
+                  "value": "tech"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "leadScore"
+                },
+                {
+                  "key": "sortDir",
+                  "value": "desc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Lead Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads/stats",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Get Lead by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Lead",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('lead_id', response.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"Tech Innovations Inc\",\n  \"website\": \"https://techinnovations.com\",\n  \"linkedinUrl\": \"https://linkedin.com/company/techinnovations\",\n  \"industry\": \"Technology\",\n  \"companySize\": \"50-100\",\n  \"location\": \"San Francisco, CA\",\n  \"description\": \"Leading software development company\",\n  \"contactName\": \"John Smith\",\n  \"contactTitle\": \"CTO\",\n  \"contactEmail\": \"john.smith@techinnovations.com\",\n  \"contactPhone\": \"+1-415-555-0123\",\n  \"contactLinkedin\": \"https://linkedin.com/in/johnsmith\",\n  \"techStack\": [\"React\", \"Node.js\", \"AWS\", \"PostgreSQL\"],\n  \"status\": \"new\",\n  \"intentLevel\": \"warm\",\n  \"notes\": \"Interested in NetSuite implementation\",\n  \"source\": \"linkedin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads",
+              "host": ["{{base_url}}"],
+              "path": ["leads"]
+            }
+          }
+        },
+        {
+          "name": "Create Lead - Minimal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"Simple Company\"  \n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads",
+              "host": ["{{base_url}}"],
+              "path": ["leads"]
+            }
+          }
+        },
+        {
+          "name": "Update Lead - Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"contacted\",\n  \"notes\": \"Initial contact made via email. Awaiting response.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Lead - Reassign (Manager/Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignedToId\": \"USER_ID_HERE\",\n  \"notes\": \"Reassigned to senior sales rep\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Lead - Full Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"Tech Innovations Corp\",\n  \"status\": \"qualified\",\n  \"intentLevel\": \"hot\",\n  \"contactPhone\": \"+1-415-555-9999\",\n  \"leadScore\": 85,\n  \"intentScore\": 75,\n  \"opportunity\": \"NetSuite ERP implementation - $150k opportunity\",\n  \"notes\": \"Highly qualified. Ready to move to proposal stage.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Lead (Admin Only)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activities",
+      "item": [
+        {
+          "name": "Get Lead Activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}/activities",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}", "activities"]
+            }
+          }
+        },
+        {
+          "name": "Create Activity - Call",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"call\",\n  \"description\": \"Discovery call completed. Discussed NetSuite implementation needs and budget. Customer is interested in proceeding.\",\n  \"metadata\": {\n    \"duration\": \"30 minutes\",\n    \"outcome\": \"positive\",\n    \"nextStep\": \"Send proposal\",\n    \"budget\": \"$150k\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}/activities",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}", "activities"]
+            }
+          }
+        },
+        {
+          "name": "Create Activity - Meeting",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"meeting\",\n  \"description\": \"Product demo scheduled for next Tuesday at 2 PM PST. Will showcase NetSuite features relevant to their business.\",\n  \"metadata\": {\n    \"scheduledDate\": \"2026-04-02T14:00:00Z\",\n    \"attendees\": [\"CTO\", \"CFO\", \"Operations Manager\"],\n    \"platform\": \"Zoom\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}/activities",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}", "activities"]
+            }
+          }
+        },
+        {
+          "name": "Create Activity - Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"email\",\n  \"description\": \"Sent follow-up email with case studies and pricing information. Included links to relevant resources.\",\n  \"metadata\": {\n    \"subject\": \"NetSuite Implementation - Case Studies & Pricing\",\n    \"attachments\": [\"case-study-1.pdf\", \"pricing-guide.pdf\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}/activities",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}", "activities"]
+            }
+          }
+        },
+        {
+          "name": "Create Activity - Demo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"demo\",\n  \"description\": \"Product demonstration completed. Showcased inventory management, financial reporting, and CRM integration. Customer was impressed.\",\n  \"metadata\": {\n    \"duration\": \"60 minutes\",\n    \"featuresShown\": [\"Inventory Management\", \"Financial Reporting\", \"CRM Integration\"],\n    \"customerFeedback\": \"Very impressed with the automation capabilities\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}/activities",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}", "activities"]
+            }
+          }
+        },
+        {
+          "name": "Create Activity - Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"note\",\n  \"description\": \"Internal note: Customer requires approval from board of directors before proceeding. Timeline is 2-3 weeks. Follow up on April 15th.\",\n  \"metadata\": {\n    \"priority\": \"high\",\n    \"followUpDate\": \"2026-04-15\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}/activities",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}", "activities"]
+            }
+          }
+        },
+        {
+          "name": "Create Activity - WhatsApp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"whatsapp\",\n  \"description\": \"Quick check-in via WhatsApp. Customer confirmed they're still interested and working on internal approvals.\",\n  \"metadata\": {\n    \"responseTime\": \"5 minutes\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/{{lead_id}}/activities",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "{{lead_id}}", "activities"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search & Filter Examples",
+      "item": [
+        {
+          "name": "Search by Company Name",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads?search=tech&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "tech"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter by Status - New Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads?status=new&sortBy=createdAt&sortDir=desc",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "new"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortDir",
+                  "value": "desc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter by Intent - Hot Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads?intent=hot&sortBy=leadScore&sortDir=desc",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "intent",
+                  "value": "hot"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "leadScore"
+                },
+                {
+                  "key": "sortDir",
+                  "value": "desc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Combined Filters - Hot Qualified Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads?status=qualified&intent=hot&sortBy=leadScore&sortDir=desc",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "qualified"
+                },
+                {
+                  "key": "intent",
+                  "value": "hot"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "leadScore"
+                },
+                {
+                  "key": "sortDir",
+                  "value": "desc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Assigned To Specific User (Manager/Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads?assignedTo=USER_ID_HERE",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "assignedTo",
+                  "value": "USER_ID_HERE"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -3,3 +3,78 @@ node_modules/
 .env.local
 .env.production
 .next/
+
+
+
+Build a CRM module UI for a this web application
+Requirements:
+
+1. Sidebar Navigation:
+
+* Add this crm in "Leads CRM"
+* Under this CRM, include:
+
+  * Leads
+  * Opportunities
+  * Activities
+
+2. Leads Page:
+
+* Display a table of leads with columns:
+
+  * Name
+  * Phone
+  * Email
+  * Status (New, Contacted, Qualified)
+  * Assigned To
+  * Next Follow-up Date
+* Add a "Create Lead" button
+* On click, open a modal form to create a lead
+
+3. Create Lead Form Fields:
+
+* Name (text)
+* Phone (text)
+* Email (text)
+* Source (dropdown: Meta, Google, Referral, Cold Outreach)
+* Requirement Type (dropdown: NetSuite, Salesforce, Development, Training)
+* Status (default: New)
+* Assigned To (dropdown - list of users)
+* Next Follow-up Date (date picker)
+
+4. API Integration:
+
+* Fetch leads from GET /api/leads
+* Create lead using POST /api/leads
+
+5. Role-based UI:
+
+* If user role is "Executive":
+
+  * Show only their leads
+* If "Manager":
+
+  * Show all leads
+* If "Admin":
+
+  * Full access
+
+6. Basic UI:
+
+* Use Tailwind for styling
+* Table should be clean and responsive
+* Modal should be centered and reusable
+
+7. Routing:
+
+* /crm/leads
+* /crm/opportunities
+* /crm/activities
+
+8. State Management:
+
+* Use React hooks (useState, useEffect)
+* Optional: React Query or Axios for API calls
+
+Goal:
+Build a clean, fast, minimal CRM UI focused on usability, not heavy design.

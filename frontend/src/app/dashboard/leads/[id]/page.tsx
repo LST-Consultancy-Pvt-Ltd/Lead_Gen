@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi } from '../../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner } from '../../../../components/ui';
+import { ActivitiesList } from '../../../../components/crm/ActivitiesList';
 import { getInitials, intentColors, statusColors } from '../../../../lib/utils';
 import {
   ArrowLeft, Zap, Send, Loader2, RefreshCw, Globe, Mail,
@@ -498,6 +499,11 @@ export default function LeadDetailPage() {
               </div>
             </div>
           )}
+
+          {/* ── Activities Timeline ──────────────────────────────────────── */}
+          <div className="card p-5">
+            <ActivitiesList leadId={id} />
+          </div>
         </div>
 
         {/* ── Right sidebar ─────────────────────────────────────────────── */}

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { leadsApi } from '../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner, EmptyState } from '../../../components/ui';
+import { CreateLeadModal } from '../../../components/crm/CreateLeadModal';
 import { getInitials, downloadBlob, intentColors, statusColors } from '../../../lib/utils';
 import { Users, Plus, Download, Search } from 'lucide-react';
 import Link from 'next/link';
@@ -13,6 +14,7 @@ export default function LeadsPage() {
   const [search, setSearch]           = useState('');
   const [intentFilter, setIntentFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Backend returns:
   // { success, data: Lead[], pagination: { total, page, limit, totalPages } }
@@ -53,9 +55,9 @@ export default function LeadsPage() {
           <button className="btn-ghost" onClick={handleExport}>
             <Download size={14} /> Export CSV
           </button>
-          {/* <Link href="/dashboard/leads/new" className="btn-primary">
+          <button className="btn-primary" onClick={() => setIsCreateModalOpen(true)}>
             <Plus size={14} /> Add Lead
-          </Link> */}
+          </button>
         </div>
       </div>
 
@@ -99,7 +101,16 @@ export default function LeadsPage() {
             icon={Users}
             title="No leads found"
             description="Run an AI scan to discover companies that need your services"
-            action={<Link href="/dashboard/lead-discovery" className="btn-primary">Run AI Scan</Link>}
+            action={
+              <div className="flex gap-2">
+                <Link href="/dashboard/lead-discovery" className="btn-primary">
+                  Run AI Scan
+                </Link>
+                <button onClick={() => setIsCreateModalOpen(true)} className="btn-ghost">
+                  <Plus size={14} /> Add Lead Manually
+                </button>
+              </div>
+            }
           />
         ) : (
           <div className="overflow-x-auto">
@@ -189,6 +200,12 @@ export default function LeadsPage() {
           </div>
         </div>
       )}
+
+      {/* Create Lead Modal */}
+      <CreateLeadModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+      />
     </div>
   );
 }

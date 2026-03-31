@@ -18,7 +18,7 @@ module.exports = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:4000/api/auth/google/callback',
   },
-  openai: { apiKey: process.env.OPENAI_API_KEY, model: 'gpt-4-turbo-preview' },
+  openai: { apiKey: process.env.OPENAI_API_KEY, model: 'gpt-4.1-mini' },
   serpapi: { key: process.env.SERPAPI_KEY },
   sendgrid: {
     apiKey: process.env.SENDGRID_API_KEY,

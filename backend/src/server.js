@@ -13,11 +13,12 @@ const { startScheduler } = require('./jobs/scanScheduler');
 
 // Routes
 const authRoutes = require('./routes/auth');
-const leadRoutes = require('./routes/leads');
+const leadRoutes = require('./routes/leads.routes'); // Updated to use new production-ready routes
 const discoveryRoutes = require('./routes/discovery');
 const campaignRoutes = require('./routes/campaigns');
 const analyticsRoutes = require('./routes/analytics');
 const teamRoutes = require('./routes/team');
+const activitiesRoutes = require('./routes/activities');
 
 const app = express();
 
@@ -62,6 +63,8 @@ app.use('/api/discovery', discoveryRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/team', teamRoutes);
+app.use('/api/users', teamRoutes); // Alias for /api/team for frontend compatibility
+app.use('/api/activities', activitiesRoutes);
 
 // ── Error Handling ────────────────────────────────────────────────────────
 app.use(notFound);

@@ -292,7 +292,7 @@ async function callOpenAI(systemPrompt, userPrompt, maxTokens = 600) {
   const client = getOpenAI();
   if (!client) throw new Error('OpenAI not configured');
   const res = await client.chat.completions.create({
-    model: config.openai.model || 'gpt-4-turbo-preview',
+    model: config.openai.model,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user',   content: userPrompt },

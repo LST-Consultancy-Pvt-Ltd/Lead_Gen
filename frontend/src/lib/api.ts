@@ -156,6 +156,7 @@ export const leadsApi = {
   update: (id: string, data: any) => api.patch(`/leads/${id}`, data),
   delete: (id: string) => api.delete(`/leads/${id}`),
   analyze: (id: string) => api.post(`/leads/${id}/analyze`),
+  enrich: (id: string) => api.post(`/leads/${id}/enrich`),
   enrichSignalHire: (id: string) => api.post(`/leads/${id}/enrich/signalhire`),
   enrichApollo: (id: string) => api.post(`/leads/${id}/enrich/apollo`),
   generateEmail: (id: string) => api.post(`/leads/${id}/generate-email`),
@@ -163,17 +164,43 @@ export const leadsApi = {
   export: () => api.get('/leads/export', { responseType: 'blob' }),
 };
 
-export const discoveryApi = {
-  startScan: (data?: any) => api.post('/discovery/scan', data || {}),
-  startProductScan: (data?: any) => api.post('/discovery/scan/product', data || {}),
-  // Step 1: generate AI prompt from product inputs — user reviews/edits before scanning
-  generateProductPrompt: (data: any) => api.post('/discovery/product/generate-prompt', data),
-  getActiveScan: () => api.get('/discovery/scan/active'),
-  getScanStatus: (jobId: string) => api.get(`/discovery/scan/${jobId}`),
-  getScans: () => api.get('/discovery/scans'),
-  getSignals: (params?: any) => api.get('/discovery/signals', { params }),
-  getServices: () => api.get('/discovery/services'),
-  updateServices: (services: any[]) => api.put('/discovery/services', { services }),
+export const activitiesApi = {
+  list: (params?: any) => api.get('/activities', { params }),
+  create: (data: any) => api.post('/activities', data),
+  update: (id: string, data: any) => api.patch(`/activities/${id}`, data),
+  delete: (id: string) => api.delete(`/activities/${id}`),
+};
+
+export const usersApi = {
+  list: () => api.get('/team'),
+  get: (id: string) => api.get(`/team/${id}`),
+  create: (data: any) => api.post('/team', data),
+  update: (id: string, data: any) => api.patch(`/team/${id}`, data),
+  delete: (id: string) => api.delete(`/team/${id}`),
+};
+
+export const accountsApi = {
+  list: (params?: any) => api.get('/accounts', { params }),
+  get: (id: string) => api.get(`/accounts/${id}`),
+  create: (data: any) => api.post('/accounts', data),
+  update: (id: string, data: any) => api.patch(`/accounts/${id}`, data),
+  delete: (id: string) => api.delete(`/accounts/${id}`),
+};
+
+export const contactsApi = {
+  list: (params?: any) => api.get('/contacts', { params }),
+  get: (id: string) => api.get(`/contacts/${id}`),
+  create: (data: any) => api.post('/contacts', data),
+  update: (id: string, data: any) => api.patch(`/contacts/${id}`, data),
+  delete: (id: string) => api.delete(`/contacts/${id}`),
+};
+
+export const opportunitiesApi = {
+  list: (params?: any) => api.get('/opportunities', { params }),
+  get: (id: string) => api.get(`/opportunities/${id}`),
+  create: (data: any) => api.post('/opportunities', data),
+  update: (id: string, data: any) => api.patch(`/opportunities/${id}`, data),
+  delete: (id: string) => api.delete(`/opportunities/${id}`),
 };
 
 export const campaignsApi = {
@@ -183,6 +210,18 @@ export const campaignsApi = {
   update: (id: string, data: any) => api.patch(`/campaigns/${id}`, data),
   addLeads: (id: string, leadIds: string[]) => api.post(`/campaigns/${id}/leads`, { leadIds }),
   launch: (id: string) => api.post(`/campaigns/${id}/launch`),
+};
+
+export const discoveryApi = {
+  startScan: (data?: any) => api.post('/discovery/scan', data || {}),
+  startProductScan: (data?: any) => api.post('/discovery/scan/product', data || {}),
+  generateProductPrompt: (data: any) => api.post('/discovery/product/generate-prompt', data),
+  getActiveScan: () => api.get('/discovery/scan/active'),
+  getScanStatus: (jobId: string) => api.get(`/discovery/scan/${jobId}`),
+  getScans: () => api.get('/discovery/scans'),
+  getSignals: (params?: any) => api.get('/discovery/signals', { params }),
+  getServices: () => api.get('/discovery/services'),
+  updateServices: (services: any[]) => api.put('/discovery/services', { services }),
 };
 
 export const analyticsApi = {
