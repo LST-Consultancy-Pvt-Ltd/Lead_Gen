@@ -16,7 +16,10 @@ function generateTokens(userId) {
 
 async function register(req, res) {
   try {
-    const { name, email, password, orgName } = req.body;
+    const name = (req.body.name || '').trim();
+    const email = (req.body.email || '').trim().toLowerCase();
+    const password = (req.body.password || '').trim();
+    const orgName = (req.body.orgName || '').trim();
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return error(res, 'Email already registered', 409);
@@ -47,8 +50,8 @@ async function register(req, res) {
 
 async function login(req, res) {
   try {
-    const { email, password } = req.body;
-    console.log("Login attempt",req.body);
+    const email = (req.body.email || '').trim().toLowerCase();
+    const password = (req.body.password || '').trim();
     const user = await prisma.user.findUnique({
       where: { email },
       // include: { organization: true },

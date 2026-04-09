@@ -4,28 +4,42 @@ import { usePathname } from 'next/navigation';
 import { cn } from '../../lib/utils';
 import { Avatar } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
+import { usePermissions, getRoleLabel } from '../../lib/rbac';
 import { getInitials } from '../../lib/utils';
 import {
-  LayoutDashboard, Search, Users, Zap, Mail, GitBranch,
-  BarChart3, UserCog, Plug2, Settings, Sparkles
+  LayoutDashboard, Users, TrendingUp, CheckSquare, GitBranch,
+  BarChart3, UserCog, Settings, Sparkles, Upload, DollarSign, Search, Zap,
+  Building2, UserCircle, Megaphone
 } from 'lucide-react';
-
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/lead-discovery', label: 'Lead Discovery', icon: Search },
-  { href: '/dashboard/leads', label: 'Leads CRM', icon: Users },
-  { href: '/dashboard/intent-signals', label: 'Intent Signals', icon: Zap },
-  { href: '/dashboard/email-campaigns', label: 'Email Campaigns', icon: Mail },
-  { href: '/dashboard/sequences', label: 'Sequences', icon: GitBranch },
-  { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/dashboard/team', label: 'Team', icon: UserCog },
-  { href: '/dashboard/integrations', label: 'Integrations', icon: Plug2 },
-  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
-];
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
   const user = useAuthStore(s => s.user);
+  const { isAdmin, isManager, canImportData } = usePermissions();
+  const canViewTeam = isAdmin || isManager;
+
+  const navItems = [
+    { href: '/dashboard',               label: 'Dashboard',      icon: LayoutDashboard, show: true },
+    { href: '/dashboard/lead-discovery',label: 'Lead Discovery', icon: Search,          show: canViewTeam },
+    { href: '/dashboard/intent-signals', label: 'Intent Signals',icon: Zap,             show: canViewTeam },
+    { href: '/dashboard/leads',          label: 'Leads CRM',     icon: Users,           show: true },
+    { href: '/dashboard/opportunities',  label: 'Opportunities', icon: DollarSign,      show: true },
+    // { href: '/dashboard/accounts',       label: 'Accounts',      icon: Building2,       show: isAdmin },
+    // { href: '/dashboard/contacts',       label: 'Contacts',      icon: UserCircle,      show: isAdmin },
+    { href: '/dashboard/activities',     label: 'Activities',    icon: CheckSquare,     show: true },
+    { href: '/dashboard/campaigns',      label: 'Campaigns',     icon: Megaphone,       show: isAdmin },
+    { href: '/dashboard/analytics',      label: 'Analytics',     icon: BarChart3,       show: canViewTeam },
+    { href: '/dashboard/team',           label: 'Team',          icon: UserCog,         show: canViewTeam },
+    // { href: '/dashboard/import',         label: 'Import Data',   icon: Upload,          show: canImportData },
+    { href: '/dashboard/integrations',   label: 'Integrations',  icon: TrendingUp,      show: isAdmin },
+    { href: '/dashboard/settings',       label: 'Settings',      icon: Settings,        show: isAdmin },
+  ].filter(item => item.show);
+
+  const roleBadgeClass = isAdmin
+    ? 'bg-emerald-500/15 text-emerald-400'
+    : isManager
+    ? 'bg-blue-500/15 text-blue-400'
+    : 'bg-slate-500/15 text-slate-400';
 
   return (
     <aside className={cn(
@@ -65,7 +79,9 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           {!collapsed && user && (
             <div className="overflow-hidden">
               <p className="text-xs font-semibold text-slate-200 truncate">{user.name}</p>
-              <p className="text-[10px] text-slate-500 truncate capitalize">{user.role.replace('_',' ')}</p>
+              <span className={cn('inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 leading-tight', roleBadgeClass)}>
+                {getRoleLabel(user.role)}
+              </span>
             </div>
           )}
         </div>

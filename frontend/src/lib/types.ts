@@ -1,10 +1,14 @@
 // ── User Types ─────────────────────────────────────────────────────────────
+export type UserRole = 'super_admin' | 'org_admin' | 'manager' | 'sales_user';
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'sales_manager' | 'sales_user';
+  role: UserRole;
   avatar?: string;
+  isActive?: boolean;
+  managerId?: string;
   createdAt: string;
 }
 
@@ -30,6 +34,27 @@ export interface Lead {
   assignedToId?: string;
   createdBy?: User;
   createdById?: string;
+  // Additional CRM fields
+  followUpDate?: string;
+  requirementType?: string[];
+  requirementDescription?: string;
+  budget?: string;
+  budgetRange?: string;
+  timeline?: string;
+  temperature?: 'hot' | 'warm' | 'cold';
+  disqualificationReason?: string;
+  campaignSource?: string;
+  notes?: string;
+  // Pipeline & UTM fields
+  pipeline?: string;
+  leadCost?: number;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  subSource?: string;
+  accountId?: string;
+  importBatchId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -123,7 +148,75 @@ export interface CreateLeadInput {
   source?: string;
   assignedToId?: string;
   status?: string;
+  // Pipeline & UTM fields
+  pipeline?: string;
+  followUpDate?: string;
+  requirementType?: string[];
+  requirementDescription?: string;
+  budgetRange?: string;
+  timeline?: string;
+  temperature?: 'hot' | 'warm' | 'cold';
+  disqualificationReason?: string;
+  leadCost?: number;
+  subSource?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
 }
+
+// ── Invitation Types ───────────────────────────────────────────────────────
+export interface Invitation {
+  id: string;
+  email: string;
+  role: 'org_admin' | 'manager' | 'sales_user';
+  status: 'pending' | 'accepted' | 'expired';
+  invitedById: string;
+  invitedBy?: User;
+  managerId?: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+// ── ImportBatch Types ──────────────────────────────────────────────────────
+export interface ImportBatch {
+  id: string;
+  fileName: string;
+  totalRows: number;
+  successRows: number;
+  failedRows: number;
+  status: 'processing' | 'completed' | 'failed';
+  mode: 'insert' | 'update' | 'upsert';
+  errors: any[];
+  assignedToId?: string;
+  createdAt: string;
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────
+export const ROLES = {
+  ORG_ADMIN: 'org_admin' as const,
+  MANAGER: 'manager' as const,
+  SALES_USER: 'sales_user' as const,
+};
+
+export const PIPELINE_OPTIONS = [
+  { value: 'netsuite', label: 'NetSuite Services' },
+  { value: 'salesforce', label: 'Salesforce Services' },
+  { value: 'dev', label: 'Custom Development' },
+  { value: 'saas', label: 'SaaS Products' },
+  { value: 'training', label: 'Training' },
+] as const;
+
+export const LEAD_SOURCES = [
+  'Meta Ads',
+  'Google Ads',
+  'Website Forms',
+  'Referrals',
+  'Cold Outreach',
+  'Emails',
+  'Calls',
+  'Events/Webinars',
+] as const;
 
 export interface CreateActivityInput {
   type: 'call' | 'meeting' | 'note' | 'email' | 'whatsapp';

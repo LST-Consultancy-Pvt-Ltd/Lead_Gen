@@ -1,12 +1,19 @@
-'use client';
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { activitiesApi } from '../../lib/api';
-import { Spinner, Avatar } from '../ui';
-import {Phone, Mail, Video, MessageSquare, FileText, Clock } from 'lucide-react';
-import { timeAgo, getInitials } from '../../lib/utils';
-import toast from 'react-hot-toast';
-import type { CreateActivityInput, Activity } from '../../lib/types';
+"use client";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { activitiesApi } from "../../lib/api";
+import { Spinner, Avatar } from "../ui";
+import {
+  Phone,
+  Mail,
+  Video,
+  MessageSquare,
+  FileText,
+  Clock,
+} from "lucide-react";
+import { timeAgo, getInitials } from "../../lib/utils";
+import toast from "react-hot-toast";
+import type { CreateActivityInput, Activity } from "../../lib/types";
 
 interface ActivitiesListProps {
   leadId?: string;
@@ -22,29 +29,29 @@ const activityIcons: Record<string, any> = {
 };
 
 const activityColors: Record<string, string> = {
-  call: 'text-blue-400 bg-blue-500/10',
-  meeting: 'text-purple-400 bg-purple-500/10',
-  note: 'text-slate-400 bg-slate-700/40',
-  email: 'text-amber-400 bg-amber-500/10',
-  whatsapp: 'text-emerald-400 bg-emerald-500/10',
+  call: "text-blue-400 bg-blue-500/10",
+  meeting: "text-purple-400 bg-purple-500/10",
+  note: "text-slate-400 bg-slate-700/40",
+  email: "text-amber-400 bg-amber-500/10",
+  whatsapp: "text-emerald-400 bg-emerald-500/10",
 };
 
 export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   const queryClient = useQueryClient();
   const [isAddingActivity, setIsAddingActivity] = useState(false);
   const [newActivity, setNewActivity] = useState<CreateActivityInput>({
-    type: 'call',
-    description: '',
-    outcome: '',
+    type: "call",
+    description: "",
+    outcome: "",
     leadId,
     opportunityId,
   });
 
   // Fetch activities
   const { data, isLoading } = useQuery({
-    queryKey: ['activities', leadId, opportunityId],
+    queryKey: ["activities", leadId, opportunityId],
     queryFn: () =>
-      activitiesApi.list({ leadId, opportunityId }).then(r => r.data),
+      activitiesApi.list({ leadId, opportunityId }).then((r) => r.data),
   });
 
   const activities = (data?.data || []) as Activity[];
@@ -53,26 +60,27 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   const createMutation = useMutation({
     mutationFn: (data: CreateActivityInput) => activitiesApi.create(data),
     onSuccess: () => {
-      toast.success('Activity added!');
-      queryClient.invalidateQueries({ queryKey: ['activities'] });
+      toast.success("Activity added!");
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setIsAddingActivity(false);
       setNewActivity({
-        type: 'call',
-        description: '',
-        outcome: '',
+        type: "call",
+        description: "",
+        outcome: "",
         leadId,
         opportunityId,
       });
     },
     onError: () => {
-      toast.error('Failed to add activity');
+      toast.error("Failed to add activity");
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newActivity.description.trim()) {
-      toast.error('Description is required');
+      toast.error("Description is required");
       return;
     }
     createMutation.mutate(newActivity);
@@ -86,7 +94,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
           onClick={() => setIsAddingActivity(!isAddingActivity)}
           className="btn-ghost text-xs"
         >
-          {isAddingActivity ? 'Cancel' : '+ Add Activity'}
+          {isAddingActivity ? "Cancel" : "+ Add Activity"}
         </button>
       </div>
 
@@ -95,11 +103,17 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
         <form onSubmit={handleSubmit} className="card p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label text-xs">Type</label>
+              <label htmlFor="activity-type" className="label text-xs">
+                Type
+              </label>
               <select
+                id="activity-type"
                 value={newActivity.type}
                 onChange={(e) =>
-                  setNewActivity({ ...newActivity, type: e.target.value as any })
+                  setNewActivity({
+                    ...newActivity,
+                    type: e.target.value as any,
+                  })
                 }
                 className="input h-9 text-xs"
               >
@@ -150,7 +164,11 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
               className="btn-primary flex-1 h-9 text-xs"
               disabled={createMutation.isPending}
             >
-              {createMutation.isPending ? <Spinner size={14} /> : 'Save Activity'}
+              {createMutation.isPending ? (
+                <Spinner size={14} />
+              ) : (
+                "Save Activity"
+              )}
             </button>
           </div>
         </form>
@@ -170,12 +188,15 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
         <div className="space-y-3">
           {activities.map((activity) => {
             const Icon = activityIcons[activity.type] || FileText;
-            const colorClass = activityColors[activity.type] || activityColors.note;
+            const colorClass =
+              activityColors[activity.type] || activityColors.note;
 
             return (
               <div key={activity.id} className="card p-4">
                 <div className="flex gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}
+                  >
                     <Icon size={18} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -185,14 +206,18 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                           {activity.type}
                         </span>
                         {activity.outcome && (
-                          <span className="text-xs text-slate-500">• {activity.outcome}</span>
+                          <span className="text-xs text-slate-500">
+                            • {activity.outcome}
+                          </span>
                         )}
                       </div>
                       <span className="text-xs text-slate-500 whitespace-nowrap">
                         {timeAgo(activity.createdAt)}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 mb-2">{activity.description}</p>
+                    <p className="text-xs text-slate-400 mb-2">
+                      {activity.description}
+                    </p>
                     {activity.createdBy && (
                       <div className="flex items-center gap-2 text-xs text-slate-500">
                         <Avatar

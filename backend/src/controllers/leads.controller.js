@@ -5,6 +5,7 @@
 
 const leadsService = require('../services/leads.service');
 const activityService = require('../services/activity.service');
+const opportunityService = require('../services/opportunity.service');
 const { success, error, paginated } = require('../utils/response');
 const logger = require('../utils/logger');
 
@@ -75,7 +76,7 @@ async function createLead(req, res) {
     const result = await leadsService.createLead(req.body, req.user);
     
     if (!result.success) {
-      return error(res, result.message, 400, { duplicateId: result.duplicateId });
+      return error(res, result.message, result.statusCode || 400);
     }
 
     // Log activity
@@ -113,7 +114,7 @@ async function updateLead(req, res) {
     const result = await leadsService.updateLead(leadId, req.body, req.user);
     
     if (!result.success) {
-      return error(res, result.message, 403);
+      return error(res, result.message, result.statusCode || 400);
     }
 
     // Log status change if status was updated
@@ -241,6 +242,138 @@ async function createLeadActivity(req, res) {
   }
 }
 
+/**
+ * PATCH /api/leads/:id/reassign
+ * Reassign a lead to a different team member
+ * Access: Manager and above only (enforced at route level)
+ */
+async function reassignLead(req, res) {
+  try {
+    const { id: leadId } = req.params;
+    const { assignedToId } = req.body;
+
+    const result = await leadsService.reassignLead(leadId, assignedToId, req.user);
+
+    if (!result.success) {
+      return error(res, result.message, result.statusCode || 400);
+    }
+
+    await activityService.logLeadAssigned(result.lead, req.user, assignedToId).catch(() => {});
+
+    logger.info('Lead reassigned', { leadId, assignedToId, byUserId: req.user.id });
+    return success(res, result.lead, 'Lead reassigned successfully');
+  } catch (err) {
+    logger.error('reassignLead error', { error: err.message, leadId: req.params.id });
+    return error(res, 'Failed to reassign lead', 500);
+  }
+}
+
+/**
+ * GET /api/leads/assignable-users
+ * Returns sales_user members that the current manager/admin can assign leads to.
+ * manager     → only their direct reports with role = sales_user
+ * org_admin / super_admin → all active sales_users in the org
+ * Access: Manager and above only (enforced at route level)
+ */
+async function getAssignableUsers(req, res) {
+  try {
+    const { id: callerId, organizationId, role } = req.user;
+    const prisma = require('../utils/prisma');
+
+    // sales_user always assigns leads to themselves — no dropdown needed
+    if (role === 'sales_user') {
+      return success(res, []);
+    }
+
+    let where = {
+      organizationId,
+      role: 'sales_user',
+      isActive: true,
+    };
+
+    // Manager can only assign to their own direct reports
+    if (role === 'manager') {
+      where.managerId = callerId;
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      select: { id: true, name: true, email: true, avatarUrl: true },
+      orderBy: { name: 'asc' },
+    });
+
+    return success(res, users);
+  } catch (err) {
+    logger.error('getAssignableUsers error', { error: err.message, userId: req.user.id });
+    return error(res, 'Failed to fetch assignable users', 500);
+  }
+}
+
+/**
+ * POST /api/leads/bulk-assign
+ * Bulk-assign multiple leads (by checkbox selection) to a sales executive.
+ * Access: Manager and above only (enforced at route level)
+ */
+async function bulkAssignLeads(req, res) {
+  try {
+    const { leadIds, assignedToId } = req.body;
+
+    const result = await leadsService.bulkAssignLeads(leadIds, assignedToId, req.user);
+
+    if (!result.success) {
+      return error(res, result.message, result.statusCode || 400);
+    }
+
+    logger.info('Leads bulk-assigned', {
+      count: result.assigned.length,
+      assignedToId,
+      byUserId: req.user.id,
+    });
+
+    return success(res, {
+      assigned: result.assigned,
+      notFound: result.notFound,
+      assignedTo: result.assignedTo,
+    }, `${result.assigned.length} lead(s) assigned to ${result.assignedTo.name} successfully`);
+  } catch (err) {
+    logger.error('bulkAssignLeads error', { error: err.message, userId: req.user.id });
+    return error(res, 'Failed to bulk assign leads', 500);
+  }
+}
+
+/**
+ * POST /api/leads/:id/convert
+ * Convert a qualified lead into an opportunity
+ * Access: All authenticated users (ownership enforced in service)
+ */
+async function convertLead(req, res) {
+  try {
+    const result = await opportunityService.convertLeadToOpportunity(req.params.id, req.user);
+
+    if (!result.success) {
+      return error(res, result.message, result.statusCode || 400);
+    }
+
+    logger.info('Lead converted to opportunity', { leadId: req.params.id, userId: req.user.id });
+    return success(res, result.opportunity, 'Lead converted to opportunity successfully', 201);
+  } catch (err) {
+    logger.error('convertLead error', { error: err.message, leadId: req.params.id });
+    return error(res, 'Failed to convert lead', 500);
+  }
+}
+
+/**
+ * GET /api/leads/config
+ * Returns lead form configuration (e.g. which statuses require follow-up)
+ * Access: All authenticated users
+ */
+function getLeadConfig(req, res) {
+  return success(res, {
+    followUpRequiredStatuses: leadsService.FOLLOW_UP_REQUIRED_STATUSES,
+    allStatuses: ['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost'],
+  });
+}
+
 module.exports = {
   getLeads,
   getLeadStats,
@@ -250,4 +383,9 @@ module.exports = {
   deleteLead,
   getLeadActivities,
   createLeadActivity,
+  reassignLead,
+  bulkAssignLeads,
+  getAssignableUsers,
+  convertLead,
+  getLeadConfig,
 };

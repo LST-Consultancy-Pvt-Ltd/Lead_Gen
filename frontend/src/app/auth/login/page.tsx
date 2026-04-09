@@ -19,10 +19,21 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data } = await authApi.login(form);
-      setAuth(data.data.user, data.data.accessToken, data.data.refreshToken);
-      router.replace('/dashboard');
+      console.log('Login response:', data);
+      
+      if (data?.data?.user && data?.data?.accessToken && data?.data?.refreshToken) {
+        setAuth(data.data.user, data.data.accessToken, data.data.refreshToken);
+        toast.success('Login successful!');
+        router.replace('/dashboard');
+      } else {
+        throw new Error('Invalid response format from server');
+      }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Login failed');
+      console.error('Login error:', err);
+      const errorMessage = err.response?.data?.message || 
+                          err.message || 
+                          'Login failed. Please check your credentials and try again.';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

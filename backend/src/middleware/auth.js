@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const config = require('../config');
 const prisma = require('../utils/prisma');
 const { error } = require('../utils/response');
+const { authorizeRole } = require('./rbac');
 
 const authenticate = async (req, res, next) => {
   try {
@@ -31,4 +32,4 @@ const authorize = (...roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, authorize };
+module.exports = { authenticate, authorize, authorizeRole };

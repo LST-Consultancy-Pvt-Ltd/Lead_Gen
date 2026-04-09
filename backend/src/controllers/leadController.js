@@ -3,6 +3,7 @@
  */
 const prisma  = require('../utils/prisma');
 const { success, error, paginated } = require('../utils/response');
+const dashboardEvents = require('../utils/dashboardEvents');
 const { analyzeLeadIntent, generateOutreachEmail } = require('../services/aiService');
 const { sendEmail } = require('../services/emailService');
 const logger = require('../utils/logger');
@@ -87,6 +88,7 @@ async function createLead(req, res) {
     const lead = await prisma.lead.create({ data });
     await prisma.activityLog.create({ data: { organizationId: req.user.organizationId, userId: req.user.id,
       leadId: lead.id, action: 'lead_created', description: `Lead created: ${lead.companyName}` } }).catch(()=>{});
+    dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, lead, 'Lead created', 201);
   } catch (err) {
     return error(res, 'Failed to create lead', 500);
@@ -100,6 +102,7 @@ async function updateLead(req, res) {
     const lead = await prisma.lead.update({ where: { id: req.params.id }, data: req.body });
     await prisma.activityLog.create({ data: { organizationId: req.user.organizationId, userId: req.user.id,
       leadId: lead.id, action: 'lead_updated', description: `Lead updated: ${lead.companyName}` } }).catch(()=>{});
+    dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, lead);
   } catch (err) {
     return error(res, 'Failed to update lead', 500);
@@ -111,6 +114,7 @@ async function deleteLead(req, res) {
     const existing = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!existing) return error(res, 'Lead not found', 404);
     await prisma.lead.delete({ where: { id: req.params.id } });
+    dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, null, 'Lead deleted');
   } catch (err) {
     return error(res, 'Failed to delete lead', 500);
@@ -128,6 +132,7 @@ async function analyzeLead(req, res) {
       intentLevel: analysis.intentLevel, opportunity: analysis.opportunity,
       aiSummary: analysis.aiSummary, aiPitch: analysis.aiPitch,
     }});
+    dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, { lead: updated, analysis });
   } catch (err) {
     return error(res, 'AI analysis failed', 500);

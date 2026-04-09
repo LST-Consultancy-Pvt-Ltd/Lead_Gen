@@ -19,6 +19,14 @@ const campaignRoutes = require('./routes/campaigns');
 const analyticsRoutes = require('./routes/analytics');
 const teamRoutes = require('./routes/team');
 const activitiesRoutes = require('./routes/activities');
+const opportunityRoutes = require('./routes/opportunities');
+const importRoutes = require('./routes/import');
+const invitationRoutes = require('./routes/invitations');
+const accountRoutes = require('./routes/accounts');
+const contactRoutes = require('./routes/contacts');
+const dropdownRoutes = require('./routes/dropdowns');
+const notificationRoutes = require('./routes/notifications');
+const searchRoutes = require('./routes/search');
 
 const app = express();
 
@@ -65,6 +73,14 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/users', teamRoutes); // Alias for /api/team for frontend compatibility
 app.use('/api/activities', activitiesRoutes);
+app.use('/api/opportunities', opportunityRoutes);
+app.use('/api/import', importRoutes);
+app.use('/api/invitations', invitationRoutes);
+app.use('/api/accounts', accountRoutes);
+app.use('/api/contacts', contactRoutes);
+app.use('/api/dropdowns', dropdownRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/search', searchRoutes);
 
 // ── Error Handling ────────────────────────────────────────────────────────
 app.use(notFound);

@@ -1,30 +1,275 @@
-const prisma = require('../utils/prisma');
+﻿const prisma = require('../utils/prisma');
 const { success, error } = require('../utils/response');
+
+// ─── Shared constants & date helpers ────────────────────────────
+const CLOSED_LEAD_STATUSES = ['disqualified', 'closed_won', 'closed_lost'];
+const CLOSED_OPP_STAGES = ['closed_won', 'closed_lost'];
+
+function _today() {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+}
+
+function _tomorrow(today) {
+  const t = new Date(today);
+  t.setDate(t.getDate() + 1);
+  return t;
+}
+
+function _weekStart(today) {
+  const d = today.getDay();
+  const ws = new Date(today);
+  ws.setDate(today.getDate() - (d === 0 ? 6 : d - 1)); // Monday
+  return ws;
+}
+
+function _parseDateRange(query) {
+  const today = _today();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  return {
+    from: query.dateFrom ? new Date(query.dateFrom) : thirtyDaysAgo,
+    to: query.dateTo ? new Date(query.dateTo) : _tomorrow(today),
+  };
+}
+
+/**
+ * Build role-scoped WHERE fragments for leads and opportunities.
+ *   sales_user → own records only
+ *   manager    → self + direct reports
+ *   admin      → whole organisation
+ */
+async function _buildScope(user) {
+  const { getTeamMemberIds, ADMIN_ROLES } = require('../middleware/rbac');
+  const orgId = user.organizationId;
+  const ids = await getTeamMemberIds(user);
+  const userIds = ids.includes(user.id) ? ids : [user.id, ...ids];
+  const isAll = ADMIN_ROLES.includes(user.role);
+  const assigned = isAll
+    ? {}
+    : user.role === 'sales_user'
+      ? { assignedToId: user.id }
+      : { assignedToId: { in: userIds } };
+
+  return {
+    orgId,
+    userIds,
+    leadWhere: { organizationId: orgId, ...assigned },
+    oppWhere: { organizationId: orgId, ...assigned },
+  };
+}
+
+// ─── Widget helpers (accept scoped WHERE fragments) ─────────────
+
+async function _wLeadsToday(leadWhere) {
+  const today = _today();
+  return prisma.lead.count({
+    where: { ...leadWhere, createdAt: { gte: today, lt: _tomorrow(today) } },
+  });
+}
+
+async function _wLeadsThisWeek(leadWhere) {
+  const today = _today();
+  return prisma.lead.count({
+    where: { ...leadWhere, createdAt: { gte: _weekStart(today) } },
+  });
+}
+
+async function _wFollowUpsDueToday(leadWhere, oppWhere) {
+  const today = _today();
+  const tomorrow = _tomorrow(today);
+  const [leads, opportunities] = await Promise.all([
+    prisma.lead.findMany({
+      where: { ...leadWhere, followUpDate: { gte: today, lt: tomorrow }, status: { notIn: CLOSED_LEAD_STATUSES } },
+      orderBy: { temperature: 'asc' }, // enum order hot→warm→cold, asc = Hot first
+      select: { id: true, companyName: true, contactName: true, followUpDate: true, status: true, temperature: true },
+    }),
+    prisma.opportunity.findMany({
+      where: { ...oppWhere, expectedCloseDate: { gte: today, lt: tomorrow }, stage: { notIn: CLOSED_OPP_STAGES } },
+      select: { id: true, title: true, stage: true, dealValue: true, expectedCloseDate: true,
+        assignedTo: { select: { id: true, name: true } } },
+    }),
+  ]);
+  return { leads, opportunities };
+}
+
+async function _wOverdueFollowUps(leadWhere, oppWhere) {
+  const today = _today();
+  const [leads, opportunities] = await Promise.all([
+    prisma.lead.findMany({
+      where: { ...leadWhere, followUpDate: { lt: today }, status: { notIn: CLOSED_LEAD_STATUSES } },
+      orderBy: { followUpDate: 'asc' },
+      select: { id: true, companyName: true, contactName: true, followUpDate: true, status: true, temperature: true,
+        assignedTo: { select: { id: true, name: true } } },
+      take: 50,
+    }),
+    prisma.opportunity.findMany({
+      where: { ...oppWhere, expectedCloseDate: { lt: today }, stage: { notIn: CLOSED_OPP_STAGES } },
+      orderBy: { expectedCloseDate: 'asc' },
+      select: { id: true, title: true, stage: true, dealValue: true, expectedCloseDate: true,
+        assignedTo: { select: { id: true, name: true } } },
+      take: 50,
+    }),
+  ]);
+  return { leads, opportunities };
+}
+
+async function _wOpenOpportunitiesByStage(oppWhere) {
+  const raw = await prisma.opportunity.groupBy({
+    by: ['stage'],
+    where: { ...oppWhere, stage: { notIn: CLOSED_OPP_STAGES } },
+    _count: { id: true },
+    _sum: { dealValue: true },
+  });
+  return raw.map((r) => ({ stage: r.stage, count: r._count.id, totalValue: r._sum.dealValue || 0 }));
+}
+
+async function _wConversionRate(leadWhere, since) {
+  const dateFilter = since ? { createdAt: { gte: since } } : {};
+  const [total, converted] = await Promise.all([
+    prisma.lead.count({ where: { ...leadWhere, ...dateFilter } }),
+    prisma.lead.count({ where: { ...leadWhere, ...dateFilter, opportunities: { some: {} } } }),
+  ]);
+  return { total, converted, rate: total > 0 ? ((converted / total) * 100).toFixed(1) : '0.0' };
+}
+
+async function _wLeadsByExecutive(orgId, userIds, dateFrom, dateTo) {
+  const members = await prisma.user.findMany({
+    where: { id: { in: userIds }, organizationId: orgId, isActive: true },
+    select: { id: true, name: true, email: true },
+  });
+  return Promise.all(
+    members.map(async (m) => ({
+      user: m,
+      count: await prisma.lead.count({
+        where: { organizationId: orgId, assignedToId: m.id, createdAt: { gte: dateFrom, lte: dateTo } },
+      }),
+    }))
+  );
+}
+
+async function _wConversionRateByExecutive(orgId, userIds, dateFrom, dateTo) {
+  const members = await prisma.user.findMany({
+    where: { id: { in: userIds }, organizationId: orgId, isActive: true },
+    select: { id: true, name: true, email: true },
+  });
+  return Promise.all(
+    members.map(async (m) => {
+      const w = { organizationId: orgId, assignedToId: m.id, createdAt: { gte: dateFrom, lte: dateTo } };
+      const [total, converted] = await Promise.all([
+        prisma.lead.count({ where: w }),
+        prisma.lead.count({ where: { ...w, opportunities: { some: {} } } }),
+      ]);
+      return { user: m, total, converted, rate: total > 0 ? ((converted / total) * 100).toFixed(1) : '0.0' };
+    })
+  );
+}
+
+async function _wPipelineByStage(oppWhere) {
+  const raw = await prisma.opportunity.groupBy({
+    by: ['stage'],
+    where: { ...oppWhere, stage: { notIn: CLOSED_OPP_STAGES } },
+    _count: { id: true },
+    _sum: { dealValue: true },
+  });
+  return raw.map((r) => ({ stage: r.stage, count: r._count.id, totalValue: r._sum.dealValue || 0 }));
+}
+
+async function _wStuckDeals(oppWhere, staleDays = 7) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - staleDays);
+  return prisma.opportunity.findMany({
+    where: {
+      ...oppWhere,
+      stage: { notIn: CLOSED_OPP_STAGES },
+      OR: [
+        { stageChangedAt: { not: null, lt: cutoff } },
+        { stageChangedAt: null, updatedAt: { lt: cutoff } },
+      ],
+    },
+    select: {
+      id: true, title: true, stage: true, dealValue: true, stageChangedAt: true, updatedAt: true,
+      assignedTo: { select: { id: true, name: true } },
+      lead: { select: { id: true, companyName: true } },
+    },
+    orderBy: { updatedAt: 'asc' },
+    take: 50,
+  });
+}
+
+async function _wLossReasonBreakdown(oppWhere, dateFrom, dateTo) {
+  const lost = await prisma.opportunity.findMany({
+    where: { ...oppWhere, stage: 'closed_lost', updatedAt: { gte: dateFrom, lte: dateTo } },
+    select: { wonLostReason: true, dealValue: true },
+  });
+  const map = {};
+  for (const o of lost) {
+    const r = o.wonLostReason || 'Not specified';
+    if (!map[r]) map[r] = { count: 0, totalValue: 0 };
+    map[r].count++;
+    map[r].totalValue += o.dealValue || 0;
+  }
+  return Object.entries(map)
+    .map(([reason, d]) => ({ reason, ...d }))
+    .sort((a, b) => b.count - a.count);
+}
+
+async function _wRevenueClosed(oppWhere, dateFrom, dateTo) {
+  const agg = await prisma.opportunity.aggregate({
+    where: { ...oppWhere, stage: 'closed_won', updatedAt: { gte: dateFrom, lte: dateTo } },
+    _sum: { dealValue: true },
+    _count: { id: true },
+  });
+  return { totalValue: agg._sum.dealValue || 0, dealCount: agg._count.id };
+}
+
+async function _wRevenueForecast(oppWhere) {
+  const opps = await prisma.opportunity.findMany({
+    where: { ...oppWhere, stage: { notIn: CLOSED_OPP_STAGES } },
+    select: { dealValue: true, probability: true },
+  });
+  const weighted = opps.reduce((sum, o) => sum + (o.dealValue || 0) * ((o.probability || 0) / 100), 0);
+  return { weightedValue: Math.round(weighted * 100) / 100, openDeals: opps.length };
+}
 
 async function getOverview(req, res) {
   try {
     const orgId = req.user.organizationId;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
     const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
+    const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
     const [
       totalLeads, leadsToday, hotLeads,
       emailsSent, emailsToday,
-      meetings, campaigns, scanJobs,
+      meetings, meetingsToday, campaigns, scanJobs,
     ] = await Promise.all([
       prisma.lead.count({ where: { organizationId: orgId } }),
       prisma.lead.count({ where: { organizationId: orgId, createdAt: { gte: today } } }),
       prisma.lead.count({ where: { organizationId: orgId, intentLevel: 'hot' } }),
       prisma.emailLog.count({ where: { organizationId: orgId, status: { in: ['sent', 'opened', 'replied'] } } }),
-      prisma.emailLog.count({ where: { organizationId: orgId, createdAt: { gte: today } } }),
+      prisma.emailLog.count({ where: { organizationId: orgId, createdAt: { gte: today, lt: tomorrow }, status: { in: ['sent', 'opened', 'replied'] } } }),
       prisma.lead.count({ where: { organizationId: orgId, status: 'meeting_booked' } }),
+      prisma.lead.count({ where: { organizationId: orgId, status: 'meeting_booked', updatedAt: { gte: today, lt: tomorrow } } }),
       prisma.campaign.count({ where: { organizationId: orgId, status: 'active' } }),
       prisma.scanJob.count({ where: { organizationId: orgId, status: 'completed' } }),
     ]);
 
-    const totalOpened = await prisma.emailLog.count({ where: { organizationId: orgId, openedAt: { not: null } } });
-    const totalReplied = await prisma.emailLog.count({ where: { organizationId: orgId, repliedAt: { not: null } } });
+    const [totalOpened, totalReplied, emailsThisWeek, repliesThisWeek, emailsLastWeek, repliesLastWeek] = await Promise.all([
+      prisma.emailLog.count({ where: { organizationId: orgId, openedAt: { not: null } } }),
+      prisma.emailLog.count({ where: { organizationId: orgId, repliedAt: { not: null } } }),
+      prisma.emailLog.count({ where: { organizationId: orgId, createdAt: { gte: weekAgo }, status: { in: ['sent', 'opened', 'replied'] } } }),
+      prisma.emailLog.count({ where: { organizationId: orgId, repliedAt: { gte: weekAgo } } }),
+      prisma.emailLog.count({ where: { organizationId: orgId, createdAt: { gte: twoWeeksAgo, lt: weekAgo }, status: { in: ['sent', 'opened', 'replied'] } } }),
+      prisma.emailLog.count({ where: { organizationId: orgId, repliedAt: { gte: twoWeeksAgo, lt: weekAgo } } }),
+    ]);
+
+    const thisWeekReplyRate = emailsThisWeek > 0 ? (repliesThisWeek / emailsThisWeek) * 100 : 0;
+    const lastWeekReplyRate = emailsLastWeek > 0 ? (repliesLastWeek / emailsLastWeek) * 100 : 0;
+    const delta = thisWeekReplyRate - lastWeekReplyRate;
+    const replyRateDelta = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% vs last week`;
 
     const topLeads = await prisma.lead.findMany({ where: { organizationId: orgId }, orderBy: { leadScore: 'desc' }, take: 5, select: { id: true, companyName: true, industry: true, companySize: true, leadScore: true, intentScore: true, intentLevel: true } });
     const hotToday = await prisma.lead.count({ where: { organizationId: orgId, intentLevel: 'hot', createdAt: { gte: today } } });
@@ -33,10 +278,10 @@ async function getOverview(req, res) {
     return success(res, {
       totalLeads, leadsToday, hotLeads, hotToday, warmLeads, coldLeads,
       emailsSent, emailsToday,
-      meetingsBooked: meetings, meetingsToday: 0, campaigns, scanJobs,
+      meetingsBooked: meetings, meetingsToday, campaigns, scanJobs,
       openRate: emailsSent > 0 ? ((totalOpened / emailsSent) * 100).toFixed(1) : 0,
       replyRate: emailsSent > 0 ? ((totalReplied / emailsSent) * 100).toFixed(1) : 0,
-      replyRateDelta: '+2.1% vs last week',
+      replyRateDelta,
       conversionRate: totalLeads > 0 ? ((meetings / totalLeads) * 100).toFixed(1) : 0,
       topLeads,
     });
@@ -105,4 +350,374 @@ async function getTopSources(req, res) {
   }
 }
 
-module.exports = { getOverview, getLeadsByMonth, getLeadsByStatus, getTopSources };
+/**
+ * GET /api/analytics/team-performance
+ * Org-wide per-user lead stats â€” manager/admin only
+ */
+async function getTeamPerformance(req, res) {
+  try {
+    const orgId = req.user.organizationId;
+    const members = await prisma.user.findMany({
+      where: { organizationId: orgId, isActive: true },
+      select: { id: true, name: true, email: true, role: true, avatarUrl: true },
+    });
+
+    const stats = await Promise.all(
+      members.map(async (member) => {
+        const [totalLeads, hotLeads, meetings, emailsSent, activitiesCount] = await Promise.all([
+          prisma.lead.count({ where: { organizationId: orgId, assignedToId: member.id } }),
+          prisma.lead.count({ where: { organizationId: orgId, assignedToId: member.id, intentLevel: 'hot' } }),
+          prisma.lead.count({ where: { organizationId: orgId, assignedToId: member.id, status: 'meeting_booked' } }),
+          prisma.emailLog.count({ where: { organizationId: orgId, sentById: member.id, status: { in: ['sent', 'opened', 'replied'] } } }),
+          prisma.activityLog.count({ where: { organizationId: orgId, userId: member.id } }),
+        ]);
+        return { ...member, totalLeads, hotLeads, meetings, emailsSent, activitiesCount };
+      })
+    );
+
+    return success(res, stats);
+  } catch (err) {
+    return error(res, 'Failed to fetch team performance', 500);
+  }
+}
+
+/**
+ * GET /api/analytics/my
+ * Personal stats for the authenticated user â€” all roles
+ */
+async function getMyAnalytics(req, res) {
+  try {
+    const userId = req.user.id;
+    const orgId = req.user.organizationId;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
+    const monthAgo = new Date(today); monthAgo.setDate(monthAgo.getDate() - 30);
+
+    const [
+      totalLeads, hotLeads, warmLeads,
+      newLeads, contactedLeads, qualifiedLeads, closedWon,
+      leadsThisWeek, leadsThisMonth,
+      emailsSent, emailsThisWeek,
+      activities, activitiesThisWeek,
+      meetings,
+    ] = await Promise.all([
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, intentLevel: 'hot' } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, intentLevel: 'warm' } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, status: 'new' } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, status: 'contacted' } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, status: 'qualified' } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, status: 'closed_won' } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, createdAt: { gte: weekAgo } } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, createdAt: { gte: monthAgo } } }),
+      prisma.emailLog.count({ where: { organizationId: orgId, sentById: userId } }),
+      prisma.emailLog.count({ where: { organizationId: orgId, sentById: userId, createdAt: { gte: weekAgo } } }),
+      prisma.activityLog.count({ where: { organizationId: orgId, userId } }),
+      prisma.activityLog.count({ where: { organizationId: orgId, userId, createdAt: { gte: weekAgo } } }),
+      prisma.lead.count({ where: { organizationId: orgId, assignedToId: userId, status: 'meeting_booked' } }),
+    ]);
+
+    const recentActivities = await prisma.activityLog.findMany({
+      where: { organizationId: orgId, userId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: { lead: { select: { id: true, companyName: true } } },
+    });
+
+    return success(res, {
+      leads: { total: totalLeads, hot: hotLeads, warm: warmLeads, new: newLeads, contacted: contactedLeads, qualified: qualifiedLeads, closedWon, thisWeek: leadsThisWeek, thisMonth: leadsThisMonth },
+      emails: { total: emailsSent, thisWeek: emailsThisWeek },
+      activities: { total: activities, thisWeek: activitiesThisWeek, recent: recentActivities },
+      meetings,
+    });
+  } catch (err) {
+    return error(res, 'Failed to fetch personal analytics', 500);
+  }
+}
+
+/**
+ * GET /api/analytics/dashboard/sales
+ * Sales Executive — 6 widgets, always scoped to the current user's own records.
+ * Widgets: leadsToday, leadsThisWeek, followUpsDueToday (Hot→Warm→Cold),
+ *          overdueFollowUps, openOpportunitiesByStage, conversionRateLast30Days
+ */
+async function getSalesDashboard(req, res) {
+  try {
+    const orgId = req.user.organizationId;
+    const userId = req.user.id;
+    const leadWhere = { organizationId: orgId, assignedToId: userId };
+    const oppWhere = { organizationId: orgId, assignedToId: userId };
+    const thirtyDaysAgo = new Date(_today());
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [
+      leadsToday,
+      leadsThisWeek,
+      followUpsDueToday,
+      overdueFollowUps,
+      openOpportunitiesByStage,
+      conversionRate,
+    ] = await Promise.all([
+      _wLeadsToday(leadWhere),
+      _wLeadsThisWeek(leadWhere),
+      _wFollowUpsDueToday(leadWhere, oppWhere),
+      _wOverdueFollowUps(leadWhere, oppWhere),
+      _wOpenOpportunitiesByStage(oppWhere),
+      _wConversionRate(leadWhere, thirtyDaysAgo),
+    ]);
+
+    return success(res, {
+      leadsToday,
+      leadsThisWeek,
+      followUpsDueToday,
+      overdueFollowUps,
+      openOpportunitiesByStage,
+      conversionRateLast30Days: conversionRate,
+    });
+  } catch (err) {
+    return error(res, 'Failed to fetch sales dashboard', 500);
+  }
+}
+
+/**
+ * GET /api/analytics/dashboard/manager
+ * Sales Manager — 8 widgets, full team scope, all filterable by date range.
+ * Query params: ?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD&staleDays=7
+ * Widgets: leadsByExecutive, conversionRateByExecutive, pipelineByStage,
+ *          stuckDeals, overdueFollowUps, lossReasonBreakdown,
+ *          revenueClosed, revenueForecast
+ */
+async function getManagerDashboard(req, res) {
+  try {
+    const { orgId, userIds, leadWhere, oppWhere } = await _buildScope(req.user);
+    const { from, to } = _parseDateRange(req.query);
+    const staleDays = parseInt(req.query.staleDays, 10) || 7;
+
+    const [
+      leadsByExecutive,
+      conversionRateByExecutive,
+      pipelineByStage,
+      stuckDeals,
+      overdueFollowUps,
+      lossReasonBreakdown,
+      revenueClosed,
+      revenueForecast,
+    ] = await Promise.all([
+      _wLeadsByExecutive(orgId, userIds, from, to),
+      _wConversionRateByExecutive(orgId, userIds, from, to),
+      _wPipelineByStage(oppWhere),
+      _wStuckDeals(oppWhere, staleDays),
+      _wOverdueFollowUps(leadWhere, oppWhere),
+      _wLossReasonBreakdown(oppWhere, from, to),
+      _wRevenueClosed(oppWhere, from, to),
+      _wRevenueForecast(oppWhere),
+    ]);
+
+    return success(res, {
+      leadsByExecutive,
+      conversionRateByExecutive,
+      pipelineByStage,
+      stuckDeals,
+      overdueFollowUps,
+      lossReasonBreakdown,
+      revenueClosed,
+      revenueForecast,
+    });
+  } catch (err) {
+    return error(res, 'Failed to fetch manager dashboard', 500);
+  }
+}
+
+/**
+ * GET /api/analytics/dashboard/ceo
+ * Admin / CEO — inherits all 8 manager widgets with system-wide data scope
+ * (all teams, all executives). Adds admin extras: totalActiveUsers,
+ * recentAuditLogs.
+ * Query params: ?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD&staleDays=7
+ */
+async function getCEODashboard(req, res) {
+  try {
+    const { orgId, userIds, leadWhere, oppWhere } = await _buildScope(req.user);
+    const { from, to } = _parseDateRange(req.query);
+    const staleDays = parseInt(req.query.staleDays, 10) || 7;
+
+    const [
+      leadsByExecutive,
+      conversionRateByExecutive,
+      pipelineByStage,
+      stuckDeals,
+      overdueFollowUps,
+      lossReasonBreakdown,
+      revenueClosed,
+      revenueForecast,
+      totalActiveUsers,
+      recentAuditLogs,
+    ] = await Promise.all([
+      _wLeadsByExecutive(orgId, userIds, from, to),
+      _wConversionRateByExecutive(orgId, userIds, from, to),
+      _wPipelineByStage(oppWhere),
+      _wStuckDeals(oppWhere, staleDays),
+      _wOverdueFollowUps(leadWhere, oppWhere),
+      _wLossReasonBreakdown(oppWhere, from, to),
+      _wRevenueClosed(oppWhere, from, to),
+      _wRevenueForecast(oppWhere),
+      prisma.user.count({ where: { organizationId: orgId, isActive: true } }),
+      prisma.auditLog.findMany({
+        where: { organizationId: orgId },
+        orderBy: { changedAt: 'desc' },
+        take: 20,
+        select: {
+          id: true, action: true, entityType: true, entityId: true, changedAt: true,
+          changedBy: { select: { id: true, name: true, email: true } },
+        },
+      }),
+    ]);
+
+    return success(res, {
+      leadsByExecutive,
+      conversionRateByExecutive,
+      pipelineByStage,
+      stuckDeals,
+      overdueFollowUps,
+      lossReasonBreakdown,
+      revenueClosed,
+      revenueForecast,
+      admin: {
+        totalActiveUsers,
+        recentAuditLogs,
+      },
+    });
+  } catch (err) {
+    return error(res, 'Failed to fetch CEO dashboard', 500);
+  }
+}
+
+/**
+ * GET /api/analytics/dashboard
+ * Fully dynamic — returns the right set of widgets based on the caller's role.
+ *   sales_user              → 6 executive widgets  (own records)
+ *   manager                 → 8 manager widgets    (team scope)
+ *   org_admin / super_admin → 8 manager widgets    (org-wide) + admin extras
+ * Query params: ?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD&staleDays=7
+ */
+async function getDashboard(req, res) {
+  try {
+    const { ADMIN_ROLES, MANAGER_AND_ABOVE } = require('../middleware/rbac');
+    const role = req.user.role;
+    const { orgId, userIds, leadWhere, oppWhere } = await _buildScope(req.user);
+
+    // ── Executive widgets (every role gets these) ───────────────
+    const thirtyDaysAgo = new Date(_today());
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const executivePromises = {
+      leadsToday:              _wLeadsToday(leadWhere),
+      leadsThisWeek:           _wLeadsThisWeek(leadWhere),
+      followUpsDueToday:       _wFollowUpsDueToday(leadWhere, oppWhere),
+      overdueFollowUps:        _wOverdueFollowUps(leadWhere, oppWhere),
+      openOpportunitiesByStage: _wOpenOpportunitiesByStage(oppWhere),
+      conversionRateLast30Days: _wConversionRate(leadWhere, thirtyDaysAgo),
+    };
+
+    // ── Manager widgets (manager + admin only) ──────────────────
+    let managerPromises = {};
+    if (MANAGER_AND_ABOVE.includes(role)) {
+      const { from, to } = _parseDateRange(req.query);
+      const staleDays = parseInt(req.query.staleDays, 10) || 7;
+      managerPromises = {
+        leadsByExecutive:           _wLeadsByExecutive(orgId, userIds, from, to),
+        conversionRateByExecutive:  _wConversionRateByExecutive(orgId, userIds, from, to),
+        pipelineByStage:            _wPipelineByStage(oppWhere),
+        stuckDeals:                 _wStuckDeals(oppWhere, staleDays),
+        lossReasonBreakdown:        _wLossReasonBreakdown(oppWhere, from, to),
+        revenueClosed:              _wRevenueClosed(oppWhere, from, to),
+        revenueForecast:            _wRevenueForecast(oppWhere),
+      };
+    }
+
+    // ── Admin extras (admin only) ───────────────────────────────
+    let adminPromises = {};
+    if (ADMIN_ROLES.includes(role)) {
+      adminPromises = {
+        totalActiveUsers: prisma.user.count({ where: { organizationId: orgId, isActive: true } }),
+        recentAuditLogs: prisma.auditLog.findMany({
+          where: { organizationId: orgId },
+          orderBy: { changedAt: 'desc' },
+          take: 20,
+          select: {
+            id: true, action: true, entityType: true, entityId: true, changedAt: true,
+            changedBy: { select: { id: true, name: true, email: true } },
+          },
+        }),
+      };
+    }
+
+    // Resolve all promises in parallel
+    const allKeys = { ...executivePromises, ...managerPromises, ...adminPromises };
+    const keys = Object.keys(allKeys);
+    const values = await Promise.all(Object.values(allKeys));
+    const data = {};
+    keys.forEach((k, i) => { data[k] = values[i]; });
+
+    // Nest admin extras under an `admin` key when present
+    if (ADMIN_ROLES.includes(role)) {
+      data.admin = {
+        totalActiveUsers: data.totalActiveUsers,
+        recentAuditLogs: data.recentAuditLogs,
+      };
+      delete data.totalActiveUsers;
+      delete data.recentAuditLogs;
+    }
+
+    // Attach metadata so the frontend knows what it received
+    data._meta = {
+      role,
+      scope: ADMIN_ROLES.includes(role) ? 'organization' : role === 'manager' ? 'team' : 'own',
+      widgetCount: keys.length - Object.keys(adminPromises).length + (ADMIN_ROLES.includes(role) ? 1 : 0),
+    };
+
+    return success(res, data);
+  } catch (err) {
+    return error(res, 'Failed to fetch dashboard', 500);
+  }
+}
+
+/**
+ * GET /api/analytics/dashboard/stream
+ * SSE endpoint — keeps connection open and pushes { event: "dashboard:change", entity }
+ * whenever a lead/opportunity/activity mutation occurs in the user's org.
+ * The frontend should call GET /api/analytics/dashboard on each event to refresh data.
+ */
+function getDashboardStream(req, res) {
+  const dashboardEvents = require('../utils/dashboardEvents');
+  const orgId = req.user.organizationId;
+  const role = req.user.role;
+
+  // SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no', // nginx passthrough
+  });
+
+  // Send initial heartbeat so client knows connection is live
+  res.write(`data: ${JSON.stringify({ event: 'connected', role, timestamp: new Date().toISOString() })}\n\n`);
+
+  // Keep-alive every 30s to prevent proxy/load-balancer timeouts
+  const heartbeat = setInterval(() => {
+    try { res.write(': heartbeat\n\n'); } catch (_) { /* noop */ }
+  }, 30000);
+
+  // Register this client
+  const removeClient = dashboardEvents.addClient(orgId, role, res);
+
+  // Cleanup on disconnect
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    removeClient();
+  });
+}
+
+module.exports = { getOverview, getLeadsByMonth, getLeadsByStatus, getTopSources, getTeamPerformance, getMyAnalytics, getCEODashboard, getManagerDashboard, getSalesDashboard, getDashboard, getDashboardStream };

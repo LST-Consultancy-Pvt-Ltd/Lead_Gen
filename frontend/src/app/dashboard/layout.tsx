@@ -10,16 +10,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const hasHydrated = useAuthStore(s => s._hasHydrated);
   const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
-    if (!isAuthenticated) {
+  }, []);
+
+  // Only redirect after hydration is complete
+  useEffect(() => {
+    if (mounted && hasHydrated && !isAuthenticated) {
       router.replace('/auth/login');
     }
-  }, [isAuthenticated, router]);
+  }, [mounted, hasHydrated, isAuthenticated, router]);
 
-  if (!mounted || !isAuthenticated) {
+  // Show loading until hydration is complete
+  if (!mounted || !hasHydrated) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-950">
+        <Spinner size={24}/>
+      </div>
+    );
+  }
+
+  // Show loading if not authenticated (while redirecting)
+  if (!isAuthenticated) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-950">
         <Spinner size={24}/>

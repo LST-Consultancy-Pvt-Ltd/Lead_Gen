@@ -43,3 +43,23 @@ export const statusColors: Record<string, string> = {
   closed_won: 'green',
   closed_lost: 'red',
 };
+
+export function getRoleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    super_admin: 'Super Admin',
+    org_admin: 'Admin',
+    manager: 'Manager',
+    sales_user: 'Sales',
+  };
+  return labels[role] || role;
+}
+
+export function getRoleBadgeColor(role: string): string {
+  const colors: Record<string, string> = {
+    super_admin: 'purple',
+    org_admin: 'blue',
+    manager: 'cyan',
+    sales_user: 'emerald',
+  };
+  return colors[role] || 'gray';
+}

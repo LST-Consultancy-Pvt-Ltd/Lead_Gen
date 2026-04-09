@@ -1,18 +1,22 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi } from '../../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner } from '../../../../components/ui';
 import { ActivitiesList } from '../../../../components/crm/ActivitiesList';
+import { RoleGuard } from '../../../../components/common/RoleGuard';
+import { usePermissions } from '../../../../lib/rbac';
+import { useAuthStore } from '../../../../store/authStore';
 import { getInitials, intentColors, statusColors } from '../../../../lib/utils';
 import {
   ArrowLeft, Zap, Send, Loader2, RefreshCw, Globe, Mail,
   User, Linkedin, Search, CheckCircle2, XCircle, Building2,
   MapPin, Users2, FileText, Phone, ExternalLink, Copy,
-  ChevronRight, Shield,
+  ChevronRight, Shield, Trash2, UserCog, Calendar, DollarSign,
+  Clock, TrendingUp, Edit2, Save, X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
 function cn(...cls: (string | boolean | undefined | null)[]) {
@@ -59,12 +63,13 @@ function InfoRow({
       </div>
       {copyable && (
         <button className="opacity-0 group-hover:opacity-100 transition-opacity btn-ghost text-[10px] py-1 px-2 flex-shrink-0"
+          title={`Copy ${label}`}
           onClick={() => { navigator.clipboard.writeText(value!); toast.success('Copied!'); }}>
           <Copy size={10} />
         </button>
       )}
       {href && (
-        <a href={href} target="_blank" rel="noopener noreferrer"
+        <a href={href} target="_blank" rel="noopener noreferrer" title={`Open ${label}`}
           className="opacity-0 group-hover:opacity-100 transition-opacity btn-ghost text-[10px] py-1 px-2 flex-shrink-0">
           <ExternalLink size={10} />
         </a>
@@ -192,6 +197,9 @@ function EnrichPanel({
 export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc     = useQueryClient();
+  const router = useRouter();
+  const permissions = usePermissions();
+  const user = useAuthStore((s) => s.user);
 
   const [enrichState, setEnrichState] = useState<EnrichState>({ status: 'idle' });
   const [aiTab,       setAiTab]       = useState<'analysis' | 'email'>('analysis');
@@ -199,6 +207,23 @@ export default function LeadDetailPage() {
   const [sendLoading, setSendLoading] = useState(false);
   const [editingLinkedin, setEditingLinkedin] = useState(false);
   const [linkedinInput,   setLinkedinInput]   = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<any>({});
+
+  // Auto-open edit form when navigated with ?edit=1
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('edit') === '1') {
+        // Remove the param from the URL silently, then open edit
+        const url = new URL(window.location.href);
+        url.searchParams.delete('edit');
+        window.history.replaceState(null, '', url.pathname + (url.search || ''));
+        setIsEditing(true);
+      }
+    }
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ['lead', id],
@@ -207,6 +232,24 @@ export default function LeadDetailPage() {
   });
 
   const lead: any = data;
+  const isOwnLead = lead?.assignedTo?.id === user?.id;
+  const canEditThisLead = permissions.canEditAllLeads || (permissions.canEditOwnLeads && isOwnLead);
+
+  // Populate editData when lead loads and edit mode is active
+  useEffect(() => {
+    if (isEditing && lead && Object.keys(editData).length === 0) {
+      setEditData({
+        status: lead.status,
+        followUpDate: lead.followUpDate ? lead.followUpDate.split('T')[0] : '',
+        disqualificationReason: lead.disqualificationReason || '',
+        contactName: lead.contactName || '',
+        contactEmail: lead.contactEmail || '',
+        contactPhone: lead.contactPhone || '',
+        contactTitle: lead.contactTitle || '',
+        notes: lead.notes || '',
+      });
+    }
+  }, [isEditing, lead]);
 
   const analyzeMutation = useMutation({
     mutationFn: () => leadsApi.analyze(id),
@@ -258,6 +301,27 @@ export default function LeadDetailPage() {
     onError: () => toast.error('Email generation failed'),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => leadsApi.delete(id),
+    onSuccess: () => {
+      toast.success('Lead deleted successfully');
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      router.push('/dashboard/leads');
+    },
+    onError: () => toast.error('Failed to delete lead'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => leadsApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead', id] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Lead updated successfully');
+      setIsEditing(false);
+    },
+    onError: () => toast.error('Failed to update lead'),
+  });
+
   async function handleSend() {
     if (!emailData) return;
     setSendLoading(true);
@@ -265,8 +329,55 @@ export default function LeadDetailPage() {
       await leadsApi.sendOutreach(id, emailData);
       toast.success('Email sent!');
       qc.invalidateQueries({ queryKey: ['lead', id] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
     } catch { toast.error('Send failed'); }
     finally { setSendLoading(false); }
+  }
+
+  function handleDelete() {
+    if (deleteConfirm) {
+      deleteMutation.mutate();
+    } else {
+      setDeleteConfirm(true);
+      setTimeout(() => setDeleteConfirm(false), 3000);
+    }
+  }
+
+  const FOLLOWUP_REQUIRED_STATUSES = ['new', 'contacted', 'replied'];
+  const originalFollowUp = lead?.followUpDate ? lead.followUpDate.split('T')[0] : '';
+
+  function handleSaveEdit() {
+    // Rule: follow-up date required only for active statuses
+    if (FOLLOWUP_REQUIRED_STATUSES.includes(editData.status)) {
+      if (!editData.followUpDate) {
+        toast.error('Follow-up date is required for this status');
+        return;
+      }
+      // Only validate past-date if the user changed the follow-up date
+      const dateChanged = editData.followUpDate !== originalFollowUp;
+      if (dateChanged) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const fud = new Date(`${editData.followUpDate}T00:00:00`);
+        if (fud < today) {
+          toast.error('Follow-up date cannot be in the past');
+          return;
+        }
+      }
+    }
+    // Rule: disqualification reason required when status is disqualified
+    if (editData.status === 'disqualified') {
+      const reason = editData.disqualificationReason?.trim() || '';
+      if (!reason) {
+        toast.error('Disqualification reason is required');
+        return;
+      }
+      if (reason.length < 10) {
+        toast.error('Disqualification reason must be at least 10 characters');
+        return;
+      }
+    }
+    updateMutation.mutate(editData);
   }
 
   if (isLoading) return <div className="flex items-center justify-center h-64"><Spinner size={24} /></div>;
@@ -323,6 +434,26 @@ export default function LeadDetailPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {canEditThisLead && (
+            <button
+              className="btn-ghost"
+              onClick={() => {
+                setIsEditing(true);
+                setEditData({
+                  status: lead.status,
+                  followUpDate: lead.followUpDate ? lead.followUpDate.split('T')[0] : '',
+                  disqualificationReason: lead.disqualificationReason || '',
+                  contactName: lead.contactName || '',
+                  contactEmail: lead.contactEmail || '',
+                  contactPhone: lead.contactPhone || '',
+                  contactTitle: lead.contactTitle || '',
+                  notes: lead.notes || '',
+                });
+              }}
+            >
+              <Edit2 size={14} /> Edit Lead
+            </button>
+          )}
           <button className="btn-ghost" onClick={() => analyzeMutation.mutate()}
             disabled={analyzeMutation.isPending}>
             {analyzeMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -335,6 +466,117 @@ export default function LeadDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Inline Edit Form ─────────────────────────────────────────────── */}
+      {isEditing && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title">Edit Lead</h2>
+            <button className="btn-ghost text-xs py-1 px-2" onClick={() => setIsEditing(false)}>
+              <X size={13} /> Cancel
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Status</label>
+              <select
+                className="input"
+                title="Lead status"
+                value={editData.status || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, status: e.target.value }))}
+              >
+                <option value="new">New</option>
+                <option value="contacted">Contacted</option>
+                <option value="replied">Replied</option>
+                <option value="meeting_booked">Meeting Booked</option>
+                <option value="qualified">Qualified</option>
+                <option value="disqualified">Disqualified</option>
+              </select>
+            </div>
+            {['new', 'contacted', 'replied'].includes(editData.status) && (
+              <div>
+                <label className="label">Follow-up Date <span className="text-red-400">*</span></label>
+                <input
+                  className="input"
+                  type="date"
+                  title="Follow-up date"
+                  value={editData.followUpDate || ''}
+                  onChange={(e) => setEditData((d: any) => ({ ...d, followUpDate: e.target.value }))}
+                />
+                {!editData.followUpDate && <p className="text-xs text-amber-400 mt-1">Required — select today or a future date</p>}
+              </div>
+            )}
+            {editData.status === 'disqualified' && (
+              <div className="sm:col-span-2">
+                <label className="label">Disqualification Reason <span className="text-red-400">*</span></label>
+                <textarea
+                  className="input h-20 resize-none"
+                  value={editData.disqualificationReason || ''}
+                  onChange={(e) => setEditData((d: any) => ({ ...d, disqualificationReason: e.target.value }))}
+                  placeholder="Explain why this lead is disqualified (min 10 characters)..."
+                />
+              </div>
+            )}
+            <div>
+              <label className="label">Contact Name</label>
+              <input
+                className="input"
+                value={editData.contactName || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, contactName: e.target.value }))}
+                placeholder="Contact full name"
+              />
+            </div>
+            <div>
+              <label className="label">Contact Email</label>
+              <input
+                className="input"
+                type="email"
+                value={editData.contactEmail || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, contactEmail: e.target.value }))}
+                placeholder="contact@company.com"
+              />
+            </div>
+            <div>
+              <label className="label">Contact Phone</label>
+              <input
+                className="input"
+                value={editData.contactPhone || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, contactPhone: e.target.value }))}
+                placeholder="+91 XXXXX XXXXX"
+              />
+            </div>
+            <div>
+              <label className="label">Contact Title</label>
+              <input
+                className="input"
+                value={editData.contactTitle || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, contactTitle: e.target.value }))}
+                placeholder="e.g. CEO, CTO"
+              />
+            </div>
+            <div>
+              <label className="label">Notes</label>
+              <textarea
+                className="input h-20 resize-none"
+                value={editData.notes || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, notes: e.target.value }))}
+                placeholder="Internal notes..."
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button
+              className="btn-primary"
+              onClick={handleSaveEdit}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              Save Changes
+            </button>
+            <button className="btn-ghost" onClick={() => setIsEditing(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="space-y-4 lg:col-span-2">
@@ -588,12 +830,14 @@ export default function LeadDetailPage() {
                   <>
                     <div>
                       <p className="label mb-1">Subject</p>
-                      <input className="input text-xs" value={emailData.subject}
+                      <input className="input text-xs" title="Email subject" placeholder="Email subject"
+                        value={emailData.subject}
                         onChange={e => setEmailData({ ...emailData, subject: e.target.value })} />
                     </div>
                     <div>
                       <p className="label mb-1">Body</p>
                       <textarea className="input text-xs h-44 resize-none leading-relaxed"
+                        title="Email body" placeholder="Email body"
                         value={emailData.body}
                         onChange={e => setEmailData({ ...emailData, body: e.target.value })} />
                     </div>

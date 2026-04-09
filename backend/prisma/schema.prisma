@@ -56,46 +56,89 @@ enum ScanStatus {
   failed
 }
 
-model Organization {
-  id          String   @id @default(uuid())
-  name        String
-  slug        String   @unique
-  website     String?
-  industry    String?
-  logoUrl     String?
-  settings    Json     @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+enum LeadTemperature {
+  hot
+  warm
+  cold
+}
 
-  users       User[]
-  leads       Lead[]
-  campaigns   Campaign[]
-  scanJobs    ScanJob[]
-  services    Service[]
-  apiKeys     ApiKey[]
+enum OpportunityStage {
+  prospecting
+  qualification
+  qualified
+  demo
+  proposal
+  negotiation
+  closed_won
+  closed_lost
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  website   String?
+  industry  String?
+  logoUrl   String?
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users         User[]
+  leads         Lead[]
+  campaigns     Campaign[]
+  scanJobs      ScanJob[]
+  services      Service[]
+  apiKeys       ApiKey[]
+  opportunities Opportunity[]
+  importLogs    ImportLog[]
+  accounts      Account[]
+  contacts      Contact[]
+  importBatches ImportBatch[]
+  invitations     Invitation[]
+  auditLogs       AuditLog[]
+  dropdownConfigs DropdownConfig[]
+  notifications   Notification[]
 }
 
 model User {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   organizationId String
-  email          String   @unique
+  email          String    @unique
   name           String
   passwordHash   String?
-  role           Role     @default(sales_user)
+  role           Role      @default(sales_user)
   avatarUrl      String?
-  googleId       String?  @unique
-  isActive       Boolean  @default(true)
+  googleId       String?   @unique
+  isActive       Boolean   @default(true)
   lastLoginAt    DateTime?
   refreshToken   String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  managerId      String?
+  invitedById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  assignedLeads  Lead[]       @relation("AssignedLeads")
-  createdLeads   Lead[]       @relation("CreatedLeads")
-  emailsSent     EmailLog[]
-  activityLogs   ActivityLog[]
-  gmailToken     GmailToken?
+  organization          Organization  @relation(fields: [organizationId], references: [id])
+  assignedLeads         Lead[]        @relation("AssignedLeads")
+  createdLeads          Lead[]        @relation("CreatedLeads")
+  emailsSent            EmailLog[]
+  activityLogs          ActivityLog[]
+  gmailToken            GmailToken?
+  assignedOpportunities Opportunity[] @relation("AssignedOpportunities")
+  createdOpportunities  Opportunity[] @relation("CreatedOpportunities")
+  importLogs            ImportLog[]
+  manager               User?         @relation("ManagedBy", fields: [managerId], references: [id])
+  teamMembers           User[]        @relation("ManagedBy")
+  invitedBy             User?         @relation("InvitedBy", fields: [invitedById], references: [id])
+  invitees              User[]        @relation("InvitedBy")
+  invitationsSent       Invitation[]  @relation("InvitationSender")
+  managedInvitations    Invitation[]  @relation("InvitationManager")
+  ownedAccounts         Account[]     @relation("AccountOwner")
+  createdAccounts       Account[]     @relation("AccountCreator")
+  ownedContacts         Contact[]     @relation("ContactOwner")
+  createdContacts       Contact[]     @relation("ContactCreator")
+  salesOpportunities    Opportunity[] @relation("SalesOwner")
+  auditLogs             AuditLog[]
+  notifications         Notification[]
 }
 
 model Service {
@@ -106,58 +149,71 @@ model Service {
   keywords       String[]
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
-
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 }
 
 model Lead {
-  id             String     @id @default(uuid())
+  id             String  @id @default(uuid())
   organizationId String
   assignedToId   String?
   createdById    String?
-
-  companyName    String
-  website        String?
-  linkedinUrl    String?
-  industry       String?
-  companySize    String?
-  location       String?
-  description    String?
-
-  contactName    String?
-  contactTitle   String?
-  contactEmail   String?
-  contactPhone   String?
+  companyName String
+  website     String?
+  linkedinUrl String?
+  industry    String?
+  companySize String?
+  location    String?
+  description String?
+  contactName     String?
+  contactTitle    String?
+  contactEmail    String?
+  contactPhone    String?
   contactLinkedin String?
-
-  techStack      String[]
-  intentSignals  Json[]   @default([])
-  funding        Json?
-  jobPostings    Json[]   @default([])
-
-  leadScore      Int      @default(0)
-  intentScore    Int      @default(0)
-  intentLevel    LeadIntent @default(cold)
-  status         LeadStatus @default(new)
-
-  opportunity    String?
-  aiSummary      String?
-  aiPitch        String?
-  notes          String?
-
-  source         String?
-  sourceUrl      String?
-
-  lastContactedAt DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  assignedTo     User?        @relation("AssignedLeads", fields: [assignedToId], references: [id])
-  createdBy      User?        @relation("CreatedLeads", fields: [createdById], references: [id])
-  emails         EmailLog[]
-  activities     ActivityLog[]
-  campaignLeads  CampaignLead[]
+  techStack     String[]
+  intentSignals Json[]   @default([])
+  funding       Json?
+  jobPostings   Json[]   @default([])
+  leadScore   Int        @default(0)
+  intentScore Int        @default(0)
+  intentLevel LeadIntent @default(cold)
+  status      LeadStatus @default(new)
+  opportunity String?
+  aiSummary   String?
+  aiPitch     String?
+  notes       String?
+  source    String?
+  sourceUrl String?
+  pipeline      String?
+  followUpDate  DateTime?
+  leadCost      Float?    @default(0)
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  utmContent    String?
+  subSource     String?
+  accountId     String?
+  importBatchId String?
+  lastContactedAt     DateTime?
+  firstName           String?
+  lastName            String?
+  requirementType     Json      @default("[]")
+  requirementDescription String?
+  budgetRange         String?
+  timeline            String?
+  temperature         LeadTemperature @default(cold)
+  disqualificationReason String?
+  lastContactedDate   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  assignedTo    User?          @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  createdBy     User?          @relation("CreatedLeads", fields: [createdById], references: [id])
+  emails        EmailLog[]
+  activities    ActivityLog[]
+  campaignLeads CampaignLead[]
+  opportunities Opportunity[]
+  account       Account?       @relation(fields: [accountId], references: [id])
+  importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
 }
 
 model Campaign {
@@ -177,9 +233,9 @@ model Campaign {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  organization   Organization   @relation(fields: [organizationId], references: [id])
-  leads          CampaignLead[]
-  emails         EmailLog[]
+  organization Organization   @relation(fields: [organizationId], references: [id])
+  leads        CampaignLead[]
+  emails       EmailLog[]
 }
 
 model CampaignLead {
@@ -189,38 +245,38 @@ model CampaignLead {
   step       Int      @default(0)
   addedAt    DateTime @default(now())
 
-  campaign   Campaign @relation(fields: [campaignId], references: [id])
-  lead       Lead     @relation(fields: [leadId], references: [id])
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+  lead     Lead     @relation(fields: [leadId], references: [id])
 
   @@unique([campaignId, leadId])
 }
 
 model EmailLog {
-  id             String      @id @default(uuid())
+  id             String  @id @default(uuid())
   organizationId String?
   leadId         String?
   campaignId     String?
   sentById       String?
 
-  toEmail        String
-  toName         String?
-  subject        String
-  body           String
-  status         EmailStatus @default(queued)
-  provider       String?
-  messageId      String?
+  toEmail   String
+  toName    String?
+  subject   String
+  body      String
+  status    EmailStatus @default(queued)
+  provider  String?
+  messageId String?
 
-  openedAt       DateTime?
-  clickedAt      DateTime?
-  repliedAt      DateTime?
-  bouncedAt      DateTime?
+  openedAt  DateTime?
+  clickedAt DateTime?
+  repliedAt DateTime?
+  bouncedAt DateTime?
 
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  lead           Lead?       @relation(fields: [leadId], references: [id])
-  campaign       Campaign?   @relation(fields: [campaignId], references: [id])
-  sentBy         User?       @relation(fields: [sentById], references: [id])
+  lead     Lead?     @relation(fields: [leadId], references: [id])
+  campaign Campaign? @relation(fields: [campaignId], references: [id])
+  sentBy   User?     @relation(fields: [sentById], references: [id])
 }
 
 model ScanJob {
@@ -238,7 +294,7 @@ model ScanJob {
   completedAt    DateTime?
   createdAt      DateTime   @default(now())
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 }
 
 model IntentSignal {
@@ -256,29 +312,37 @@ model IntentSignal {
 }
 
 model ActivityLog {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   organizationId String?
   userId         String?
   leadId         String?
+  opportunityId  String?
+  linkedType     String?   // 'lead' or 'opportunity'
   action         String
   description    String?
+  outcome        String?
+  notes          String?
+  activityDate   DateTime?
+  duration       Int?      // minutes
+  nextActionDate DateTime?
   metadata       Json?
   createdAt      DateTime @default(now())
 
-  user   User? @relation(fields: [userId], references: [id])
-  lead   Lead? @relation(fields: [leadId], references: [id])
+  user        User?        @relation(fields: [userId], references: [id])
+  lead        Lead?        @relation(fields: [leadId], references: [id])
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
 }
 
 model ApiKey {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   organizationId String
   name           String
-  keyHash        String   @unique
+  keyHash        String    @unique
   lastUsedAt     DateTime?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 }
 
 model GmailToken {
@@ -291,4 +355,185 @@ model GmailToken {
   updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id])
+}
+
+model Opportunity {
+  id                String           @id @default(uuid())
+  organizationId    String
+  leadId            String
+  assignedToId      String?
+  createdById       String
+  title             String
+  stage             OpportunityStage @default(prospecting)
+  value             Float?
+  closeProbability  Int?
+  notes             String?
+  expectedCloseDate DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  opportunityName String?
+  accountId       String?
+  contactId       String?
+  businessLine    String?
+  dealValue       Float   @default(0)
+  probability     Int     @default(20)
+  salesOwnerId    String?
+  wonLostReason   String?
+  stageChangedAt  DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  lead         Lead          @relation(fields: [leadId], references: [id])
+  assignedTo   User?         @relation("AssignedOpportunities", fields: [assignedToId], references: [id])
+  createdBy    User          @relation("CreatedOpportunities", fields: [createdById], references: [id])
+  salesOwner   User?         @relation("SalesOwner", fields: [salesOwnerId], references: [id])
+  account      Account?      @relation(fields: [accountId], references: [id])
+  contact      Contact?      @relation(fields: [contactId], references: [id])
+  activityLogs ActivityLog[]
+}
+
+model ImportLog {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String
+  fileName       String
+  totalRows      Int      @default(0)
+  successRows    Int      @default(0)
+  failedRows     Int      @default(0)
+  errors         Json     @default("[]")
+  status         String   @default("completed")
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+}
+
+model Invitation {
+  id             String   @id @default(uuid())
+  organizationId String
+  email          String
+  role           Role
+  invitedById    String
+  managerId      String?
+  token          String   @unique
+  status         String   @default("pending")
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invitedBy    User         @relation("InvitationSender", fields: [invitedById], references: [id])
+  manager      User?        @relation("InvitationManager", fields: [managerId], references: [id])
+
+  @@unique([organizationId, email])
+}
+
+model Account {
+  id             String   @id @default(uuid())
+  organizationId String
+  companyName    String
+  website        String?
+  industry       String?
+  companySize    String?
+  country        String?
+  state          String?
+  customerType   String   @default("prospect")
+  accountOwnerId String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  accountOwner  User?         @relation("AccountOwner", fields: [accountOwnerId], references: [id])
+  createdByUser User?         @relation("AccountCreator", fields: [createdById], references: [id])
+  contacts      Contact[]
+  opportunities Opportunity[]
+  leads         Lead[]
+}
+
+model Contact {
+  id              String   @id @default(uuid())
+  organizationId  String
+  name            String
+  email           String
+  phone           String?
+  designation     String?
+  linkedAccountId String?
+  decisionMaker   Boolean  @default(false)
+  influenceLevel  String   @default("medium")
+  ownerId         String?
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  linkedAccount Account?      @relation(fields: [linkedAccountId], references: [id])
+  owner         User?         @relation("ContactOwner", fields: [ownerId], references: [id])
+  createdByUser User?         @relation("ContactCreator", fields: [createdById], references: [id])
+  opportunities Opportunity[]
+}
+
+model ImportBatch {
+  id             String   @id @default(uuid())
+  organizationId String
+  fileName       String
+  totalRows      Int      @default(0)
+  successRows    Int      @default(0)
+  failedRows     Int      @default(0)
+  status         String   @default("processing")
+  mode           String   @default("upsert")
+  assignedToId   String?
+  errors         Json     @default("[]")
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  leads        Lead[]
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String
+  entityType     String
+  entityId       String
+  fieldName      String?
+  oldValue       String?
+  newValue       String?
+  changedById    String
+  changedAt      DateTime @default(now())
+  action         String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  changedBy    User         @relation(fields: [changedById], references: [id])
+}
+
+model DropdownConfig {
+  id             String   @id @default(uuid())
+  organizationId String
+  category       String
+  value          String
+  displayOrder   Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, category, value])
+}
+
+model Notification {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  type           String
+  title          String
+  message        String
+  entityType     String?
+  entityId       String?
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 }

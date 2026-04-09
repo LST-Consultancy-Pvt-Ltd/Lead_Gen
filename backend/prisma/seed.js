@@ -24,7 +24,7 @@ async function main() {
     where: { email: 'admin@demo.com' },
     update: {},
     create: {
-      name: 'Alex Rodriguez',
+      name: 'LST Consultancy',
       email: 'admin@demo.com',
       passwordHash,
       role: 'org_admin',
