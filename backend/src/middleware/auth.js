@@ -7,10 +7,13 @@ const { authorizeRole } = require('./rbac');
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : req.query.token;
+
+    if (!token) {
       return error(res, 'No token provided', 401);
     }
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, config.jwt.secret);
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
