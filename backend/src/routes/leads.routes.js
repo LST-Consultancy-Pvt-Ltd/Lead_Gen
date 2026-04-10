@@ -10,7 +10,11 @@ const { authenticate } = require('../middleware/auth');
 const { requireAdmin, requireManagerOrAdmin } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const leadsController = require('../controllers/leads.controller');
+<<<<<<< HEAD
 const legacyLeadController = require('../controllers/leadController');
+=======
+const leadController = require('../controllers/leadController');
+>>>>>>> prajwal
 
 // Validation rules
 const createLeadValidation = [
@@ -149,13 +153,13 @@ const updateLeadValidation = [
     .withMessage('Company name must be between 2 and 200 characters'),
   
   body('website')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .isURL()
     .withMessage('Website must be a valid URL'),
   
   body('contactEmail')
-    .optional()
+    .optional({ checkFalsy: true })
     .trim()
     .isEmail()
     .withMessage('Contact email must be valid')
@@ -497,7 +501,11 @@ router.post(
   authenticate,
   leadIdValidation,
   validate,
+<<<<<<< HEAD
   legacyLeadController.enrichLeadViaSignalHire
+=======
+  leadController.enrichLeadViaSignalHire
+>>>>>>> prajwal
 );
 
 /**
@@ -510,7 +518,11 @@ router.post(
   authenticate,
   leadIdValidation,
   validate,
+<<<<<<< HEAD
   legacyLeadController.enrichLeadViaApollo
+=======
+  leadController.enrichLeadViaApollo
+>>>>>>> prajwal
 );
 
 module.exports = router;
