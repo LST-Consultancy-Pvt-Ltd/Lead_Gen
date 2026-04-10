@@ -115,21 +115,17 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     assignedToId: yup.string().optional(),
     status: yup.string().required(),
     pipeline: yup.string().required("Pipeline is required"),
-    followUpDate: yup.string().when("status", {
-      is: (status: string) => ['new', 'contacted', 'replied'].includes(status),
-      then: (rule) => rule.required("Follow-up date is required for this status").test(
-        "not-past",
-        "Follow-up date cannot be in the past",
-        (value) => {
-          if (!value) return false;
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const picked = new Date(`${value}T00:00:00`);
-          return picked >= today;
-        },
-      ),
-      otherwise: (rule) => rule.optional(),
-    }),
+    followUpDate: yup.string().test(
+      "not-past",
+      "Follow-up date cannot be in the past",
+      (value) => {
+        if (!value) return true;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const picked = new Date(`${value}T00:00:00`);
+        return picked >= today;
+      },
+    ).optional(),
     requirementType: yup.array().of(yup.string().required()).min(1, "Select at least one requirement type"),
     requirementDescription: yup.string().max(2000, "Requirement description must be 2000 characters or less").optional(),
     budgetRange: yup.string().required("Budget range is required"),
@@ -410,13 +406,11 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               </select>
               {errors.pipeline && <p className="text-xs text-red-400 mt-1">{errors.pipeline.message}</p>}
             </div>
-            {['new', 'contacted', 'replied'].includes(status) && (
-              <div>
-                <label className="label">Follow-up Date <span className="text-red-400">*</span></label>
-                <input type="date" {...register("followUpDate")} title="Follow-up Date" placeholder="Follow-up Date" className="input" />
-                {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
-              </div>
-            )}
+            <div>
+              <label className="label">Follow-up Date</label>
+              <input type="date" {...register("followUpDate")} title="Follow-up Date" placeholder="Follow-up Date" className="input" />
+              {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -237,11 +237,8 @@ class LeadsService {
    */
   async createLead(data, user) {
     // ── Validation: followUpDate ──────────────────────────────────────────────
-    const effectiveStatus = (data.status || 'new').toLowerCase();
-    if (FOLLOW_UP_REQUIRED_STATUSES.includes(effectiveStatus)) {
-      if (!data.followUpDate) {
-        return { success: false, message: 'Follow-up date is required for status: ' + effectiveStatus, statusCode: 400 };
-      }
+    // Follow-up date is now optional, but if provided, it cannot be in the past
+    if (data.followUpDate) {
       const fud = new Date(data.followUpDate);
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       if (isNaN(fud.getTime()) || fud < todayStart) {
@@ -409,23 +406,19 @@ class LeadsService {
     }
 
     // ── Spec validations ──────────────────────────────────────────────────────
-    // Determine the effective status (incoming or existing)
-    const effectiveStatus = (data.status || accessCheck.lead.status || '').toLowerCase();
-    if (FOLLOW_UP_REQUIRED_STATUSES.includes(effectiveStatus)) {
-      // Only validate if the user is sending a NEW follow-up date (not the old value echoed back)
-      if (data.followUpDate) {
-        const existingFud = accessCheck.lead.followUpDate
-          ? new Date(accessCheck.lead.followUpDate).toISOString()
-          : null;
-        const incomingFud = new Date(data.followUpDate).toISOString();
-        const isNewValue = existingFud !== incomingFud;
+    // Follow-up date is now optional, but if provided and changed, it cannot be in the past
+    if (data.followUpDate) {
+      const existingFud = accessCheck.lead.followUpDate
+        ? new Date(accessCheck.lead.followUpDate).toISOString()
+        : null;
+      const incomingFud = new Date(data.followUpDate).toISOString();
+      const isNewValue = existingFud !== incomingFud;
 
-        if (isNewValue) {
-          const fud = new Date(data.followUpDate);
-          const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-          if (isNaN(fud.getTime()) || fud < todayStart) {
-            return { success: false, message: 'Follow-up date cannot be in the past', statusCode: 400 };
-          }
+      if (isNewValue) {
+        const fud = new Date(data.followUpDate);
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        if (isNaN(fud.getTime()) || fud < todayStart) {
+          return { success: false, message: 'Follow-up date cannot be in the past', statusCode: 400 };
         }
       }
     }
@@ -442,10 +435,10 @@ class LeadsService {
     delete updateData.id;
 
     // ── Normalise date fields ─────────────────────────────────────────────────
-    const toDate = (val) => (val ? new Date(val) : undefined);
-    if (updateData.followUpDate) updateData.followUpDate = toDate(updateData.followUpDate);
-    if (updateData.lastContactedDate) updateData.lastContactedDate = toDate(updateData.lastContactedDate);
-    if (updateData.lastContactedAt) updateData.lastContactedAt = toDate(updateData.lastContactedAt);
+    const toDate = (val) => (val ? new Date(val) : null);
+    if ('followUpDate' in updateData) updateData.followUpDate = toDate(updateData.followUpDate);
+    if ('lastContactedDate' in updateData) updateData.lastContactedDate = toDate(updateData.lastContactedDate);
+    if ('lastContactedAt' in updateData) updateData.lastContactedAt = toDate(updateData.lastContactedAt);
 
     const previousLead = await prisma.lead.findUnique({
       where: { id: leadId },
