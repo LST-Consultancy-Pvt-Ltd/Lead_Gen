@@ -10,6 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireAdmin, requireManagerOrAdmin } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const leadsController = require('../controllers/leads.controller');
+const legacyLeadController = require('../controllers/leadController');
 
 // Validation rules
 const createLeadValidation = [
@@ -484,6 +485,32 @@ router.post(
   [param('id').isUUID().withMessage('Lead ID must be a valid UUID')],
   validate,
   leadsController.convertLead
+);
+
+/**
+ * POST /api/leads/:id/enrich/signalhire
+ * Enrich lead contact via SignalHire
+ * Access: All authenticated users
+ */
+router.post(
+  '/:id/enrich/signalhire',
+  authenticate,
+  leadIdValidation,
+  validate,
+  legacyLeadController.enrichLeadViaSignalHire
+);
+
+/**
+ * POST /api/leads/:id/enrich/apollo
+ * Enrich lead contact via Apollo
+ * Access: All authenticated users
+ */
+router.post(
+  '/:id/enrich/apollo',
+  authenticate,
+  leadIdValidation,
+  validate,
+  legacyLeadController.enrichLeadViaApollo
 );
 
 module.exports = router;
