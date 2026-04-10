@@ -10,11 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireAdmin, requireManagerOrAdmin } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const leadsController = require('../controllers/leads.controller');
-<<<<<<< HEAD
-const legacyLeadController = require('../controllers/leadController');
-=======
 const leadController = require('../controllers/leadController');
->>>>>>> prajwal
 
 // Validation rules
 const createLeadValidation = [
@@ -501,11 +497,7 @@ router.post(
   authenticate,
   leadIdValidation,
   validate,
-<<<<<<< HEAD
-  legacyLeadController.enrichLeadViaSignalHire
-=======
   leadController.enrichLeadViaSignalHire
->>>>>>> prajwal
 );
 
 /**
@@ -518,11 +510,7 @@ router.post(
   authenticate,
   leadIdValidation,
   validate,
-<<<<<<< HEAD
-  legacyLeadController.enrichLeadViaApollo
-=======
   leadController.enrichLeadViaApollo
->>>>>>> prajwal
 );
 
 module.exports = router;
