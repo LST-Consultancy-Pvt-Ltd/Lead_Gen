@@ -347,22 +347,14 @@ export default function LeadDetailPage() {
   const originalFollowUp = lead?.followUpDate ? lead.followUpDate.split('T')[0] : '';
 
   function handleSaveEdit() {
-    // Rule: follow-up date required only for active statuses
-    if (FOLLOWUP_REQUIRED_STATUSES.includes(editData.status)) {
-      if (!editData.followUpDate) {
-        toast.error('Follow-up date is required for this status');
+    // Validate past-date only if follow-up date is provided
+    if (editData.followUpDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const fud = new Date(`${editData.followUpDate}T00:00:00`);
+      if (fud < today) {
+        toast.error('Follow-up date cannot be in the past');
         return;
-      }
-      // Only validate past-date if the user changed the follow-up date
-      const dateChanged = editData.followUpDate !== originalFollowUp;
-      if (dateChanged) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const fud = new Date(`${editData.followUpDate}T00:00:00`);
-        if (fud < today) {
-          toast.error('Follow-up date cannot be in the past');
-          return;
-        }
       }
     }
     // Rule: disqualification reason required when status is disqualified
@@ -493,19 +485,16 @@ export default function LeadDetailPage() {
                 <option value="disqualified">Disqualified</option>
               </select>
             </div>
-            {['new', 'contacted', 'replied'].includes(editData.status) && (
-              <div>
-                <label className="label">Follow-up Date <span className="text-red-400">*</span></label>
-                <input
-                  className="input"
-                  type="date"
-                  title="Follow-up date"
-                  value={editData.followUpDate || ''}
-                  onChange={(e) => setEditData((d: any) => ({ ...d, followUpDate: e.target.value }))}
-                />
-                {!editData.followUpDate && <p className="text-xs text-amber-400 mt-1">Required — select today or a future date</p>}
-              </div>
-            )}
+            <div>
+              <label className="label">Follow-up Date</label>
+              <input
+                className="input"
+                type="date"
+                title="Follow-up date"
+                value={editData.followUpDate || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, followUpDate: e.target.value }))}
+              />
+            </div>
             {editData.status === 'disqualified' && (
               <div className="sm:col-span-2">
                 <label className="label">Disqualification Reason <span className="text-red-400">*</span></label>
@@ -775,6 +764,15 @@ export default function LeadDetailPage() {
             {lead.source && (
               <p className="text-xs text-slate-600 mt-2">Source: {lead.source}</p>
             )}
+            <div className="mt-3 pt-3 border-t border-white/[0.06]">
+              <div className="flex items-center gap-2 text-xs">
+                <Calendar size={12} className="text-slate-500" />
+                <span className="text-slate-600">Follow-up:</span>
+                <span className="text-slate-300">
+                  {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* AI Panel */}

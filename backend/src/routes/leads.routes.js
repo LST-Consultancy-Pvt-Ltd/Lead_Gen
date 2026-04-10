@@ -199,7 +199,7 @@ const updateLeadValidation = [
     .withMessage('Notes must be less than 5000 characters'),
 
   body('followUpDate')
-    .optional()
+    .optional({ checkFalsy: true })
     .isISO8601()
     .withMessage('followUpDate must be a valid ISO date'),
 
