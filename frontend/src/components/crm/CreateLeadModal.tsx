@@ -318,8 +318,8 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
         </div>
 
         {/* Contact Info */}
-        <div className="pt-3 border-t border-white/10 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-300">
+        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
+          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">
             Contact Information
           </h3>
 
@@ -362,13 +362,13 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               {requirementTypeOptions.map((item) => (
                 <label
                   key={item}
-                  className="flex items-center gap-2 rounded-lg border border-white/10 px-2.5 py-2 text-xs text-slate-300"
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-white/10 px-2.5 py-2 text-xs text-slate-600 dark:text-slate-300"
                 >
                   <input
                     type="checkbox"
                     checked={requirementType.includes(item)}
                     onChange={() => toggleRequirementType(item)}
-                    className="w-4 h-4 rounded border-white/20 bg-slate-800 text-blue-500"
+                    className="w-4 h-4 rounded border-white/20 bg-slate-200 dark:bg-slate-800 text-blue-500"
                   />
                   {item}
                 </label>
@@ -392,8 +392,8 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
         </div>
 
         {/* Lead Details */}
-        <div className="pt-3 border-t border-white/10 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-300">Lead Details</h3>
+        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
+          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Lead Details</h3>
 
           <div className="grid grid-cols-2 gap-3">
             <div>

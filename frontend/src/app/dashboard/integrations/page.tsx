@@ -39,12 +39,12 @@ export default function IntegrationsPage() {
             {INTEGRATIONS.filter(i => i.cat === cat).map(int => (
               <div key={int.name} className="card p-4 hover:border-slate-600/50 transition-colors">
                 <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-400">
                     <int.icon size={18}/>
                   </div>
                   <Badge color={int.connected ? 'green' : 'gray'}>{int.connected ? 'Connected' : 'Not Connected'}</Badge>
                 </div>
-                <p className="font-semibold text-slate-200 mb-1">{int.name}</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">{int.name}</p>
                 <p className="text-xs text-slate-500 mb-4">{int.desc}</p>
                 <button
                   onClick={() => int.connected ? null : handleConnect(int.name)}

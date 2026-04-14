@@ -27,7 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Show loading until hydration is complete
   if (!mounted || !hasHydrated) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-950">
+      <div className="h-screen flex items-center justify-center bg-white dark:bg-slate-950">
         <Spinner size={24}/>
       </div>
     );
@@ -36,14 +36,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Show loading if not authenticated (while redirecting)
   if (!isAuthenticated) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-950">
+      <div className="h-screen flex items-center justify-center bg-white dark:bg-slate-950">
         <Spinner size={24}/>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-[#060b18]">
+    <div className="h-screen flex overflow-hidden bg-slate-50 dark:bg-[#060b18]">
       <Sidebar collapsed={collapsed}/>
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onToggleSidebar={() => setCollapsed(!collapsed)}/>

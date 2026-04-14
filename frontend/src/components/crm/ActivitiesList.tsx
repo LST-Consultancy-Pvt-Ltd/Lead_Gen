@@ -89,7 +89,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-200">Activity Timeline</h3>
+        <h3 className="font-semibold text-slate-800 dark:text-slate-200">Activity Timeline</h3>
         <button
           onClick={() => setIsAddingActivity(!isAddingActivity)}
           className="btn-ghost text-xs"
@@ -202,7 +202,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-200 capitalize">
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 capitalize">
                           {activity.type}
                         </span>
                         {activity.outcome && (

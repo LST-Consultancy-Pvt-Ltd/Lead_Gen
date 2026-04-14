@@ -88,8 +88,8 @@ export const formatUSD = (v: number) =>
 function DarkTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 shadow-xl text-xs">
-      <p className="text-slate-400 mb-1">{label}</p>
+    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 shadow-xl text-xs">
+      <p className="text-slate-500 dark:text-slate-400 mb-1">{label}</p>
       {payload.map((p: any, i: number) => (
         <p key={i} className="font-semibold" style={{ color: p.color }}>
           {p.name}: {typeof p.value === 'number' && p.name?.toLowerCase().includes('revenue') ? formatUSD(p.value) : p.value}
@@ -125,11 +125,11 @@ function StatCardWidget({ widget }: { widget: DashboardWidget }) {
         <span className="text-xs text-slate-500">{widget.data?.tag ?? 'Count'}</span>
         {Icon && <Icon size={14} className={colorCls} />}
       </div>
-      <p className={`text-2xl font-bold ${colorCls === 'text-blue-400' ? 'text-slate-100' : colorCls}`}>
+      <p className={`text-2xl font-bold ${colorCls === 'text-blue-400' ? 'text-slate-900 dark:text-slate-100' : colorCls}`}>
         {prefix}{typeof value === 'number' ? value.toLocaleString() : value}{suffix}
       </p>
-      <p className="text-xs text-slate-400 mt-1 font-medium">{widget.title}</p>
-      {subtitle && <p className="text-[10px] text-slate-600 mt-0.5">{subtitle}</p>}
+      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">{widget.title}</p>
+      {subtitle && <p className="text-[10px] text-slate-500 dark:text-slate-600 mt-0.5">{subtitle}</p>}
     </div>
   );
 }
@@ -147,8 +147,8 @@ function CurrencyCardWidget({ widget }: { widget: DashboardWidget }) {
         {Icon && <Icon size={14} className={colorCls} />}
       </div>
       <p className={`text-2xl font-bold ${colorCls}`}>{formatUSD(value)}</p>
-      <p className="text-xs text-slate-400 mt-1 font-medium">{widget.title}</p>
-      {widget.description && <p className="text-[10px] text-slate-600 mt-0.5">{widget.description}</p>}
+      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">{widget.title}</p>
+      {widget.description && <p className="text-[10px] text-slate-500 dark:text-slate-600 mt-0.5">{widget.description}</p>}
     </div>
   );
 }
@@ -198,9 +198,9 @@ function ListWidget({ widget }: { widget: DashboardWidget }) {
             if (isFollowUp) {
               return (
                 <div key={item.leadId || idx}
-                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 flex items-center justify-between gap-2">
+                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950 px-3 py-2.5 flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-200 truncate">{item.companyName || '—'}</p>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{item.companyName || '—'}</p>
                     {item.contactName && <p className="text-xs text-slate-500 truncate">{item.contactName}</p>}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -235,10 +235,10 @@ function ListWidget({ widget }: { widget: DashboardWidget }) {
 
             if (isWarning) {
               return (
-                <div key={item.id || idx} className="px-3 py-2.5 rounded-xl border border-white/10 bg-slate-950 hover:bg-slate-800/20">
+                <div key={item.id || idx} className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800/20">
                   <div className="flex items-start justify-between">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-200 truncate">{item.opportunityName || item.companyName || '—'}</p>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{item.opportunityName || item.companyName || '—'}</p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         Stage: <span className="text-amber-400">{(item.currentStage || item.stage || '—').replace('_', ' ')}</span>
                         {' · '}{item.daysStuck ?? item.daysSinceUpdate ?? 0} days
@@ -255,8 +255,8 @@ function ListWidget({ widget }: { widget: DashboardWidget }) {
 
             // generic list item
             return (
-              <div key={item.id || idx} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5">
-                <p className="text-sm font-medium text-slate-200">{item.title || item.companyName || item.name || '—'}</p>
+              <div key={item.id || idx} className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950 px-3 py-2.5">
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{item.title || item.companyName || item.name || '—'}</p>
                 {item.subtitle && <p className="text-xs text-slate-500 mt-0.5">{item.subtitle}</p>}
               </div>
             );
@@ -285,7 +285,7 @@ function BarChartWidget({ widget }: { widget: DashboardWidget }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center gap-2">
         {Icon && <Icon size={15} className={colorCls} />}
         <h2 className="section-title">{widget.title}</h2>
       </div>
@@ -300,8 +300,8 @@ function BarChartWidget({ widget }: { widget: DashboardWidget }) {
                 tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false}
                 tickFormatter={isPercentage ? (v: number) => `${v}%` : undefined}
               />
-              <YAxis type="category" dataKey="name" tick={{ fill: '#cbd5e1', fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
-              <Tooltip content={<DarkTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+              <YAxis type="category" dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
+              <Tooltip content={<DarkTooltip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
               <Bar dataKey="value" name={barLabel} fill={barColor} radius={[0, 4, 4, 0]} barSize={20} />
             </BarChart>
           </ResponsiveContainer>
@@ -326,7 +326,7 @@ function PipelineChartWidget({ widget }: { widget: DashboardWidget }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center gap-2">
         {Icon && <Icon size={15} className={colorCls} />}
         <h2 className="section-title">{widget.title}</h2>
         {widget.description && <span className="text-xs text-slate-500 ml-1">{widget.description}</span>}
@@ -337,11 +337,11 @@ function PipelineChartWidget({ widget }: { widget: DashboardWidget }) {
         <div className="px-4 py-4" style={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ left: 10, right: 10, bottom: 20 }}>
-              <XAxis dataKey="name" tick={{ fill: '#cbd5e1', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis yAxisId="count" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis yAxisId="value" orientation="right" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false}
                 tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip content={<DarkTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+              <Tooltip content={<DarkTooltip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
               <Bar yAxisId="count" dataKey="count" name="Deals" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={30} />
               <Bar yAxisId="value" dataKey="value" name="Revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30} opacity={0.6} />
             </BarChart>
@@ -367,7 +367,7 @@ function PieChartWidget({ widget }: { widget: DashboardWidget }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center gap-2">
         {Icon && <Icon size={15} className={colorCls} />}
         <h2 className="section-title">{widget.title}</h2>
       </div>
@@ -410,7 +410,7 @@ function TableWidget({ widget }: { widget: DashboardWidget }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center gap-2">
         {Icon && <Icon size={15} className={colorCls} />}
         <h2 className="section-title">{widget.title}</h2>
         {items.length > 0 && widget.data?.showCount && (
@@ -430,7 +430,7 @@ function TableWidget({ widget }: { widget: DashboardWidget }) {
           <table className="w-full">
             {columns.length > 0 && (
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {columns.map((col) => (
                     <th key={col.key} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{col.label}</th>
                   ))}
@@ -439,9 +439,9 @@ function TableWidget({ widget }: { widget: DashboardWidget }) {
             )}
             <tbody>
               {items.map((row: any, i: number) => (
-                <tr key={row.id || i} className="border-b border-white/[0.04] hover:bg-slate-800/20">
+                <tr key={row.id || i} className="border-b border-slate-100 dark:border-white/[0.04] hover:bg-slate-50 dark:hover:bg-slate-800/20">
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-4 py-3 text-sm ${col.color === 'red' ? 'text-red-400' : col.color === 'green' ? 'text-emerald-400' : col.color === 'primary' ? 'font-medium text-slate-200' : 'text-slate-400'}`}>
+                    <td key={col.key} className={`px-4 py-3 text-sm ${col.color === 'red' ? 'text-red-400' : col.color === 'green' ? 'text-emerald-400' : col.color === 'primary' ? 'font-medium text-slate-800 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
                       {col.key === 'followUpDate' && row[col.key] ? formatDate(row[col.key]) : (row[col.key] ?? '—')}
                     </td>
                   ))}
@@ -463,7 +463,7 @@ function OpportunitiesByStageWidget({ widget }: { widget: DashboardWidget }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-2">
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center gap-2">
         {Icon && <Icon size={14} className={colorCls} />}
         <h2 className="section-title">{widget.title}</h2>
         {widget.description && <span className="text-xs text-slate-500 ml-1">{widget.description}</span>}
@@ -471,7 +471,7 @@ function OpportunitiesByStageWidget({ widget }: { widget: DashboardWidget }) {
       {items.length === 0 ? (
         <p className="px-5 py-8 text-sm text-slate-500 text-center">No open opportunities</p>
       ) : (
-        <div className="divide-y divide-white/[0.04]">
+        <div className="divide-y divide-slate-100 dark:divide-white/[0.04]">
           {items.map((row: any, idx: number) => (
             <div key={row.stage || idx} className="px-5 py-3 flex items-center gap-3">
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${STAGE_BADGE_COLORS[row.stage] ?? 'bg-slate-700/40 text-slate-400'}`}>
@@ -502,7 +502,7 @@ export function DateFilterBar({ value, onChange }: { value: string; onChange: (v
           className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
             value === p.value
               ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-              : 'bg-slate-800/50 text-slate-400 border border-white/5 hover:bg-slate-800 hover:text-slate-300'
+              : 'bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/5 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
           {p.label}

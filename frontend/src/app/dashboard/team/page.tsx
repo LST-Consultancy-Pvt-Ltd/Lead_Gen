@@ -104,29 +104,29 @@ export default function TeamPage() {
                 <div className="flex items-center gap-2 py-1.5">
                   <Avatar initials={getInitials(a.name)} size="sm" />
                   <div>
-                    <span className="text-sm font-semibold text-slate-200">{a.name}</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{a.name}</span>
                     <span className="text-xs text-slate-500 ml-2">{a.email}</span>
                   </div>
                   <Badge color="green" className="ml-auto">Admin</Badge>
                 </div>
                 {managers.map((mgr: any) => (
-                  <div key={mgr.id} className="ml-6 border-l border-white/[0.06] pl-4">
+                  <div key={mgr.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
                     <div className="flex items-center gap-2 py-1.5">
                       <ChevronRight size={12} className="text-slate-600 -ml-2" />
                       <Avatar initials={getInitials(mgr.name)} size="sm" />
                       <div>
-                        <span className="text-sm font-medium text-slate-200">{mgr.name}</span>
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{mgr.name}</span>
                         <span className="text-xs text-slate-500 ml-2">{mgr.email}</span>
                       </div>
                       <Badge color="blue" className="ml-auto">Manager</Badge>
                     </div>
                     {salesUsers.filter((s: any) => s.managerId === mgr.id).map((su: any) => (
-                      <div key={su.id} className="ml-6 border-l border-white/[0.06] pl-4">
+                      <div key={su.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
                         <div className="flex items-center gap-2 py-1.5">
                           <ChevronRight size={12} className="text-slate-600 -ml-2" />
                           <Avatar initials={getInitials(su.name)} size="sm" />
                           <div>
-                            <span className="text-sm text-slate-300">{su.name}</span>
+                            <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
                             <span className="text-xs text-slate-500 ml-2">{su.email}</span>
                           </div>
                           <span className="text-xs text-slate-600 ml-auto">→ {mgr.name}</span>
@@ -134,12 +134,12 @@ export default function TeamPage() {
                       </div>
                     ))}
                     {salesUsers.filter((s: any) => !s.managerId).map((su: any) => (
-                      <div key={su.id} className="ml-6 border-l border-white/[0.06] pl-4">
+                      <div key={su.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
                         <div className="flex items-center gap-2 py-1.5">
                           <ChevronRight size={12} className="text-slate-600 -ml-2" />
                           <Avatar initials={getInitials(su.name)} size="sm" />
                           <div>
-                            <span className="text-sm text-slate-300">{su.name}</span>
+                            <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
                             <span className="text-xs text-slate-500 ml-2">{su.email}</span>
                           </div>
                         </div>
@@ -158,7 +158,7 @@ export default function TeamPage() {
         <div className="card p-5 border-blue-500/20 bg-blue-500/[0.04]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title">Invite Team Member</h3>
-            <button title="Close" onClick={() => setInviteOpen(false)} className="text-slate-500 hover:text-slate-300">
+            <button title="Close" onClick={() => setInviteOpen(false)} className="text-slate-500 hover:text-slate-500 dark:hover:text-slate-300">
               <X size={16} />
             </button>
           </div>
@@ -214,13 +214,13 @@ export default function TeamPage() {
       {/* Pending Invitations */}
       {invitations.length > 0 && (
         <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/[0.06]">
+          <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06]">
             <h2 className="section-title">Pending Invitations</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {['Email', 'Role', 'Status', 'Sent By', 'Expires', 'Action'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                   ))}
@@ -228,8 +228,8 @@ export default function TeamPage() {
               </thead>
               <tbody>
                 {invitations.map((inv: any) => (
-                  <tr key={inv.id} className="border-b border-white/[0.04] hover:bg-slate-800/20">
-                    <td className="px-4 py-3 text-sm text-slate-300">{inv.email}</td>
+                  <tr key={inv.id} className="border-b border-slate-200 dark:border-white/[0.04] hover:bg-slate-200/20 dark:hover:bg-slate-800/20">
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{inv.email}</td>
                     <td className="px-4 py-3"><Badge color={inv.role === 'manager' ? 'blue' : 'slate'}>{getRoleLabel(inv.role)}</Badge></td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-medium ${inv.status === 'pending' ? 'text-amber-400' : inv.status === 'accepted' ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -267,7 +267,7 @@ export default function TeamPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {['User', 'Role', 'Status', 'Leads', 'Last Login', ...(isReadOnly ? [] : ['Actions'])].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                   ))}
@@ -275,12 +275,12 @@ export default function TeamPage() {
               </thead>
               <tbody>
                 {members.map((m: any) => (
-                  <tr key={m.id} className="border-b border-white/[0.04] hover:bg-slate-800/20 transition-colors">
+                  <tr key={m.id} className="border-b border-slate-200 dark:border-white/[0.04] hover:bg-slate-200/20 dark:hover:bg-slate-800/20 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <Avatar initials={getInitials(m.name)} size="sm" />
                         <div>
-                          <p className="text-sm font-semibold text-slate-200">{m.name}</p>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{m.name}</p>
                           <p className="text-xs text-slate-500">{m.email}</p>
                         </div>
                       </div>

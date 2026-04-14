@@ -100,10 +100,10 @@ export default function ContactsPage() {
       {/* Create/Edit Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-slate-100">{editItem ? 'Edit Contact' : 'New Contact'}</h2>
-              <button onClick={closeModal} className="text-slate-500 hover:text-slate-300" title="Close contact modal"><X size={16} /></button>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{editItem ? 'Edit Contact' : 'New Contact'}</h2>
+              <button onClick={closeModal} className="text-slate-500 hover:text-slate-500 dark:hover:text-slate-300" title="Close contact modal"><X size={16} /></button>
             </div>
             <form onSubmit={e => { e.preventDefault(); saveMutation.mutate(form); }} className="space-y-3">
               <div>
@@ -134,7 +134,7 @@ export default function ContactsPage() {
                 <div className="flex flex-col">
                   <label className="label mb-1 block">Decision Maker</label>
                   <label className="flex items-center gap-2 mt-1.5 cursor-pointer">
-                    <input type="checkbox" className="w-4 h-4 rounded border-white/20 bg-slate-800 text-emerald-500 focus:ring-emerald-500/30" checked={form.decisionMaker} onChange={e => setForm(f => ({ ...f, decisionMaker: e.target.checked }))} />
+                    <input type="checkbox" className="w-4 h-4 rounded border-white/20 bg-slate-200 dark:bg-slate-800 text-emerald-500 focus:ring-emerald-500/30" checked={form.decisionMaker} onChange={e => setForm(f => ({ ...f, decisionMaker: e.target.checked }))} />
                     <span className="text-xs text-slate-400">Yes</span>
                   </label>
                 </div>
@@ -174,7 +174,7 @@ export default function ContactsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {['Name', 'Email', 'Phone', 'Linked Account', 'Designation', 'Decision Maker', 'Influence Level', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                   ))}
@@ -182,8 +182,8 @@ export default function ContactsPage() {
               </thead>
               <tbody>
                 {filtered.map((c: any) => (
-                  <tr key={c.id} className="border-b border-white/[0.04] hover:bg-slate-800/20 transition-colors">
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-200">{c.name}</td>
+                  <tr key={c.id} className="border-b border-slate-200 dark:border-white/[0.04] hover:bg-slate-200/20 dark:hover:bg-slate-800/20 transition-colors">
+                    <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{c.name}</td>
                     <td className="px-4 py-3 text-sm text-slate-400">{c.email || '—'}</td>
                     <td className="px-4 py-3 text-sm text-slate-400">{c.phone || '—'}</td>
                     <td className="px-4 py-3 text-sm">

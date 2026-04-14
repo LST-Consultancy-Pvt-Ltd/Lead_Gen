@@ -36,15 +36,15 @@ function SectionCard({
   return (
     <div className="card overflow-hidden">
       <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/20 transition-colors text-left">
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-200/20 dark:hover:bg-slate-800/20 transition-colors text-left">
         <div>
-          <p className="text-sm font-semibold text-slate-200">{title}</p>
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{title}</p>
           {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
         </div>
         {open ? <ChevronUp size={14} className="text-slate-500 flex-shrink-0" />
               : <ChevronDown size={14} className="text-slate-500 flex-shrink-0" />}
       </button>
-      {open && <div className="px-5 pb-5 border-t border-white/[0.04]">{children}</div>}
+      {open && <div className="px-5 pb-5 border-t border-slate-200 dark:border-white/[0.04]">{children}</div>}
     </div>
   );
 }
@@ -272,7 +272,7 @@ export default function LeadDiscoveryPage() {
         </div>
         <div className="flex items-center gap-3">
           {totalLeadsEver > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900 border border-white/[0.06] rounded-xl px-3 py-2">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2">
               <TrendingUp size={12} className="text-emerald-400" />
               {totalLeadsEver.toLocaleString()} total discovered
             </div>
@@ -300,7 +300,7 @@ export default function LeadDiscoveryPage() {
               'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all',
               scanMode === mode
                 ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
-                : 'bg-slate-950 border-white/[0.06] text-slate-400 hover:text-slate-200 hover:border-white/20'
+                : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
             )}>
             {icon}{label}
           </button>
@@ -318,10 +318,10 @@ export default function LeadDiscoveryPage() {
                 {servicesLoading ? <Spinner /> : (
                   <div className="space-y-2 mb-3">
                     {services.map((s: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between bg-slate-950 rounded-xl px-3 py-2.5 group">
+                      <div key={i} className="flex items-center justify-between bg-slate-100 dark:bg-slate-950 rounded-xl px-3 py-2.5 group">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 size={13} className="text-emerald-400" />
-                          <span className="text-sm text-slate-200">{s.name}</span>
+                          <span className="text-sm text-slate-800 dark:text-slate-200">{s.name}</span>
                         </div>
                         <button onClick={() => removeService(i)}
                           className="text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors">
@@ -354,7 +354,7 @@ export default function LeadDiscoveryPage() {
                       className={cn(
                         'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition-all',
                         active ? 'bg-blue-500/20 border-blue-500/50 text-blue-300'
-                               : 'bg-slate-950 border-white/[0.06] text-slate-400 hover:text-slate-200'
+                               : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
                       )}>
                       <span>{icon}</span>{label}
                       {active && <span className="ml-1 text-blue-400 text-xs">✓</span>}
@@ -394,7 +394,7 @@ export default function LeadDiscoveryPage() {
                   <Target size={28} className="text-blue-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-slate-200 mb-1">Ready to Discover Leads</p>
+                  <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Ready to Discover Leads</p>
                   <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
                     Google Jobs engine finds companies ACTIVELY HIRING for your service.
                     AI generates job title variants — no static lists.
@@ -429,11 +429,11 @@ export default function LeadDiscoveryPage() {
               <div key={n} className="flex items-center gap-2">
                 <div className={cn(
                   'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
-                  done ? 'bg-emerald-500/20 text-emerald-400' : active ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-600'
+                  done ? 'bg-emerald-500/20 text-emerald-400' : active ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-200 dark:bg-slate-800 text-slate-600'
                 )}>
                   {done ? '✓' : n}
                 </div>
-                <span className={cn('text-xs font-medium', done ? 'text-emerald-400' : active ? 'text-slate-200' : 'text-slate-600')}>
+                <span className={cn('text-xs font-medium', done ? 'text-emerald-400' : active ? 'text-slate-800 dark:text-slate-200' : 'text-slate-600')}>
                   {label}
                 </span>
                 {i < 2 && <ArrowRight size={12} className="text-slate-700 flex-shrink-0" />}
@@ -455,8 +455,8 @@ export default function LeadDiscoveryPage() {
                       <div className="w-7 h-7 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center flex-shrink-0">
                         <Link2 size={13} className="text-blue-400" />
                       </div>
-                      <p className="text-sm font-semibold text-slate-200">Product URL</p>
-                      <span className="text-[10px] bg-slate-800 border border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Product URL</p>
+                      <span className="text-[10px] bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
                     </div>
                     <div className="flex gap-2">
                       <input className="input text-sm flex-1" placeholder="https://yourproduct.com"
@@ -471,9 +471,9 @@ export default function LeadDiscoveryPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-white/[0.06]" />
+                    <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
                     <span className="text-[10px] text-slate-600 font-semibold tracking-widest">AND / OR</span>
-                    <div className="flex-1 h-px bg-white/[0.06]" />
+                    <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
                   </div>
 
                   {/* Description */}
@@ -482,8 +482,8 @@ export default function LeadDiscoveryPage() {
                       <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
                         <AlignLeft size={13} className="text-violet-400" />
                       </div>
-                      <p className="text-sm font-semibold text-slate-200">Product Description</p>
-                      <span className="text-[10px] bg-slate-800 border border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Product Description</p>
+                      <span className="text-[10px] bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
                     </div>
                     <textarea className="input text-sm resize-none w-full" rows={5}
                       placeholder="Describe your product: what it is, who needs it, problems it solves, features, use cases…"
@@ -493,9 +493,9 @@ export default function LeadDiscoveryPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-white/[0.06]" />
+                    <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
                     <span className="text-[10px] text-slate-600 font-semibold tracking-widest">AND / OR</span>
-                    <div className="flex-1 h-px bg-white/[0.06]" />
+                    <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
                   </div>
 
                   {/* Document upload */}
@@ -504,13 +504,13 @@ export default function LeadDiscoveryPage() {
                       <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center flex-shrink-0">
                         <FileText size={13} className="text-emerald-400" />
                       </div>
-                      <p className="text-sm font-semibold text-slate-200">Upload Brochure / Spec Sheet</p>
-                      <span className="text-[10px] bg-slate-800 border border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Upload Brochure / Spec Sheet</p>
+                      <span className="text-[10px] bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
                     </div>
                     <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.pdf"
                       onChange={handleFileUpload} className="hidden" />
                     {productDocumentText ? (
-                      <div className="bg-slate-950 rounded-xl p-3 border border-emerald-500/20">
+                      <div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-3 border border-emerald-500/20">
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-2">
                             <CheckCircle2 size={13} className="text-emerald-400" />
@@ -525,9 +525,9 @@ export default function LeadDiscoveryPage() {
                       </div>
                     ) : (
                       <button type="button" onClick={() => fileInputRef.current?.click()}
-                        className="w-full border-2 border-dashed border-white/[0.08] hover:border-emerald-500/30 rounded-xl p-5 text-center transition-colors group">
+                        className="w-full border-2 border-dashed border-slate-300 dark:border-white/[0.08] hover:border-emerald-500/30 rounded-xl p-5 text-center transition-colors group">
                         <Upload size={20} className="mx-auto mb-2 text-slate-600 group-hover:text-emerald-400 transition-colors" />
-                        <p className="text-sm text-slate-400 group-hover:text-slate-300">Click to upload .txt, .md, or .pdf</p>
+                        <p className="text-sm text-slate-400 group-hover:text-slate-500 dark:hover:text-slate-300">Click to upload .txt, .md, or .pdf</p>
                         <p className="text-xs text-slate-600 mt-1">Max 5 MB</p>
                       </button>
                     )}
@@ -633,7 +633,7 @@ export default function LeadDiscoveryPage() {
                       onChange={e => { setPromptText(e.target.value); setPromptEdited(true); }}
                       placeholder="AI prompt will appear here…"
                     />
-                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-900/80 backdrop-blur rounded-lg px-2 py-1 pointer-events-none">
+                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur rounded-lg px-2 py-1 pointer-events-none">
                       <Edit3 size={9} className="text-slate-600" />
                       <span className="text-[9px] text-slate-600">editable</span>
                     </div>
@@ -662,7 +662,7 @@ export default function LeadDiscoveryPage() {
                     <Sparkles size={26} className="text-violet-400" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-200 mb-1">AI Prompt Preview</p>
+                    <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">AI Prompt Preview</p>
                     <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
                       Fill in your product details, then click{' '}
                       <span className="text-violet-400 font-medium">Generate Discovery Prompt</span>.
@@ -676,7 +676,7 @@ export default function LeadDiscoveryPage() {
                       { icon: '✏️', text: 'You review & edit before scanning' },
                       { icon: '🚀', text: 'Scan runs with your approved prompt' },
                     ].map(({ icon, text }) => (
-                      <div key={text} className="flex items-center gap-2.5 bg-slate-950 rounded-lg px-3 py-2">
+                      <div key={text} className="flex items-center gap-2.5 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2">
                         <span className="text-sm">{icon}</span>
                         <p className="text-xs text-slate-400">{text}</p>
                       </div>
@@ -697,7 +697,7 @@ export default function LeadDiscoveryPage() {
             {(scansData!.items as any[]).slice(0, 8).map((scan: any) => {
               const isProduct = scan.sources?.scanType === 'product';
               return (
-                <div key={scan.id} className="flex items-center justify-between p-3 bg-slate-950 rounded-xl gap-3">
+                <div key={scan.id} className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-950 rounded-xl gap-3">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <Badge color={
                       scan.status === 'completed' ? 'green' :
@@ -709,7 +709,7 @@ export default function LeadDiscoveryPage() {
                                 : 'bg-blue-500/10 text-blue-400 border-blue-500/20')}>
                       {isProduct ? 'product' : 'service'}
                     </span>
-                    <span className="text-sm font-semibold text-slate-200">{scan.leadsFound ?? 0} leads</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{scan.leadsFound ?? 0} leads</span>
                     {scan.targetRegion && <span className="text-xs text-slate-500">· {scan.targetRegion}</span>}
                     {!isProduct && (scan.services ?? []).length > 0 && (
                       <span className="text-xs text-slate-500 truncate hidden sm:inline">
@@ -785,7 +785,7 @@ function ScanComplete({ activeScan }: { activeScan: any }) {
         <CheckCircle2 size={30} className="text-emerald-400" />
       </div>
       <div>
-        <p className="font-semibold text-slate-200 mb-1">Scan Complete!</p>
+        <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Scan Complete!</p>
         <p className="text-3xl font-bold text-emerald-400">{activeScan?.leadsFound ?? 0}</p>
         <p className="text-sm text-slate-500 mt-1">new leads discovered</p>
       </div>

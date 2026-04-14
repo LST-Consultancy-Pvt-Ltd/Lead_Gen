@@ -47,7 +47,7 @@ export default function CampaignsPage() {
                     <Mail size={16} className="text-blue-400"/>
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-200">{c.name}</p>
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">{c.name}</p>
                     <p className="text-xs text-slate-500">Created {formatDate(c.createdAt)}</p>
                   </div>
                 </div>
@@ -66,8 +66,8 @@ export default function CampaignsPage() {
               <div className="grid grid-cols-5 gap-2">
                 {[['Sent',c.sentCount],['Opened',c.openCount],['Replied',c.replyCount],['Meetings',c.meetingCount],
                   ['Reply Rate', c.sentCount > 0 ? `${((c.replyCount/c.sentCount)*100).toFixed(1)}%` : '0%']].map(([k,v])=>(
-                  <div key={k} className="bg-slate-950 rounded-xl p-3 text-center">
-                    <p className="font-display text-xl font-bold text-slate-100">{v}</p>
+                  <div key={k} className="bg-slate-100 dark:bg-slate-950 rounded-xl p-3 text-center">
+                    <p className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">{v}</p>
                     <p className="text-xs text-slate-500">{k}</p>
                   </div>
                 ))}

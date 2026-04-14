@@ -47,7 +47,7 @@ export default function RegisterPage() {
           </span>
         </div>
         <div className="card p-8">
-          <h1 className="font-display text-xl font-bold text-slate-100 mb-1">Create account</h1>
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">Create account</h1>
           <p className="text-sm text-slate-500 mb-6">Start discovering leads in minutes</p>
           <form onSubmit={handleSubmit} className="space-y-4">
             {fields.map(f => (

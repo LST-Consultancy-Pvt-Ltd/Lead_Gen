@@ -43,7 +43,7 @@ export default function IntentSignalsPage() {
         {stats.map(s => (
           <div key={s.label} className="card p-4 border-l-2"
             style={{ borderLeftColor: s.color==='blue'?'#3b82f6':s.color==='green'?'#10b981':s.color==='purple'?'#8b5cf6':'#f59e0b' }}>
-            <p className="font-display text-2xl font-bold text-slate-100">{isLoading?'—':s.count}</p>
+            <p className="font-display text-2xl font-bold text-slate-900 dark:text-slate-100">{isLoading?'—':s.count}</p>
             <p className="text-xs text-slate-500">{s.label}</p>
           </div>
         ))}
@@ -63,14 +63,14 @@ export default function IntentSignalsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {signals.map((s: any, i: number) => (
-            <div key={i} className="card p-4 hover:border-slate-600/50 transition-colors cursor-pointer"
+            <div key={i} className="card p-4 hover:border-slate-300 dark:hover:border-slate-600/50 transition-colors cursor-pointer"
               style={{ borderLeft:`3px solid ${borderColors[s.signalType]??'#334155'}` }}>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-300">
+                  <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-300">
                     {s.companyName?.charAt(0).toUpperCase() ?? '?'}
                   </div>
-                  <p className="text-sm font-semibold text-slate-200">{s.companyName}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{s.companyName}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <Badge color={signalColors[s.signalType]??'gray'}>{s.signalType}</Badge>

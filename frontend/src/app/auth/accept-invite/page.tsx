@@ -73,7 +73,7 @@ function AcceptInviteForm() {
         </div>
 
         <div className="card p-8">
-          <h1 className="font-display text-xl font-bold text-slate-100 mb-1">Accept Invitation</h1>
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">Accept Invitation</h1>
           <p className="text-sm text-slate-500 mb-6">Set up your account to join the team</p>
 
           {!token ? (
@@ -120,7 +120,7 @@ function AcceptInviteForm() {
                     <button
                       type="button"
                       onClick={() => setShowPw(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-500 dark:hover:text-slate-300"
                     >
                       {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>

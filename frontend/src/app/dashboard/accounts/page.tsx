@@ -90,10 +90,10 @@ export default function AccountsPage() {
       {/* Create/Edit Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-slate-100">{editItem ? 'Edit Account' : 'New Account'}</h2>
-              <button onClick={closeModal} className="text-slate-500 hover:text-slate-300" title="Close account modal"><X size={16} /></button>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{editItem ? 'Edit Account' : 'New Account'}</h2>
+              <button onClick={closeModal} className="text-slate-500 hover:text-slate-500 dark:hover:text-slate-300" title="Close account modal"><X size={16} /></button>
             </div>
             <form onSubmit={e => { e.preventDefault(); createMutation.mutate(form); }} className="space-y-3">
               <div>
@@ -150,7 +150,7 @@ export default function AccountsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {['Company Name', 'Industry', 'Customer Type', 'Account Owner', 'Created Date', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                   ))}
@@ -158,8 +158,8 @@ export default function AccountsPage() {
               </thead>
               <tbody>
                 {filtered.map((a: any) => (
-                  <tr key={a.id} className="border-b border-white/[0.04] hover:bg-slate-800/20 transition-colors">
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-200">{a.companyName}</td>
+                  <tr key={a.id} className="border-b border-slate-200 dark:border-white/[0.04] hover:bg-slate-200/20 dark:hover:bg-slate-800/20 transition-colors">
+                    <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{a.companyName}</td>
                     <td className="px-4 py-3 text-sm text-slate-400">{a.industry || '—'}</td>
                     <td className="px-4 py-3">
                       <Badge color={a.customerType === 'customer' ? 'green' : a.customerType === 'partner' ? 'blue' : 'gray'}>

@@ -251,7 +251,7 @@ export default function OpportunitiesPage() {
             className={`px-3 py-1.5 rounded-lg text-xs border ${
               businessFilter === line.value
                 ? 'bg-blue-500/15 border-blue-500/40 text-blue-300'
-                : 'bg-slate-900 border-white/10 text-slate-400 hover:border-white/20'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10 text-slate-400 hover:border-slate-400 dark:hover:border-white/20'
             }`}
           >
             {line.label}
@@ -264,14 +264,14 @@ export default function OpportunitiesPage() {
           const items = opportunitiesByStage[stage.id] || [];
           return (
             <div key={stage.id} className="card p-3 min-h-[420px] flex flex-col">
-              <h3 className="text-sm font-semibold text-slate-200 mb-3">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">
                 {stage.label} [{items.length}]
               </h3>
               <div className="space-y-2 overflow-y-auto pr-1">
                 {items.map((opp: any) => (
-                  <div key={opp.id} className="rounded-lg border border-white/10 bg-slate-950 p-3">
+                  <div key={opp.id} className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-950 p-3">
                     <div className="flex items-start justify-between gap-1 mb-0.5">
-                      <p className="text-sm font-semibold text-slate-200">{opp.opportunityName}</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{opp.opportunityName}</p>
                       {daysSince(opp.stageChangedAt || opp.updatedAt) >= STUCK_DAYS_THRESHOLD && !['closed_won','closed_lost'].includes(opp.stage) && (
                         <span title={`Stuck in ${opp.stage} for ${daysSince(opp.stageChangedAt || opp.updatedAt)} days`}
                           className="flex-shrink-0 flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded-full">
@@ -316,10 +316,10 @@ export default function OpportunitiesPage() {
 
       {createOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 w-full max-w-lg">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="section-title">Create Opportunity</h3>
-              <button className="text-slate-500 hover:text-slate-300" onClick={() => setCreateOpen(false)} title="Close create opportunity modal">
+              <button className="text-slate-500 hover:text-slate-500 dark:hover:text-slate-300" onClick={() => setCreateOpen(false)} title="Close create opportunity modal">
                 <X size={16} />
               </button>
             </div>
@@ -424,12 +424,12 @@ export default function OpportunitiesPage() {
       {/* Stage Activity Requirement Confirmation */}
       {stageConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-md">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle size={16} className="text-amber-400" />
               <h3 className="section-title">Activity Requirement</h3>
             </div>
-            <p className="text-sm text-slate-300">{stageConfirmModal.message}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{stageConfirmModal.message}</p>
             <p className="text-xs text-slate-500 mt-2">If the required activity is missing, the server will reject this change.</p>
             <div className="flex gap-2 mt-4">
               <button className="btn-ghost flex-1" onClick={() => setStageConfirmModal(null)}>Cancel</button>
@@ -451,7 +451,7 @@ export default function OpportunitiesPage() {
       {/* Closed Won / Lost Reason Modal */}
       {reasonModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-md">
             {reasonModal.stage === 'closed_won' ? (
               <>
                 <h3 className="section-title">Win Reason <span className="text-emerald-400">✓</span></h3>

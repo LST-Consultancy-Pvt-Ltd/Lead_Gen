@@ -26,6 +26,7 @@ import { usePermissions } from "../../lib/rbac";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ThemeToggle } from "../../components/common/ThemeToggle";
 
 export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const user = useAuthStore((s) => s.user);
@@ -167,7 +168,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   }
 
   return (
-    <header className="h-14 flex-shrink-0 bg-slate-950 border-b border-white/[0.06] flex items-center justify-between px-4 gap-3">
+    <header className="h-14 flex-shrink-0 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-white/[0.06] flex items-center justify-between px-4 gap-3">
       <div className="flex items-center gap-3">
         <button
           onClick={onToggleSidebar}
@@ -201,7 +202,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
           )}
 
           {showDropdown && (
-            <div className="absolute top-full left-0 mt-1.5 w-96 bg-slate-900 border border-white/10 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
+            <div className="absolute top-full left-0 mt-1.5 w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl shadow-2xl shadow-black/10 dark:shadow-black/50 z-50 overflow-hidden">
               {isLoading && !hasResults ? (
                 <div className="flex items-center justify-center py-8">
                   <Spinner size={18} />
@@ -221,7 +222,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                       {leads.map((item: any) => (
                         <button
                           key={item.id}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-800/60 flex items-center gap-3 transition-colors"
+                          className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center gap-3 transition-colors"
                           onClick={() =>
                             navigate(`/dashboard/leads/${item.id}`)
                           }
@@ -230,7 +231,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                             {(item.companyName ?? "?")[0].toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-200 truncate">
+                            <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
                               {item.companyName}
                             </p>
                             <p className="text-[10px] text-slate-500 truncate">
@@ -254,14 +255,14 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                       {contacts.map((item: any) => (
                         <button
                           key={item.id}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-800/60 flex items-center gap-3 transition-colors"
+                          className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center gap-3 transition-colors"
                           onClick={() => navigate("/dashboard/contacts")}
                         >
                           <div className="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-purple-400">
                             {(item.name ?? "?")[0].toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-200 truncate">
+                            <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
                               {item.name}
                             </p>
                             <p className="text-[10px] text-slate-500 truncate">
@@ -285,14 +286,14 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                       {accounts.map((item: any) => (
                         <button
                           key={item.id}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-800/60 flex items-center gap-3 transition-colors"
+                          className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center gap-3 transition-colors"
                           onClick={() => navigate("/dashboard/accounts")}
                         >
                           <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-amber-400">
                             {(item.companyName ?? "?")[0].toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-200 truncate">
+                            <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
                               {item.companyName}
                             </p>
                             <p className="text-[10px] text-slate-500 truncate">
@@ -313,7 +314,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                       {opps.map((item: any) => (
                         <button
                           key={item.id}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-800/60 flex items-center gap-3 transition-colors"
+                          className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800/60 flex items-center gap-3 transition-colors"
                           onClick={() => navigate("/dashboard/opportunities")}
                         >
                           <div className="w-7 h-7 rounded-lg bg-emerald-500/15 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-emerald-400">
@@ -322,7 +323,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                               "?")[0].toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-200 truncate">
+                            <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
                               {item.opportunityName ?? item.title}
                             </p>
                             <p className="text-[10px] text-slate-500 truncate">
@@ -358,6 +359,9 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
           </span>
         </div>
 
+        {/* Theme Toggle */}
+        <ThemeToggle />
+
         <div className="relative" ref={notificationsRef}>
           <button
             className="btn-ghost p-2 relative"
@@ -365,15 +369,15 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
           >
             <Bell size={16} />
             {unread.length > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[10px] text-white font-semibold flex items-center justify-center border border-slate-950">
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[10px] text-white font-semibold flex items-center justify-center border border-white dark:border-slate-950">
                 {unread.length > 99 ? "99+" : unread.length}
               </span>
             )}
           </button>
           {notificationsOpen && (
-            <div className="absolute right-0 top-full mt-1 w-80 card shadow-xl shadow-black/40 z-50 overflow-hidden">
-              <div className="px-3 py-2 border-b border-white/[0.06]">
-                <p className="text-sm font-semibold text-slate-200">
+            <div className="absolute right-0 top-full mt-1 w-80 card shadow-xl shadow-black/10 dark:shadow-black/40 z-50 overflow-hidden">
+              <div className="px-3 py-2 border-b border-slate-200 dark:border-white/[0.06]">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                   Notifications
                 </p>
               </div>
@@ -381,9 +385,9 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                 {notifications.slice(0, 10).map((n: any) => (
                   <div
                     key={n.id}
-                    className={`px-3 py-2 border-b border-white/[0.04] ${!n.isRead ? "bg-blue-500/10" : ""}`}
+                    className={`px-3 py-2 border-b border-slate-100 dark:border-white/[0.04] ${!n.isRead ? "bg-blue-500/10" : ""}`}
                   >
-                    <p className="text-sm font-semibold text-slate-200">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                       {n.title}
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">{n.message}</p>
@@ -398,7 +402,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                   </div>
                 )}
               </div>
-              <div className="p-2 border-t border-white/[0.06]">
+              <div className="p-2 border-t border-slate-200 dark:border-white/[0.06]">
                 <button
                   className="btn-ghost w-full justify-center text-xs"
                   disabled={!unread.length || markReadMutation.isPending}
@@ -421,12 +425,12 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white text-xs font-bold">
               {user?.name?.charAt(0).toUpperCase() ?? "U"}
             </div>
-            <span className="text-sm text-slate-300 hidden sm:block">
+            <span className="text-sm text-slate-600 dark:text-slate-300 hidden sm:block">
               {user?.name?.split(" ")[0]}
             </span>
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-44 card shadow-xl shadow-black/40 py-1 z-50">
+            <div className="absolute right-0 top-full mt-1 w-44 card shadow-xl shadow-black/10 dark:shadow-black/40 py-1 z-50">
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 w-full text-left transition-colors"

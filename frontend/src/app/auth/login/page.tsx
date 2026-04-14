@@ -53,7 +53,7 @@ export default function LoginPage() {
         </div>
 
         <div className="card p-8">
-          <h1 className="font-display text-xl font-bold text-slate-100 mb-1">Welcome back</h1>
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">Welcome back</h1>
           <p className="text-sm text-slate-500 mb-6">Sign in to your account</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

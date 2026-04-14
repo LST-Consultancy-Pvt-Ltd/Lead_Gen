@@ -48,8 +48,8 @@ function InfoRow({
 }) {
   if (!value) return null;
   return (
-    <div className="flex items-center gap-3 p-3 bg-slate-950 rounded-xl group">
-      <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0">
+    <div className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-950 rounded-xl group">
+      <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
         {icon}
       </div>
       <div className="flex-1 min-w-0">
@@ -58,7 +58,7 @@ function InfoRow({
           <a href={href} target="_blank" rel="noopener noreferrer"
             className="text-sm text-blue-400 hover:underline truncate block">{value}</a>
         ) : (
-          <p className="text-sm text-slate-200 truncate">{value}</p>
+          <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{value}</p>
         )}
       </div>
       {copyable && (
@@ -93,7 +93,7 @@ function EnrichPanel({
 
   if (hasContact && status === 'idle') {
     return (
-      <div className="flex gap-2 pt-3 border-t border-white/[0.05] mt-3">
+      <div className="flex gap-2 pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3">
         <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
           onClick={onSignalHire} disabled={isSHLoading}>
           {isSHLoading ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
@@ -116,8 +116,8 @@ function EnrichPanel({
         isSHLoading ? 'bg-emerald-500/[0.08] border-emerald-500/30'
           : status === 'sh_found' ? 'bg-emerald-500/[0.08] border-emerald-500/30'
           : status === 'sh_not_found' || status === 'searching_apollo' || status === 'apollo_found' || status === 'both_failed'
-            ? 'bg-slate-950 border-white/[0.06] opacity-60'
-            : 'bg-slate-950 border-white/[0.06]'
+            ? 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] opacity-60'
+            : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06]'
       )}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -125,7 +125,7 @@ function EnrichPanel({
               <Shield size={12} className="text-emerald-400" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-200">SignalHire</p>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">SignalHire</p>
               <p className="text-[10px] text-slate-500">Best for LinkedIn-matched contacts</p>
             </div>
           </div>
@@ -150,8 +150,8 @@ function EnrichPanel({
         isApolloLoading ? 'bg-violet-500/[0.08] border-violet-500/30'
           : status === 'apollo_found' ? 'bg-violet-500/[0.08] border-violet-500/30'
           : status === 'both_failed' ? 'bg-red-500/[0.06] border-red-500/20'
-          : status === 'idle' || status === 'searching_sh' ? 'bg-slate-950 border-white/[0.06] opacity-50'
-          : 'bg-slate-950 border-white/[0.06]'
+          : status === 'idle' || status === 'searching_sh' ? 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] opacity-50'
+          : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06]'
       )}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -159,7 +159,7 @@ function EnrichPanel({
               <Search size={12} className="text-violet-400" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-200">Apollo.io</p>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Apollo.io</p>
               <p className="text-[10px] text-slate-500">Fallback — 200M+ contacts database</p>
             </div>
           </div>
@@ -383,7 +383,7 @@ export default function LeadDetailPage() {
   return (
     <div className="space-y-5 max-w-5xl">
       <Link href="/dashboard/leads"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300">
+        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-500 dark:hover:text-slate-300">
         <ArrowLeft size={15} /> Back to Leads
       </Link>
 
@@ -392,11 +392,11 @@ export default function LeadDetailPage() {
         <div className="flex items-center gap-4">
           <Avatar initials={getInitials(lead.companyName)} size="lg" />
           <div>
-            <h1 className="font-display text-xl font-bold text-slate-100">{lead.companyName}</h1>
+            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">{lead.companyName}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               {/* Domain badge */}
               {domainName && (
-                <span className="inline-flex items-center gap-1 text-xs bg-slate-800 border border-white/[0.08] text-slate-400 px-2.5 py-1 rounded-lg font-mono">
+                <span className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-400 px-2.5 py-1 rounded-lg font-mono">
                   {domainName}
                 </span>
               )}
@@ -593,14 +593,14 @@ export default function LeadDetailPage() {
 
             {/* Description */}
             {(lead.description || agg.description) && (
-              <div className="mt-3 p-3 bg-slate-950 rounded-xl flex items-start gap-2">
+              <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-950 rounded-xl flex items-start gap-2">
                 <FileText size={12} className="text-slate-500 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-400 leading-relaxed">{lead.description || agg.description}</p>
               </div>
             )}
 
             {/* Edit LinkedIn */}
-            <div className="mt-3 pt-3 border-t border-white/[0.06]">
+            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/[0.06]">
               {editingLinkedin ? (
                 <div className="flex items-center gap-2">
                   <input className="input text-xs flex-1"
@@ -690,9 +690,9 @@ export default function LeadDetailPage() {
               <h2 className="section-title mb-3">Intent Signals</h2>
               <div className="space-y-2">
                 {(lead.intentSignals as any[]).map((s: any, i: number) => (
-                  <div key={i} className="p-3 bg-slate-950 rounded-xl border-l-2 border-blue-500/40 flex items-start gap-2.5">
+                  <div key={i} className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl border-l-2 border-blue-500/40 flex items-start gap-2.5">
                     <Zap size={13} className="text-amber-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-slate-300">{s.text ?? s.signalText ?? s}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">{s.text ?? s.signalText ?? s}</p>
                   </div>
                 ))}
               </div>
@@ -705,9 +705,9 @@ export default function LeadDetailPage() {
               <h2 className="section-title mb-3">Job Postings</h2>
               <div className="space-y-2">
                 {(lead.jobPostings as any[]).map((jp: any, i: number) => (
-                  <div key={i} className="p-3 bg-slate-950 rounded-xl">
+                  <div key={i} className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-slate-200">{jp.title}</p>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{jp.title}</p>
                       {jp.postedAt && <span className="text-xs text-slate-500 flex-shrink-0">{jp.postedAt}</span>}
                     </div>
                     {jp.snippet && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{jp.snippet}</p>}
@@ -746,7 +746,7 @@ export default function LeadDetailPage() {
               <p className="text-xs text-slate-500">Lead Score</p>
               <ScoreRing score={lead.leadScore} size={52} />
             </div>
-            <div className="border-t border-white/[0.06] pt-4 flex items-center justify-between">
+            <div className="border-t border-slate-200 dark:border-white/[0.06] pt-4 flex items-center justify-between">
               <div>
                 <p className="text-xs text-slate-500 mb-1">Intent Level</p>
                 <Badge color={intentColors[lead.intentLevel] ?? 'gray'}>{lead.intentLevel}</Badge>
@@ -764,11 +764,11 @@ export default function LeadDetailPage() {
             {lead.source && (
               <p className="text-xs text-slate-600 mt-2">Source: {lead.source}</p>
             )}
-            <div className="mt-3 pt-3 border-t border-white/[0.06]">
+            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/[0.06]">
               <div className="flex items-center gap-2 text-xs">
                 <Calendar size={12} className="text-slate-500" />
                 <span className="text-slate-600">Follow-up:</span>
-                <span className="text-slate-300">
+                <span className="text-slate-600 dark:text-slate-300">
                   {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                 </span>
               </div>
@@ -777,11 +777,11 @@ export default function LeadDetailPage() {
 
           {/* AI Panel */}
           <div className="card p-5">
-            <div className="flex gap-1 mb-4 p-1 bg-slate-950 rounded-xl">
+            <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl">
               {(['analysis', 'email'] as const).map(tab => (
                 <button key={tab} onClick={() => setAiTab(tab)}
                   className={cn('flex-1 py-1.5 rounded-lg text-xs font-medium transition-all',
-                    aiTab === tab ? 'bg-blue-500/20 text-blue-300' : 'text-slate-500 hover:text-slate-300')}>
+                    aiTab === tab ? 'bg-blue-500/20 text-blue-300' : 'text-slate-500 hover:text-slate-500 dark:hover:text-slate-300')}>
                   {tab === 'analysis' ? '🤖 Analysis' : '✉️ Email'}
                 </button>
               ))}
@@ -790,21 +790,21 @@ export default function LeadDetailPage() {
             {aiTab === 'analysis' && (
               <div className="space-y-3">
                 {lead.aiSummary && (
-                  <div className="p-3 bg-slate-950 rounded-xl">
+                  <div className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Summary</p>
-                    <p className="text-xs text-slate-300 leading-relaxed">{lead.aiSummary}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.aiSummary}</p>
                   </div>
                 )}
                 {lead.opportunity && (
                   <div className="p-3 bg-blue-500/[0.08] border border-blue-500/20 rounded-xl">
                     <p className="text-[10px] font-semibold text-blue-300 mb-1 uppercase tracking-wider">Opportunity</p>
-                    <p className="text-xs text-slate-300 leading-relaxed">{lead.opportunity}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.opportunity}</p>
                   </div>
                 )}
                 {lead.aiPitch && (
                   <div className="p-3 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-xl">
                     <p className="text-[10px] font-semibold text-emerald-400 mb-1 uppercase tracking-wider">Pitch</p>
-                    <p className="text-xs text-slate-300 leading-relaxed">{lead.aiPitch}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.aiPitch}</p>
                   </div>
                 )}
                 {!lead.aiSummary && (

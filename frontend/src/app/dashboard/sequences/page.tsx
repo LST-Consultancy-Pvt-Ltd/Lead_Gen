@@ -26,7 +26,7 @@ export default function SequencesPage() {
 
       <div className="card p-6">
         <div className="flex items-center justify-between mb-1">
-          <p className="font-semibold text-slate-200">{DEMO_SEQUENCE.name}</p>
+          <p className="font-semibold text-slate-800 dark:text-slate-200">{DEMO_SEQUENCE.name}</p>
           <Badge color="green">Active</Badge>
         </div>
         <p className="text-sm text-slate-500 mb-6">{DEMO_SEQUENCE.contacts} active contacts · 4 steps</p>
@@ -43,10 +43,10 @@ export default function SequencesPage() {
                 )}
               </div>
               <div className={`flex-1 ${i < DEMO_SEQUENCE.steps.length - 1 ? 'pb-5' : ''}`}>
-                <div className="bg-slate-950 rounded-xl p-4 flex items-center justify-between">
+                <div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-4 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold text-blue-400 mb-0.5">{step.day}</p>
-                    <p className="text-sm font-semibold text-slate-200">{step.action}</p>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{step.action}</p>
                     <p className="text-xs text-slate-500">Template: {step.template}</p>
                   </div>
                   <Badge color={step.status === 'active' ? 'green' : 'gray'}>{step.status}</Badge>

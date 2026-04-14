@@ -43,11 +43,11 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
 
   return (
     <aside className={cn(
-      'flex flex-col bg-slate-950 border-r border-white/[0.06] transition-all duration-300 flex-shrink-0',
+      'flex flex-col bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-white/[0.06] transition-all duration-300 flex-shrink-0',
       collapsed ? 'w-16' : 'w-56'
     )}>
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 py-5 border-b border-white/[0.06]">
+      <div className="flex items-center gap-2.5 px-4 py-5 border-b border-slate-200 dark:border-white/[0.06]">
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center flex-shrink-0">
           <Sparkles size={16} className="text-white"/>
         </div>
@@ -73,12 +73,12 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
       </nav>
 
       {/* User */}
-      <div className="px-3 py-3 border-t border-white/[0.06]">
+      <div className="px-3 py-3 border-t border-slate-200 dark:border-white/[0.06]">
         <div className="flex items-center gap-2.5">
           <Avatar initials={user ? getInitials(user.name) : 'U'} size="sm"/>
           {!collapsed && user && (
             <div className="overflow-hidden">
-              <p className="text-xs font-semibold text-slate-200 truncate">{user.name}</p>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{user.name}</p>
               <span className={cn('inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 leading-tight', roleBadgeClass)}>
                 {getRoleLabel(user.role)}
               </span>

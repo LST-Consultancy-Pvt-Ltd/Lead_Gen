@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -315,7 +315,7 @@ function ActivityRow({
     : "/dashboard/opportunities";
 
   return (
-    <div className="px-5 py-4 hover:bg-slate-800/30 transition-colors">
+    <div className="px-5 py-4 hover:bg-slate-200/30 dark:hover:bg-slate-800/30 transition-colors">
       <div className="flex items-start gap-3">
         <div
           className={
@@ -373,7 +373,7 @@ function ActivityRow({
             </div>
           </div>
           {activity.outcome && (
-            <p className="text-xs text-slate-300 mt-1.5 line-clamp-2">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2">
               &ldquo;{activity.outcome}&rdquo;
             </p>
           )}
@@ -418,18 +418,18 @@ function DeleteModal({
   const meta = getTypeMeta(activity.type);
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
             <AlertTriangle size={20} className="text-red-400" />
           </div>
-          <h3 className="text-base font-semibold text-slate-100">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
             Delete this activity?
           </h3>
         </div>
         <p className="text-sm text-slate-400 leading-relaxed">
-          {/* You are about to delete the <span className="text-slate-200 font-medium">{meta.label}</span> activity
-          logged by <span className="text-slate-200 font-medium">{activity.createdBy?.name ?? 'Unknown'}</span>
+          {/* You are about to delete the <span className="text-slate-800 dark:text-slate-200 font-medium">{meta.label}</span> activity
+          logged by <span className="text-slate-800 dark:text-slate-200 font-medium">{activity.createdBy?.name ?? 'Unknown'}</span>
           {activity.activityDate ? ' on ' + formatDate(activity.activityDate) : ''}.
           This action is permanent and will be recorded in the Audit Log. */}
           Are you Sure want's to Delete
@@ -772,13 +772,13 @@ export default function ActivitiesPage() {
           label: "Today",
           value: stats.today,
           sub: "activities logged",
-          color: "text-slate-100",
+          color: "text-slate-900 dark:text-slate-100",
         },
         {
           label: "This week",
           value: stats.thisWeek,
           sub: "total logged",
-          color: "text-slate-100",
+          color: "text-slate-900 dark:text-slate-100",
         },
         {
           label: "Follow-ups due",
@@ -799,13 +799,13 @@ export default function ActivitiesPage() {
           label: "Team today",
           value: stats.today,
           sub: "activities logged",
-          color: "text-slate-100",
+          color: "text-slate-900 dark:text-slate-100",
         },
         {
           label: "This week",
           value: stats.thisWeek,
           sub: "total team activities",
-          color: "text-slate-100",
+          color: "text-slate-900 dark:text-slate-100",
         },
         {
           label: "Overdue (team)",
@@ -828,13 +828,13 @@ export default function ActivitiesPage() {
         label: "System today",
         value: stats.today,
         sub: "org-wide activities",
-        color: "text-slate-100",
+        color: "text-slate-900 dark:text-slate-100",
       },
       {
         label: "This week",
         value: stats.thisWeek,
         sub: "all executives",
-        color: "text-slate-100",
+        color: "text-slate-900 dark:text-slate-100",
       },
       {
         label: "Overdue (all)",
@@ -846,7 +846,7 @@ export default function ActivitiesPage() {
         label: "Total activities",
         value: stats.total,
         sub: "since go-live",
-        color: "text-slate-100",
+        color: "text-slate-900 dark:text-slate-100",
       },
     ];
   }, [isSalesUser, isManager, stats, allForStats]);
@@ -929,8 +929,8 @@ export default function ActivitiesPage() {
           className={
             "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors " +
             (viewMode === "list"
-              ? "bg-slate-800 border-white/20 text-slate-100"
-              : "bg-transparent border-white/10 text-slate-500 hover:border-white/20")
+              ? "bg-slate-200 dark:bg-slate-800 border-white/20 text-slate-900 dark:text-slate-100"
+              : "bg-transparent border-slate-200 dark:border-white/10 text-slate-500 hover:border-slate-400 dark:hover:border-white/20")
           }
         >
           <List size={13} /> List view
@@ -940,8 +940,8 @@ export default function ActivitiesPage() {
           className={
             "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors " +
             (viewMode === "timeline"
-              ? "bg-slate-800 border-white/20 text-slate-100"
-              : "bg-transparent border-white/10 text-slate-500 hover:border-white/20")
+              ? "bg-slate-200 dark:bg-slate-800 border-white/20 text-slate-900 dark:text-slate-100"
+              : "bg-transparent border-slate-200 dark:border-white/10 text-slate-500 hover:border-slate-400 dark:hover:border-white/20")
           }
         >
           <Clock size={13} /> Timeline view
@@ -1055,7 +1055,7 @@ export default function ActivitiesPage() {
                 )}
               </button>
               {showLinkedFilter && (
-                <div className="absolute top-full left-0 mt-1 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl z-40 p-2">
+                <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl shadow-xl z-40 p-2">
                   <input
                     autoFocus
                     className="input h-8 text-xs w-full"
@@ -1067,7 +1067,7 @@ export default function ActivitiesPage() {
                     {flLeads.map((l: any) => (
                       <button
                         key={l.id}
-                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-800 rounded text-slate-300"
+                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300"
                         onClick={() => {
                           setLinkedToFilterId(l.id);
                           setLinkedToFilterName(l.companyName);
@@ -1092,7 +1092,7 @@ export default function ActivitiesPage() {
 
           {hasActiveFilters && (
             <button
-              className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1"
+              className="text-xs text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 flex items-center gap-1"
               onClick={clearFilters}
             >
               <X size={11} /> Clear all
@@ -1114,7 +1114,7 @@ export default function ActivitiesPage() {
                   "px-3 py-1 rounded-full text-xs border transition-colors " +
                   (typeFilter === t.value
                     ? "bg-blue-500/15 border-blue-500/40 text-blue-300"
-                    : "bg-slate-900 border-white/10 text-slate-400 hover:border-white/20")
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10 text-slate-400 hover:border-slate-400 dark:hover:border-white/20")
                 }
               >
                 {t.label}
@@ -1127,14 +1127,14 @@ export default function ActivitiesPage() {
       {/* 5. ACTIVITY LIST */}
       <div className="card overflow-hidden">
         {!isSalesUser && activities.length > 0 && (
-          <div className="px-5 py-3 border-b border-white/[0.04]">
+          <div className="px-5 py-3 border-b border-slate-200 dark:border-white/[0.04]">
             <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest">
               {isManager ? "All team activities" : "System-wide activity log"}
             </p>
           </div>
         )}
         {isSalesUser && activities.length > 0 && (
-          <div className="px-5 py-3 border-b border-white/[0.04]">
+          <div className="px-5 py-3 border-b border-slate-200 dark:border-white/[0.04]">
             <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest">
               Recent activities
             </p>
@@ -1199,7 +1199,7 @@ export default function ActivitiesPage() {
                     {items.length} activit{items.length === 1 ? "y" : "ies"}
                   </span>
                 </div>
-                <div className="space-y-1 pl-2 border-l border-white/[0.06]">
+                <div className="space-y-1 pl-2 border-l border-slate-200 dark:border-white/[0.06]">
                   {items.map((a) => (
                     <ActivityRow
                       key={a.id}
@@ -1226,7 +1226,7 @@ export default function ActivitiesPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="w-8 h-8 rounded-lg flex items-center justify-center border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="w-8 h-8 rounded-lg flex items-center justify-center border border-slate-200 dark:border-white/10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               title="Previous page"
             >
               <ChevronLeft size={14} />
@@ -1255,7 +1255,7 @@ export default function ActivitiesPage() {
                   }
                 }}
                 onFocus={(e) => e.currentTarget.select()}
-                className="w-10 h-8 rounded-lg bg-slate-800 border border-white/10 text-center text-xs text-slate-200 font-medium focus:border-blue-500/50 focus:outline-none cursor-text"
+                className="w-10 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-center text-xs text-slate-800 dark:text-slate-200 font-medium focus:border-blue-500/50 focus:outline-none cursor-text"
                 title="Go to page"
               />
               <span>/ {totalPages}</span>
@@ -1263,7 +1263,7 @@ export default function ActivitiesPage() {
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="w-8 h-8 rounded-lg flex items-center justify-center border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="w-8 h-8 rounded-lg flex items-center justify-center border border-slate-200 dark:border-white/10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               title="Next page"
             >
               <ChevronRight size={14} />
@@ -1275,7 +1275,7 @@ export default function ActivitiesPage() {
       {/* COACHING ALERTS \u2014 manager only */}
       {isManager && overdueActivities.length > 0 && (
         <div className="card overflow-hidden border-amber-500/20">
-          <div className="px-5 py-3 border-b border-white/[0.04] bg-amber-500/5">
+          <div className="px-5 py-3 border-b border-slate-200 dark:border-white/[0.04] bg-amber-500/5">
             <p className="text-xs font-semibold text-amber-400">
               Coaching alerts \u2014 overdue follow-ups across team
             </p>
@@ -1293,7 +1293,7 @@ export default function ActivitiesPage() {
                   className="px-5 py-3 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm text-slate-200 font-medium truncate">
+                    <p className="text-sm text-slate-800 dark:text-slate-200 font-medium truncate">
                       {a.createdBy?.name ?? "Unknown"} {"\u2014"} {linkedName}
                       {a.opportunity?.opportunityName ? " Opp" : ""}
                     </p>
@@ -1319,14 +1319,14 @@ export default function ActivitiesPage() {
       {/* 6. LOG ACTIVITY MODAL */}
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-xl shadow-2xl max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
-              <h3 className="text-base font-semibold text-slate-100">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-xl shadow-2xl max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-white/[0.06]">
+              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 Log Activity
               </h3>
               <button
                 title="Close"
-                className="text-slate-500 hover:text-slate-300"
+                className="text-slate-500 hover:text-slate-500 dark:hover:text-slate-300"
                 onClick={closeForm}
               >
                 <X size={16} />
@@ -1387,7 +1387,7 @@ export default function ActivitiesPage() {
                         <button
                           type="button"
                           title="Clear linked record"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-500 dark:hover:text-slate-300"
                           onClick={() => {
                             setLinkedDisplay("");
                             setLinkedSearch("");
@@ -1400,7 +1400,7 @@ export default function ActivitiesPage() {
                       )}
                       {linkedDropOpen &&
                         (lsLeads.length > 0 || lsOpps.length > 0) && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
                             {lsLeads.length > 0 && (
                               <>
                                 <p className="px-3 pt-2 pb-1 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
@@ -1410,7 +1410,7 @@ export default function ActivitiesPage() {
                                   <button
                                     key={l.id}
                                     type="button"
-                                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-700 text-slate-200"
+                                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-700 text-slate-800 dark:text-slate-200"
                                     onClick={() =>
                                       selectLinked("lead", l.id, l.companyName)
                                     }
@@ -1436,7 +1436,7 @@ export default function ActivitiesPage() {
                                   <button
                                     key={o.id}
                                     type="button"
-                                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-700 text-slate-200"
+                                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-700 text-slate-800 dark:text-slate-200"
                                     onClick={() =>
                                       selectLinked(
                                         "opportunity",
@@ -1560,7 +1560,7 @@ export default function ActivitiesPage() {
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-600 bg-slate-950 rounded-lg px-3 py-2 leading-relaxed">
+                <p className="text-[11px] text-slate-600 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2 leading-relaxed">
                   On save {"\u2014"} system auto-updates parent
                   lead/opportunity:{" "}
                   <span className="text-slate-500">
@@ -1572,7 +1572,7 @@ export default function ActivitiesPage() {
               </form>
             </div>
 
-            <div className="flex gap-2 px-6 py-4 border-t border-white/[0.06]">
+            <div className="flex gap-2 px-6 py-4 border-t border-slate-200 dark:border-white/[0.06]">
               <button
                 type="button"
                 className="btn-ghost flex-1"

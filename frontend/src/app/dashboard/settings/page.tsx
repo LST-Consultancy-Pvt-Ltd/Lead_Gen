@@ -130,7 +130,7 @@ export default function SettingsPage() {
   if (!permissions.canAccessSettings) {
     return (
       <div className="card p-6">
-        <h1 className="text-lg font-semibold text-slate-200">Unauthorized</h1>
+        <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Unauthorized</h1>
         <p className="text-sm text-slate-500 mt-1">You do not have access to settings.</p>
       </div>
     );
@@ -144,14 +144,14 @@ export default function SettingsPage() {
       </div>
 
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center justify-between">
           <h2 className="section-title">User Management</h2>
           <button className="btn-ghost" onClick={() => setBulkOpen(true)}>Bulk Reassign Leads</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/[0.06]">
+              <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                 {['Name', 'Email', 'Role', 'Status', 'Last Login', 'Actions'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                 ))}
@@ -159,8 +159,8 @@ export default function SettingsPage() {
             </thead>
             <tbody>
               {users.map((u: any) => (
-                <tr key={u.id} className="border-b border-white/[0.04]">
-                  <td className="px-4 py-3 text-sm text-slate-200">{u.name}</td>
+                <tr key={u.id} className="border-b border-slate-200 dark:border-white/[0.04]">
+                  <td className="px-4 py-3 text-sm text-slate-800 dark:text-slate-200">{u.name}</td>
                   <td className="px-4 py-3 text-sm text-slate-400">{u.email}</td>
                   <td className="px-4 py-3">
                     <select
@@ -209,19 +209,19 @@ export default function SettingsPage() {
           {categories.map((cat) => {
             const values = categoryValues(cat.key);
             return (
-              <div key={cat.key} className="border border-white/10 rounded-xl overflow-hidden">
+              <div key={cat.key} className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden">
                 <button
-                  className="w-full px-3 py-2 flex items-center justify-between bg-slate-950"
+                  className="w-full px-3 py-2 flex items-center justify-between bg-slate-100 dark:bg-slate-950"
                   onClick={() => setExpanded((prev) => ({ ...prev, [cat.key]: !prev[cat.key] }))}
                 >
-                  <span className="text-sm text-slate-200">{cat.label}</span>
+                  <span className="text-sm text-slate-800 dark:text-slate-200">{cat.label}</span>
                   {expanded[cat.key] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
                 {expanded[cat.key] && (
                   <div className="p-3 space-y-2">
                     {values.map((item: any) => (
-                      <div key={item.id || item.value} className="flex items-center justify-between bg-slate-950 rounded-lg px-3 py-2">
-                        <span className="text-sm text-slate-300">{item.value || item.label}</span>
+                      <div key={item.id || item.value} className="flex items-center justify-between bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2">
+                        <span className="text-sm text-slate-600 dark:text-slate-300">{item.value || item.label}</span>
                         <button className="btn-ghost text-xs" onClick={() => disableDropdownMutation.mutate(item.id)}>Disable</button>
                       </div>
                     ))}
@@ -291,7 +291,7 @@ export default function SettingsPage() {
 
       {bulkOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-md">
             <h3 className="section-title mb-3">Bulk Reassign Leads</h3>
             <div className="space-y-3">
               <div>

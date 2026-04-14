@@ -4,53 +4,66 @@
 
 @layer base {
   :root {
-    --background: 222 47% 5%;
-    --foreground: 213 31% 91%;
+    --background: #ffffff;
+    --foreground: #1e293b;
+    --toast-bg: #ffffff;
+    --toast-color: #1e293b;
+    --toast-border: rgba(0, 0, 0, 0.1);
+  }
+
+  .dark {
+    --background: #060b18;
+    --foreground: #e2e8f0;
+    --toast-bg: #0d1628;
+    --toast-color: #e2e8f0;
+    --toast-border: rgba(255, 255, 255, 0.1);
   }
 
   * { box-sizing: border-box; }
 
   body {
-    background: #060b18;
-    color: #e2e8f0;
+    background: var(--background);
+    color: var(--foreground);
     font-family: var(--font-dm-sans), system-ui, sans-serif;
   }
 
   ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: #0a1124; }
-  ::-webkit-scrollbar-thumb { background: #1e2d4a; border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .dark ::-webkit-scrollbar-track { background: #0a1124; }
+  .dark ::-webkit-scrollbar-thumb { background: #1e2d4a; border-radius: 4px; }
 }
 
 @layer components {
   .card {
-    @apply bg-slate-900 border border-white/[0.06] rounded-2xl;
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/[0.06] rounded-2xl;
   }
   .card-hover {
-    @apply transition-all duration-200 hover:border-blue-500/30 hover:bg-slate-800/60;
+    @apply transition-all duration-200 hover:border-blue-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/60;
   }
   .btn-primary {
     @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold text-sm transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.05] border border-white/[0.08] text-slate-400 font-medium text-sm transition-all duration-200 hover:bg-white/[0.09] hover:text-slate-200;
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.08] text-slate-600 dark:text-slate-400 font-medium text-sm transition-all duration-200 hover:bg-slate-200 dark:hover:bg-white/[0.09] hover:text-slate-800 dark:hover:text-slate-200;
   }
   .input {
-    @apply w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-200 outline-none transition-all duration-200 placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15;
+    @apply w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 outline-none transition-all duration-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15;
   }
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border;
   }
   .nav-link {
-    @apply flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-200 hover:bg-blue-500/[0.08] transition-all duration-200 text-sm font-medium;
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-500/[0.08] transition-all duration-200 text-sm font-medium;
   }
   .nav-link-active {
-    @apply bg-blue-500/[0.15] text-blue-400 border border-blue-500/20;
+    @apply bg-blue-50 dark:bg-blue-500/[0.15] text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20;
   }
   .page-title {
-    @apply font-display text-xl font-bold text-slate-100;
+    @apply font-display text-xl font-bold text-slate-900 dark:text-slate-100;
   }
   .section-title {
-    @apply text-sm font-bold text-slate-200;
+    @apply text-sm font-bold text-slate-800 dark:text-slate-200;
   }
   .label {
     @apply text-xs font-semibold text-slate-500 uppercase tracking-wider;

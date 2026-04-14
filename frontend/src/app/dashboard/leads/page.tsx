@@ -234,13 +234,13 @@ export default function LeadsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {permissions.canReassignLead && (
                     <th className="px-4 py-3 w-8">
                       <input
                         type="checkbox"
                         title="Select all"
-                        className="w-4 h-4 rounded border-white/20 bg-slate-800 accent-blue-500 cursor-pointer"
+                        className="w-4 h-4 rounded border-white/20 bg-slate-200 dark:bg-slate-800 accent-blue-500 cursor-pointer"
                         checked={leads.length > 0 && selectedLeads.size === leads.length}
                         ref={(el) => { if (el) el.indeterminate = selectedLeads.size > 0 && selectedLeads.size < leads.length; }}
                         onChange={toggleSelectAll}
@@ -274,13 +274,13 @@ export default function LeadsPage() {
               </thead>
               <tbody>
                 {leads.map((l: any) => (
-                  <tr key={l.id} className={`border-b border-white/[0.04] hover:bg-slate-800/30 transition-colors ${selectedLeads.has(l.id) ? 'bg-blue-500/5' : ''}`}>
+                  <tr key={l.id} className={`border-b border-slate-200 dark:border-white/[0.04] hover:bg-slate-200/30 dark:hover:bg-slate-800/30 transition-colors ${selectedLeads.has(l.id) ? 'bg-blue-500/5' : ''}`}>
                     {permissions.canReassignLead && (
                       <td className="px-4 py-3 w-8">
                         <input
                           type="checkbox"
                           title="Select lead"
-                          className="w-4 h-4 rounded border-white/20 bg-slate-800 accent-blue-500 cursor-pointer"
+                          className="w-4 h-4 rounded border-white/20 bg-slate-200 dark:bg-slate-800 accent-blue-500 cursor-pointer"
                           checked={selectedLeads.has(l.id)}
                           onChange={() => toggleSelect(l.id)}
                         />
@@ -290,13 +290,13 @@ export default function LeadsPage() {
                       <Link href={`/dashboard/leads/${l.id}`} className="flex items-center gap-2.5">
                         <Avatar initials={getInitials(l.companyName)} size="sm" />
                         <div>
-                          <p className="text-sm font-semibold text-slate-200">{l.companyName}</p>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{l.companyName}</p>
                           <p className="text-xs text-slate-500">{l.industry || 'Unknown'}</p>
                         </div>
                       </Link>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-xs text-slate-200">{l.contactName || '—'}</p>
+                      <p className="text-xs text-slate-800 dark:text-slate-200">{l.contactName || '—'}</p>
                       <p className="text-xs text-slate-500">{l.contactEmail}</p>
                     </td>
                     <RoleGuard permission="canViewAllLeads">
@@ -373,7 +373,7 @@ export default function LeadsPage() {
                 className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
                   p === page
                     ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                    : 'text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
                 }`}
               >
                 {p}
@@ -387,13 +387,13 @@ export default function LeadsPage() {
       {assignOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAssignOpen(false)} />
-          <div className="relative bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-slate-100">Assign Leads</h3>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Assign Leads</h3>
                 <p className="text-xs text-slate-500 mt-0.5">{selectedLeads.size} lead{selectedLeads.size > 1 ? 's' : ''} selected</p>
               </div>
-              <button title="Close" onClick={() => setAssignOpen(false)} className="text-slate-500 hover:text-slate-300">
+              <button title="Close" onClick={() => setAssignOpen(false)} className="text-slate-500 hover:text-slate-500 dark:hover:text-slate-300">
                 <X size={16} />
               </button>
             </div>

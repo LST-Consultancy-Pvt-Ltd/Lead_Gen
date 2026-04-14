@@ -16,7 +16,7 @@ import {
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs">
       <p className="text-slate-400 mb-1">{label}</p>
       <p className="font-bold text-blue-300">{payload[0].value} leads</p>
     </div>
@@ -134,7 +134,7 @@ export default function AnalyticsPage() {
             <BarChart data={monthlyData} barCategoryGap="30%">
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="rgba(255,255,255,0.04)"
+                stroke="rgba(100,116,139,0.15)"
               />
               <XAxis
                 dataKey="month"
@@ -180,7 +180,7 @@ export default function AnalyticsPage() {
                 <div key={key}>
                   <div className="flex justify-between mb-1.5 text-xs">
                     <span className="text-slate-400">{label}</span>
-                    <span className="font-semibold text-slate-300">{pct}%</span>
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">{pct}%</span>
                   </div>
                   <ProgressBar value={pct} color={color as any} />
                 </div>
@@ -197,7 +197,7 @@ export default function AnalyticsPage() {
                 <div key={s.source}>
                   <div className="flex justify-between mb-1.5 text-xs">
                     <span className="text-slate-400">{s.source}</span>
-                    <span className="font-semibold text-slate-300">
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">
                       {s.count}
                     </span>
                   </div>

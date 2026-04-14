@@ -171,7 +171,7 @@ export default function ImportPage() {
   if (!permissions.canImportData) {
     return (
       <div className="card p-6">
-        <h1 className="text-lg font-semibold text-slate-200">Unauthorized</h1>
+        <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Unauthorized</h1>
         <p className="text-sm text-slate-500 mt-1">You do not have permission to import data.</p>
       </div>
     );
@@ -193,7 +193,7 @@ export default function ImportPage() {
           ].map((item, idx) => (
             <div
               key={item}
-              className={`px-2.5 py-1 rounded-md border ${step === idx + 1 ? 'bg-blue-500/15 border-blue-500/40 text-blue-300' : 'bg-slate-900 border-white/10 text-slate-500'}`}
+              className={`px-2.5 py-1 rounded-md border ${step === idx + 1 ? 'bg-blue-500/15 border-blue-500/40 text-blue-300' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10 text-slate-500'}`}
             >
               {item}
             </div>
@@ -204,9 +204,9 @@ export default function ImportPage() {
       {step === 1 && (
         <div className="card p-6 space-y-4">
           <h2 className="section-title">Step 1: Upload File</h2>
-          <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-white/[0.1] rounded-xl cursor-pointer hover:border-blue-500/40 transition-colors bg-slate-950">
+          <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-300 dark:border-white/[0.1] rounded-xl cursor-pointer hover:border-blue-500/40 transition-colors bg-slate-100 dark:bg-slate-950">
             <Upload size={30} className="text-slate-500 mb-2" />
-            <p className="text-sm text-slate-300">Click to upload CSV/XLSX</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">Click to upload CSV/XLSX</p>
             <input
               type="file"
               className="hidden"
@@ -234,15 +234,15 @@ export default function ImportPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/[0.06]">
+                <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   <th className="px-3 py-2 text-left text-xs text-slate-500">Source Column</th>
                   <th className="px-3 py-2 text-left text-xs text-slate-500">Target Lead Field</th>
                 </tr>
               </thead>
               <tbody>
                 {headers.map((header) => (
-                  <tr key={header} className="border-b border-white/[0.04]">
-                    <td className="px-3 py-2 text-sm text-slate-300">{header}</td>
+                  <tr key={header} className="border-b border-slate-200 dark:border-white/[0.04]">
+                    <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-300">{header}</td>
                     <td className="px-3 py-2">
                       <select
                         className="input h-8 text-xs"
@@ -281,7 +281,7 @@ export default function ImportPage() {
                 { value: 'update', label: 'Update Existing' },
                 { value: 'upsert', label: 'Upsert Recommended' },
               ].map((m) => (
-                <label key={m.value} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 flex items-center gap-2">
+                <label key={m.value} className="rounded-lg border border-slate-200 dark:border-white/10 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
                   <input type="radio" name="mode" checked={mode === m.value} onChange={() => setMode(m.value as any)} />
                   {m.label}
                 </label>
@@ -292,7 +292,7 @@ export default function ImportPage() {
           <div>
             <label className="label mb-2 block">Owner Assignment</label>
             <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm text-slate-300">
+              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                 <input type="radio" checked={ownerMode === 'single'} onChange={() => setOwnerMode('single')} />
                 Assign All to One Person
               </label>
@@ -304,7 +304,7 @@ export default function ImportPage() {
                   ))}
                 </select>
               )}
-              <label className="flex items-center gap-2 text-sm text-slate-300">
+              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                 <input type="radio" checked={ownerMode === 'round_robin'} onChange={() => setOwnerMode('round_robin')} />
                 Round-Robin Auto-Distribution
               </label>
@@ -313,10 +313,10 @@ export default function ImportPage() {
 
           <div>
             <h3 className="label mb-2 block">Preview (first 5 rows)</h3>
-            <div className="overflow-x-auto border border-white/10 rounded-lg">
+            <div className="overflow-x-auto border border-slate-200 dark:border-white/10 rounded-lg">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-white/[0.06]">
+                  <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                     {headers.map((h) => (
                       <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-slate-500 uppercase">{h}</th>
                     ))}
@@ -324,7 +324,7 @@ export default function ImportPage() {
                 </thead>
                 <tbody>
                   {rows.slice(0, 5).map((row, idx) => (
-                    <tr key={idx} className="border-b border-white/[0.04]">
+                    <tr key={idx} className="border-b border-slate-200 dark:border-white/[0.04]">
                       {headers.map((_, hidx) => (
                         <td key={hidx} className="px-3 py-2 text-xs text-slate-400">{row[hidx] || '—'}</td>
                       ))}
