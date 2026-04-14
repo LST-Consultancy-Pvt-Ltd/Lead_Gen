@@ -109,11 +109,17 @@ async function sendSmtpEmail({ name, email, subject, txt, html }) {
       },
       tls: {
         rejectUnauthorized: false,
+        servername: process.env.EMAIL_SERVER_HOST, // ← fixes SNI for custom domains
       },
       connectionTimeout: 10000,
       greetingTimeout: 30000,
       socketTimeout: 60000,
     });
+
+    console.log('[emailService] Verifying SMTP connection...');
+    await transporter.verify();
+    console.log('[emailService] SMTP connection verified ✓');
+    
     console.log(`[emailService] Sending to ${email} via ${process.env.EMAIL_SERVER_HOST}:${process.env.EMAIL_SERVER_PORT}`);
     const result = await transporter.sendMail({
       from: `"${name}" <${process.env.EMAIL_FROM}>`,
