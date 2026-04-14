@@ -107,9 +107,12 @@ async function sendSmtpEmail({ name, email, subject, txt, html }) {
         user: process.env.EMAIL_SERVER_USER,
         pass: process.env.EMAIL_SERVER_PASSWORD,
       },
-      connectionTimeout: 5000,
-      greetingTimeout: 15000,
-      socketTimeout: 30000,
+      tls: {
+        rejectUnauthorized: false,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 30000,
+      socketTimeout: 60000,
     });
     console.log(`[emailService] Sending to ${email} via ${process.env.EMAIL_SERVER_HOST}:${process.env.EMAIL_SERVER_PORT}`);
     const result = await transporter.sendMail({
