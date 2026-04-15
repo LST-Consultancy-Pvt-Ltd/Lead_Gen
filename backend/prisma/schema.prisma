@@ -545,3 +545,15 @@ model Notification {
   user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
 }
+
+model OtpVerification {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  orgName      String
+  passwordHash String
+  otpHash      String
+  expiresAt    DateTime
+  attempts     Int      @default(0)
+  createdAt    DateTime @default(now())
+}

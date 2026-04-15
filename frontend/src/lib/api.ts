@@ -229,6 +229,8 @@ export const authApi = {
   refresh: (refreshToken: string) => api.post('/auth/refresh', { refreshToken }),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
+  verifyOtp: (data: { email: string; otp: string }) => api.post('/auth/verify-otp', data),
+  resendOtp: (data: { email: string }) => api.post('/auth/resend-otp', data),
 };
 
 export const leadsApi = {

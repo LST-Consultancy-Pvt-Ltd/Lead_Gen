@@ -8,6 +8,14 @@ router.post('/register',
   [body('name').notEmpty(), body('email').isEmail(), body('password').isLength({ min: 8 }), body('orgName').notEmpty()],
   validate, ctrl.register
 );
+router.post('/verify-otp',
+  [body('email').isEmail(), body('otp').isLength({ min: 4, max: 4 }).isNumeric()],
+  validate, ctrl.verifyOtp
+);
+router.post('/resend-otp',
+  [body('email').isEmail()],
+  validate, ctrl.resendOtp
+);
 router.post('/login',
   [body('email').isEmail(), body('password').notEmpty()],
   validate, ctrl.login

@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '../../../store/authStore';
 import { authApi } from '../../../lib/api';
 import { Sparkles, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -9,7 +8,6 @@ import Link from 'next/link';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const setAuth = useAuthStore(s => s.setAuth);
   const [form, setForm] = useState({ name: '', email: '', password: '', orgName: '' });
   const [loading, setLoading] = useState(false);
 
@@ -17,10 +15,9 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data } = await authApi.register(form);
-      setAuth(data.data.user, data.data.accessToken, data.data.refreshToken);
-      toast.success('Account created! Welcome to LeadForge AI');
-      router.replace('/dashboard');
+      await authApi.register(form);
+      toast.success('Account created! Please verify your email.');
+      router.replace(`/auth/verify-otp?email=${encodeURIComponent(form.email)}`);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Registration failed');
     } finally {

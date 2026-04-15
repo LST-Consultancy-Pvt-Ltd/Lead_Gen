@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const { OAuth2Client } = require('google-auth-library');
 const prisma = require('../utils/prisma');
 const config = require('../config');
@@ -14,6 +15,61 @@ function generateTokens(userId) {
   return { accessToken, refreshToken };
 }
 
+function generateOtp() {
+  return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit
+}
+
+async function sendOtpEmail(email, name, otp) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_SERVER_HOST,
+      port: Number(process.env.EMAIL_SERVER_PORT),
+      secure: process.env.EMAIL_SERVER_SECURE === 'true',
+      auth: { user: process.env.EMAIL_SERVER_USER, pass: process.env.EMAIL_SERVER_PASSWORD },
+      family: 4,
+      tls: { rejectUnauthorized: false, servername: process.env.EMAIL_SERVER_HOST },
+      connectionTimeout: 30000,
+      greetingTimeout: 30000,
+      socketTimeout: 60000,
+    });
+
+    const html = `
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 20px;">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.08);overflow:hidden;max-width:560px;">
+      <tr><td style="background:#1a2e4a;padding:28px 40px;text-align:center;">
+        <h1 style="margin:0;color:#fff;font-size:24px;font-weight:700;">LeadForge <span style="color:#4f9ef8;">CRM</span></h1>
+      </td></tr>
+      <tr><td style="padding:36px 40px;">
+        <p style="margin:0 0 12px;font-size:16px;color:#333;">Hi <strong>${name}</strong>,</p>
+        <p style="margin:0 0 24px;font-size:15px;color:#555;">Your email verification code is:</p>
+        <div style="text-align:center;margin:24px 0;">
+          <span style="font-size:40px;font-weight:700;letter-spacing:12px;color:#1a2e4a;background:#f0f4ff;padding:16px 28px;border-radius:10px;border:2px solid #dbe4ff;display:inline-block;">${otp}</span>
+        </div>
+        <p style="margin:16px 0 0;font-size:13px;color:#888;text-align:center;">Valid for <strong>10 minutes</strong>. Do not share this code.</p>
+      </td></tr>
+      <tr><td style="background:#f8fafc;padding:16px 40px;text-align:center;">
+        <p style="margin:0;font-size:12px;color:#aaa;">&copy; 2026 LeadForge CRM</p>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body>`;
+
+    await transporter.sendMail({
+      from: `"LeadForge CRM" <${process.env.EMAIL_FROM}>`,
+      to: `"${name}" <${email}>`,
+      subject: `${otp} is your LeadForge verification code`,
+      text: `Hi ${name},\n\nYour OTP is: ${otp}\n\nValid for 10 minutes.`,
+      html,
+    });
+    logger.info('OTP email sent', { email });
+  } catch (err) {
+    logger.error('OTP email failed', { email, err: err.message });
+    throw err;
+  }
+}
+
+// ── Step 1: Register → store pending data + send OTP ──────────────────────────
 async function register(req, res) {
   try {
     const name = (req.body.name || '').trim();
@@ -24,27 +80,109 @@ async function register(req, res) {
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return error(res, 'Email already registered', 409);
 
-    const slug = orgName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-' + Date.now();
-    const org = await prisma.organization.create({
-      data: { name: orgName, slug, settings: {} },
-    });
-
+    const otp = generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await prisma.user.create({
-      data: { name, email, passwordHash, organizationId: org.id, role: 'org_admin' },
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await prisma.otpVerification.upsert({
+      where: { email },
+      create: { email, name, orgName, passwordHash, otpHash, expiresAt, attempts: 0 },
+      update: { name, orgName, passwordHash, otpHash, expiresAt, attempts: 0 },
     });
 
-    const { accessToken, refreshToken } = generateTokens(user.id);
-    await prisma.user.update({ where: { id: user.id }, data: { refreshToken, lastLoginAt: new Date() } });
+    await sendOtpEmail(email, name, otp);
 
-    logger.info('User registered', { userId: user.id, orgId: org.id });
-    return success(res, {
-      accessToken, refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, organization: org },
-    }, 'Registration successful', 201);
+    logger.info('OTP sent for registration', { email });
+    return success(res, { email }, 'OTP sent to your email. Please verify to complete registration.');
   } catch (err) {
     logger.error('Register error', { err: err.message });
     return error(res, 'Registration failed', 500);
+  }
+}
+
+// ── Step 2: Verify OTP → create org + user, redirect to login ─────────────────
+async function verifyOtp(req, res) {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const otp = (req.body.otp || '').trim();
+
+    const record = await prisma.otpVerification.findUnique({ where: { email } });
+    if (!record) return error(res, 'No pending registration found. Please register again.', 404);
+
+    if (record.attempts >= 5) {
+      await prisma.otpVerification.delete({ where: { email } });
+      return error(res, 'Too many wrong attempts. Please register again.', 429);
+    }
+
+    if (new Date() > record.expiresAt) {
+      await prisma.otpVerification.delete({ where: { email } });
+      return error(res, 'OTP has expired. Please register again.', 410);
+    }
+
+    const valid = await bcrypt.compare(otp, record.otpHash);
+    if (!valid) {
+      await prisma.otpVerification.update({
+        where: { email },
+        data: { attempts: record.attempts + 1 },
+      });
+      const remaining = 4 - record.attempts;
+      return error(res, `Incorrect OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`, 400);
+    }
+
+    // OTP correct — create organisation and user
+    const slug = record.orgName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-' + Date.now();
+    const org = await prisma.organization.create({
+      data: { name: record.orgName, slug, settings: {} },
+    });
+
+    const user = await prisma.user.create({
+      data: {
+        name: record.name,
+        email: record.email,
+        passwordHash: record.passwordHash,
+        organizationId: org.id,
+        role: 'org_admin',
+      },
+    });
+
+    await prisma.otpVerification.delete({ where: { email } });
+
+    logger.info('User registered via OTP', { userId: user.id, orgId: org.id });
+    return success(res, null, 'Email verified! You can now sign in.', 201);
+  } catch (err) {
+    logger.error('OTP verify error', { err: err.message });
+    return error(res, 'Verification failed', 500);
+  }
+}
+
+// ── Resend OTP ────────────────────────────────────────────────────────────────
+async function resendOtp(req, res) {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return error(res, 'Email already registered', 409);
+
+    const record = await prisma.otpVerification.findUnique({ where: { email } });
+    if (!record) return error(res, 'No pending registration found. Please register again.', 404);
+
+    const otp = generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await prisma.otpVerification.update({
+      where: { email },
+      data: { otpHash, expiresAt, attempts: 0 },
+    });
+
+    await sendOtpEmail(email, record.name, otp);
+
+    logger.info('OTP resent', { email });
+    return success(res, { email }, 'New OTP sent to your email.');
+  } catch (err) {
+    logger.error('Resend OTP error', { err: err.message });
+    return error(res, 'Failed to resend OTP', 500);
   }
 }
 
@@ -52,12 +190,7 @@ async function login(req, res) {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
     const password = (req.body.password || '').trim();
-    const user = await prisma.user.findUnique({
-      where: { email },
-      // include: { organization: true },
-    });
-
-    console.log("user", user);
+    const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user || !user.passwordHash) return error(res, 'Invalid credentials', 401);
     if (!user.isActive) return error(res, 'Account disabled', 403);
@@ -162,4 +295,4 @@ async function me(req, res) {
   });
 }
 
-module.exports = { register, login, googleAuth, refresh, logout, me };
+module.exports = { register, verifyOtp, resendOtp, login, googleAuth, refresh, logout, me };
