@@ -1,30 +1,30 @@
 'use client';
-import { useState, useRef, useEffect, KeyboardEvent, ClipboardEvent } from 'react';
+import { useState, useRef, useEffect, KeyboardEvent, ClipboardEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authApi } from '../../../lib/api';
 import { Sparkles, Loader2, ShieldCheck, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
-
-export default function ResetOtpPage() {
+ 
+function ResetOtpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get('email') || '';
-
+ 
   const [digits, setDigits] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(60);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
+ 
   useEffect(() => {
     if (resendCooldown > 0) {
       const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
       return () => clearTimeout(t);
     }
   }, [resendCooldown]);
-
+ 
   function handleChange(index: number, value: string) {
     const digit = value.replace(/\D/g, '').slice(-1);
     const next = [...digits];
@@ -33,13 +33,13 @@ export default function ResetOtpPage() {
     setError('');
     if (digit && index < 3) inputRefs.current[index + 1]?.focus();
   }
-
+ 
   function handleKeyDown(index: number, e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Backspace' && !digits[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   }
-
+ 
   function handlePaste(e: ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
@@ -49,7 +49,7 @@ export default function ResetOtpPage() {
     setError('');
     inputRefs.current[Math.min(pasted.length, 3)]?.focus();
   }
-
+ 
   async function handleVerify() {
     const otp = digits.join('');
     if (otp.length < 4) {
@@ -75,7 +75,7 @@ export default function ResetOtpPage() {
       setLoading(false);
     }
   }
-
+ 
   async function handleResend() {
     if (resendCooldown > 0 || resending) return;
     setResending(true);
@@ -92,7 +92,7 @@ export default function ResetOtpPage() {
       setResending(false);
     }
   }
-
+ 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#060b18] p-4">
       <div className="w-full max-w-sm">
@@ -104,7 +104,7 @@ export default function ResetOtpPage() {
             LeadForge AI
           </span>
         </div>
-
+ 
         <div className="card p-8">
           <div className="flex flex-col items-center mb-6">
             <div className="w-14 h-14 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
@@ -116,7 +116,7 @@ export default function ResetOtpPage() {
               <span className="text-slate-200 font-medium">{email || 'your email'}</span>
             </p>
           </div>
-
+ 
           {/* OTP inputs */}
           <div className="flex justify-center gap-3 mb-2">
             {digits.map((d, i) => (
@@ -143,11 +143,11 @@ export default function ResetOtpPage() {
               />
             ))}
           </div>
-
+ 
           {error && (
             <p className="text-center text-sm text-red-400 mt-2 mb-1">{error}</p>
           )}
-
+ 
           <button
             onClick={handleVerify}
             disabled={loading || digits.join('').length < 4}
@@ -155,7 +155,7 @@ export default function ResetOtpPage() {
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : 'Verify OTP'}
           </button>
-
+ 
           <div className="mt-5 text-center text-sm text-slate-400">
             Didn&apos;t receive the code?{' '}
             {resendCooldown > 0 ? (
@@ -171,7 +171,7 @@ export default function ResetOtpPage() {
               </button>
             )}
           </div>
-
+ 
           <div className="mt-4 text-center text-sm text-slate-500">
             <Link href="/auth/forgot-password" className="text-blue-400 hover:underline">Change email</Link>
           </div>
@@ -180,3 +180,13 @@ export default function ResetOtpPage() {
     </div>
   );
 }
+ 
+export default function ResetOtpPage() {
+  return (
+    <Suspense>
+      <ResetOtpForm />
+    </Suspense>
+  );
+}
+ 
+ 

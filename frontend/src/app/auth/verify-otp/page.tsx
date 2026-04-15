@@ -1,39 +1,39 @@
 'use client';
-import { useState, useRef, useEffect, KeyboardEvent, ClipboardEvent } from 'react';
+import { useState, useRef, useEffect, KeyboardEvent, ClipboardEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authApi } from '../../../lib/api';
 import { Sparkles, Loader2, MailCheck, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
-
-export default function VerifyOtpPage() {
+ 
+function VerifyOtpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get('email') || '';
-
+ 
   const [digits, setDigits] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
+ 
   // Start resend cooldown on mount
   useEffect(() => {
     startCooldown();
   }, []);
-
+ 
   useEffect(() => {
     if (resendCooldown > 0) {
       const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
       return () => clearTimeout(t);
     }
   }, [resendCooldown]);
-
+ 
   function startCooldown() {
     setResendCooldown(60);
   }
-
+ 
   function handleChange(index: number, value: string) {
     // Allow only single digit
     const digit = value.replace(/\D/g, '').slice(-1);
@@ -41,18 +41,18 @@ export default function VerifyOtpPage() {
     next[index] = digit;
     setDigits(next);
     setError('');
-
+ 
     if (digit && index < 3) {
       inputRefs.current[index + 1]?.focus();
     }
   }
-
+ 
   function handleKeyDown(index: number, e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Backspace' && !digits[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   }
-
+ 
   function handlePaste(e: ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
@@ -64,7 +64,7 @@ export default function VerifyOtpPage() {
     const focusIndex = Math.min(pasted.length, 3);
     inputRefs.current[focusIndex]?.focus();
   }
-
+ 
   async function handleVerify() {
     const otp = digits.join('');
     if (otp.length < 4) {
@@ -87,7 +87,7 @@ export default function VerifyOtpPage() {
       setLoading(false);
     }
   }
-
+ 
   async function handleResend() {
     if (resendCooldown > 0 || resending) return;
     setResending(true);
@@ -104,7 +104,7 @@ export default function VerifyOtpPage() {
       setResending(false);
     }
   }
-
+ 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#060b18] p-4">
       <div className="w-full max-w-sm">
@@ -117,7 +117,7 @@ export default function VerifyOtpPage() {
             LeadForge AI
           </span>
         </div>
-
+ 
         <div className="card p-8">
           {/* Icon + heading */}
           <div className="flex flex-col items-center mb-6">
@@ -130,7 +130,7 @@ export default function VerifyOtpPage() {
               <span className="text-slate-200 font-medium">{email || 'your email'}</span>
             </p>
           </div>
-
+ 
           {/* OTP inputs */}
           <div className="flex justify-center gap-3 mb-2">
             {digits.map((d, i) => (
@@ -157,12 +157,12 @@ export default function VerifyOtpPage() {
               />
             ))}
           </div>
-
+ 
           {/* Error message */}
           {error && (
             <p className="text-center text-sm text-red-400 mt-2 mb-2">{error}</p>
           )}
-
+ 
           {/* Verify button */}
           <button
             onClick={handleVerify}
@@ -171,7 +171,7 @@ export default function VerifyOtpPage() {
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : 'Verify OTP'}
           </button>
-
+ 
           {/* Resend */}
           <div className="mt-5 text-center text-sm text-slate-400">
             Didn&apos;t receive the code?{' '}
@@ -188,7 +188,7 @@ export default function VerifyOtpPage() {
               </button>
             )}
           </div>
-
+ 
           <div className="mt-4 text-center text-sm text-slate-500">
             <Link href="/auth/login" className="text-blue-400 hover:underline">Back to login</Link>
           </div>
@@ -197,3 +197,21 @@ export default function VerifyOtpPage() {
     </div>
   );
 }
+ 
+export default function VerifyOtpPage() {
+  return (
+    <Suspense>
+      <VerifyOtpForm />
+    </Suspense>
+  );
+}
+ 
+export default function VerifyOtpPage() {
+  return (
+    <Suspense>
+      <VerifyOtpForm />
+    </Suspense>
+  );
+}
+ 
+ 
