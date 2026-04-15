@@ -231,6 +231,9 @@ export const authApi = {
   me: () => api.get('/auth/me'),
   verifyOtp: (data: { email: string; otp: string }) => api.post('/auth/verify-otp', data),
   resendOtp: (data: { email: string }) => api.post('/auth/resend-otp', data),
+  forgotPassword: (data: { email: string }) => api.post('/auth/forgot-password', data),
+  verifyResetOtp: (data: { email: string; otp: string }) => api.post('/auth/verify-reset-otp', data),
+  resetPassword: (data: { email: string; resetToken: string; newPassword: string }) => api.post('/auth/reset-password', data),
 };
 
 export const leadsApi = {

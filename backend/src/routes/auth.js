@@ -16,6 +16,18 @@ router.post('/resend-otp',
   [body('email').isEmail()],
   validate, ctrl.resendOtp
 );
+router.post('/forgot-password',
+  [body('email').isEmail()],
+  validate, ctrl.forgotPassword
+);
+router.post('/verify-reset-otp',
+  [body('email').isEmail(), body('otp').isLength({ min: 4, max: 4 }).isNumeric()],
+  validate, ctrl.verifyResetOtp
+);
+router.post('/reset-password',
+  [body('email').isEmail(), body('resetToken').notEmpty(), body('newPassword').isLength({ min: 8 })],
+  validate, ctrl.resetPassword
+);
 router.post('/login',
   [body('email').isEmail(), body('password').notEmpty()],
   validate, ctrl.login

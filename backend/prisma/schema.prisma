@@ -557,3 +557,14 @@ model OtpVerification {
   attempts     Int      @default(0)
   createdAt    DateTime @default(now())
 }
+
+model PasswordResetOtp {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  otpHash        String
+  resetToken     String?
+  expiresAt      DateTime
+  tokenExpiresAt DateTime?
+  attempts       Int       @default(0)
+  createdAt      DateTime  @default(now())
+}

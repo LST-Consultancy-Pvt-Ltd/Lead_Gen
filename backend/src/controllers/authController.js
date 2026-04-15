@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { OAuth2Client } = require('google-auth-library');
 const prisma = require('../utils/prisma');
@@ -295,4 +296,155 @@ async function me(req, res) {
   });
 }
 
-module.exports = { register, verifyOtp, resendOtp, login, googleAuth, refresh, logout, me };
+// ── Forgot Password → send OTP ────────────────────────────────────────────────
+async function forgotPassword(req, res) {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Always return success to avoid leaking user existence
+    if (!user) {
+      return success(res, null, 'If that email is registered, an OTP has been sent.');
+    }
+
+    const otp = generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await prisma.passwordResetOtp.upsert({
+      where: { email },
+      create: { email, otpHash, expiresAt, attempts: 0 },
+      update: { otpHash, expiresAt, attempts: 0, resetToken: null, tokenExpiresAt: null },
+    });
+
+    // Send OTP email
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_SERVER_HOST,
+      port: Number(process.env.EMAIL_SERVER_PORT),
+      secure: process.env.EMAIL_SERVER_SECURE === 'true',
+      auth: { user: process.env.EMAIL_SERVER_USER, pass: process.env.EMAIL_SERVER_PASSWORD },
+      family: 4,
+      tls: { rejectUnauthorized: false, servername: process.env.EMAIL_SERVER_HOST },
+    });
+
+    const html = `
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 20px;">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.08);overflow:hidden;max-width:560px;">
+      <tr><td style="background:#1a2e4a;padding:28px 40px;text-align:center;">
+        <h1 style="margin:0;color:#fff;font-size:24px;font-weight:700;">LeadForge <span style="color:#4f9ef8;">CRM</span></h1>
+      </td></tr>
+      <tr><td style="padding:36px 40px;">
+        <p style="margin:0 0 12px;font-size:16px;color:#333;">Hi <strong>${user.name}</strong>,</p>
+        <p style="margin:0 0 24px;font-size:15px;color:#555;">We received a request to reset your password. Your verification code is:</p>
+        <div style="text-align:center;margin:24px 0;">
+          <span style="font-size:40px;font-weight:700;letter-spacing:12px;color:#1a2e4a;background:#f0f4ff;padding:16px 28px;border-radius:10px;border:2px solid #dbe4ff;display:inline-block;">${otp}</span>
+        </div>
+        <p style="margin:16px 0 0;font-size:13px;color:#888;text-align:center;">Valid for <strong>10 minutes</strong>. If you did not request this, ignore this email.</p>
+      </td></tr>
+      <tr><td style="background:#f8fafc;padding:16px 40px;text-align:center;">
+        <p style="margin:0;font-size:12px;color:#aaa;">&copy; 2026 LeadForge CRM</p>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body>`;
+
+    await transporter.sendMail({
+      from: `"LeadForge CRM" <${process.env.EMAIL_FROM}>`,
+      to: `"${user.name}" <${email}>`,
+      subject: `${otp} is your LeadForge password reset code`,
+      text: `Hi ${user.name},\n\nYour password reset OTP is: ${otp}\n\nValid for 10 minutes.`,
+      html,
+    });
+
+    logger.info('Password reset OTP sent', { email });
+    return success(res, null, 'If that email is registered, an OTP has been sent.');
+  } catch (err) {
+    logger.error('Forgot password error', { err: err.message });
+    return error(res, 'Failed to send OTP', 500);
+  }
+}
+
+// ── Verify Reset OTP → return short-lived reset token ─────────────────────────
+async function verifyResetOtp(req, res) {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const otp = (req.body.otp || '').trim();
+
+    const record = await prisma.passwordResetOtp.findUnique({ where: { email } });
+    if (!record) return error(res, 'No password reset request found. Please request again.', 404);
+
+    if (record.attempts >= 5) {
+      await prisma.passwordResetOtp.delete({ where: { email } });
+      return error(res, 'Too many wrong attempts. Please request a new OTP.', 429);
+    }
+
+    if (new Date() > record.expiresAt) {
+      await prisma.passwordResetOtp.delete({ where: { email } });
+      return error(res, 'OTP has expired. Please request a new one.', 410);
+    }
+
+    const valid = await bcrypt.compare(otp, record.otpHash);
+    if (!valid) {
+      await prisma.passwordResetOtp.update({
+        where: { email },
+        data: { attempts: record.attempts + 1 },
+      });
+      const remaining = 4 - record.attempts;
+      return error(res, `Incorrect OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`, 400);
+    }
+
+    // OTP correct — issue a short-lived reset token (valid 15 min)
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await prisma.passwordResetOtp.update({
+      where: { email },
+      data: { resetToken, tokenExpiresAt, attempts: 0 },
+    });
+
+    logger.info('Reset OTP verified', { email });
+    return success(res, { resetToken }, 'OTP verified. You may now reset your password.');
+  } catch (err) {
+    logger.error('Verify reset OTP error', { err: err.message });
+    return error(res, 'Verification failed', 500);
+  }
+}
+
+// ── Reset Password ─────────────────────────────────────────────────────────────
+async function resetPassword(req, res) {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const { resetToken, newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 8) {
+      return error(res, 'Password must be at least 8 characters.', 400);
+    }
+
+    const record = await prisma.passwordResetOtp.findUnique({ where: { email } });
+    if (!record || !record.resetToken) {
+      return error(res, 'Invalid or expired reset request. Please start over.', 400);
+    }
+
+    if (record.resetToken !== resetToken) {
+      return error(res, 'Invalid reset token.', 400);
+    }
+
+    if (!record.tokenExpiresAt || new Date() > record.tokenExpiresAt) {
+      await prisma.passwordResetOtp.delete({ where: { email } });
+      return error(res, 'Reset session has expired. Please request a new OTP.', 410);
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { email }, data: { passwordHash } });
+    await prisma.passwordResetOtp.delete({ where: { email } });
+
+    logger.info('Password reset successful', { email });
+    return success(res, null, 'Password updated successfully. You can now sign in.');
+  } catch (err) {
+    logger.error('Reset password error', { err: err.message });
+    return error(res, 'Password reset failed', 500);
+  }
+}
+
+module.exports = { register, verifyOtp, resendOtp, login, googleAuth, refresh, logout, me, forgotPassword, verifyResetOtp, resetPassword };

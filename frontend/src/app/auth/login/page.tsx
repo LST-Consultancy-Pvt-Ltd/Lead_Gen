@@ -64,7 +64,12 @@ export default function LoginPage() {
                 className="input" placeholder="you@company.com"/>
             </div>
             <div>
-              <label className="label mb-1.5 block">Password</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="label">Password</label>
+                <Link href="/auth/forgot-password" className="text-xs text-blue-400 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <input type={showPw ? 'text' : 'password'} required value={form.password}
                   onChange={e => setForm({...form, password: e.target.value})}
