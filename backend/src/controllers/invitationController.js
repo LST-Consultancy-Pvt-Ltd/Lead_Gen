@@ -189,7 +189,7 @@ async function acceptInvitation(req, res) {
 async function getInvitations(req, res) {
   try {
     const caller = req.user;
-    const where = { organizationId: caller.organizationId };
+    const where = { organizationId: caller.organizationId, status: 'pending' };
 
     if (caller.role === 'manager') {
       where.invitedById = caller.id;

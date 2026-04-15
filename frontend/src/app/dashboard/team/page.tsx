@@ -212,13 +212,21 @@ export default function TeamPage() {
       )}
 
       {/* Pending Invitations */}
-      {invitations.length > 0 && (
+      {invitations.filter((inv: any) => inv.status === 'pending').length > 0 && (
         <div className="card overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06]">
             <h2 className="section-title">Pending Invitations</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
+              <colgroup>
+                <col style={{width:'25%'}} />
+                <col style={{width:'13%'}} />
+                <col style={{width:'13%'}} />
+                <col style={{width:'13%'}} />
+                <col style={{width:'14%'}} />
+                <col style={{width:'7%'}} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {['Email', 'Role', 'Status', 'Sent By', 'Expires', 'Action'].map(h => (
@@ -227,7 +235,7 @@ export default function TeamPage() {
                 </tr>
               </thead>
               <tbody>
-                {invitations.map((inv: any) => (
+                {invitations.filter((inv: any) => inv.status === 'pending').map((inv: any) => (
                   <tr key={inv.id} className="border-b border-slate-200 dark:border-white/[0.04] hover:bg-slate-200/20 dark:hover:bg-slate-800/20">
                     <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{inv.email}</td>
                     <td className="px-4 py-3"><Badge color={inv.role === 'manager' ? 'blue' : 'slate'}>{getRoleLabel(inv.role)}</Badge></td>
@@ -265,7 +273,15 @@ export default function TeamPage() {
           <EmptyState icon={UserCog} title="No team members" description="Invite your team to start collaborating on leads" action={<button className="btn-primary" onClick={() => setInviteOpen(true)}><Plus size={14} /> Invite First Member</button>} />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
+              <colgroup>
+                <col style={{width:'25%'}} />
+                <col style={{width:'13%'}} />
+                <col style={{width:'13%'}} />
+                <col style={{width:'13%'}} />
+                <col style={{width:'14%'}} />
+                <col style={{width:'7%'}} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {['User', 'Role', 'Status', 'Leads', 'Last Login', ...(isReadOnly ? [] : ['Actions'])].map(h => (
