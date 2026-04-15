@@ -3,7 +3,8 @@
  * Admin-only CSV/XLSX lead import with logging
  */
 
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
+const { Readable } = require('stream');
 const prisma = require('../utils/prisma');
 const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
@@ -12,7 +13,6 @@ const dashboardEvents = require('../utils/dashboardEvents');
 
 const ALLOWED_MIME_TYPES = [
   'text/csv',
-  'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain',
 ];
@@ -29,13 +29,43 @@ async function importLeads(req, res) {
 
   const mime = req.file.mimetype;
   if (!ALLOWED_MIME_TYPES.includes(mime)) {
-    return error(res, 'Invalid file type. Allowed: CSV, XLS, XLSX', 400);
+    return error(res, 'Invalid file type. Allowed: CSV, XLSX', 400);
   }
 
   try {
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    const workbook = new ExcelJS.Workbook();
+
+    if (mime === 'text/csv' || mime === 'text/plain') {
+      const stream = Readable.from(req.file.buffer);
+      await workbook.csv.read(stream);
+    } else {
+      await workbook.xlsx.load(req.file.buffer);
+    }
+
+    const sheet = workbook.worksheets[0];
+    if (!sheet) return error(res, 'File contains no data', 422);
+
+    // Extract headers from first row (ExcelJS row.values is 1-indexed, index 0 is undefined)
+    const headerValues = sheet.getRow(1).values;
+    const headers = Array.isArray(headerValues) ? headerValues.slice(1) : [];
+    if (headers.length === 0) return error(res, 'File contains no valid headers', 422);
+
+    // Build rows as array of objects (same shape xlsx produced)
+    const rows = [];
+    for (let r = 2; r <= sheet.rowCount; r++) {
+      const rowVals = sheet.getRow(r).values;
+      const vals = Array.isArray(rowVals) ? rowVals.slice(1) : [];
+      const obj = {};
+      let hasData = false;
+      headers.forEach((h, i) => {
+        if (h != null) {
+          const val = vals[i];
+          obj[String(h)] = val ?? '';
+          if (val !== undefined && val !== null && val !== '') hasData = true;
+        }
+      });
+      if (hasData) rows.push(obj);
+    }
 
     if (rows.length === 0) return error(res, 'File contains no data rows', 422);
     if (rows.length > MAX_ROWS) return error(res, `File exceeds maximum of ${MAX_ROWS} rows`, 422);
@@ -57,7 +87,6 @@ async function importLeads(req, res) {
         select: { id: true },
       });
       if (roundRobinUsers.length === 0) {
-        // Fallback to self if no sales_users found
         roundRobinUsers = [{ id: req.user.id }];
       }
     }
@@ -83,7 +112,6 @@ async function importLeads(req, res) {
           }
         }
 
-        // Check for duplicate within same org
         const duplicate = await prisma.lead.findFirst({
           where: {
             organizationId: req.user.organizationId,
@@ -123,7 +151,6 @@ async function importLeads(req, res) {
       }
     }
 
-    // Persist import log
     await prisma.importLog.create({
       data: {
         organizationId: req.user.organizationId,
@@ -152,7 +179,7 @@ async function importLeads(req, res) {
       totalRows: rows.length,
       successRows: successLeads.length,
       failedRows: importErrors.length,
-      errors: importErrors.slice(0, 50), // cap error list in response
+      errors: importErrors.slice(0, 50),
     }, `Import complete: ${successLeads.length} leads created, ${importErrors.length} skipped`, 201);
   } catch (err) {
     logger.error('importLeads error', { error: err.message, userId: req.user.id });

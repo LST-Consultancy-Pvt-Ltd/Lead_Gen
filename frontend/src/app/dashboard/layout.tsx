@@ -43,7 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-[#060b18]">
+    <div className="h-screen flex overflow-hidden bg-[#060b18] light:bg-slate-50">
       <Sidebar collapsed={collapsed}/>
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onToggleSidebar={() => setCollapsed(!collapsed)}/>

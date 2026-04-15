@@ -19,6 +19,14 @@
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: #0a1124; }
   ::-webkit-scrollbar-thumb { background: #1e2d4a; border-radius: 4px; }
+
+  /* ── Light mode base ───────────────────────────────────────────────── */
+  .light body {
+    background: #f8fafc;
+    color: #1e293b;
+  }
+  .light ::-webkit-scrollbar-track { background: #f1f5f9; }
+  .light ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 }
 
 @layer components {
@@ -55,9 +63,66 @@
   .label {
     @apply text-xs font-semibold text-slate-500 uppercase tracking-wider;
   }
+
 }
 
 .font-display { font-family: var(--font-sora), system-ui, sans-serif; }
+
+/* ── Light mode component overrides (plain CSS, outside @layer) ──────── */
+.light .card {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.light .card-hover:hover {
+  border-color: rgba(96,165,250,0.4) !important;
+  background: #f8fafc !important;
+}
+.light .btn-ghost {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #475569 !important;
+}
+.light .btn-ghost:hover {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+.light .input {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+.light .input::placeholder {
+  color: #94a3b8 !important;
+}
+.light .input:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15) !important;
+}
+.light .nav-link {
+  color: #475569 !important;
+}
+.light .nav-link:hover {
+  color: #0f172a !important;
+  background: #eff6ff !important;
+}
+.light .nav-link-active {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  border-color: #bfdbfe !important;
+}
+.light .page-title {
+  color: #0f172a !important;
+}
+.light .section-title {
+  color: #1e293b !important;
+}
+.light .label {
+  color: #64748b !important;
+}
+.light .badge {
+  border-color: #e2e8f0 !important;
+}
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(8px); }
@@ -70,3 +135,209 @@
   50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(16,185,129,0); }
 }
 .animate-pulse-dot { animation: pulse-dot 2s infinite; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — Global deep overrides
+   Targets all hardcoded dark Tailwind classes used across components.
+   The .light class is applied on <html> by ThemeWrapper.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Layout shells ───────────────────────────────────────────────────── */
+.light aside {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+.light header {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+.light main {
+  background: #f8fafc !important;
+}
+
+/* ── Background overrides ────────────────────────────────────────────── */
+.light .bg-\[\#060b18\],
+.light .bg-\[\#0d1628\],
+.light .bg-\[\#0a1124\] {
+  background: #f8fafc !important;
+}
+.light .bg-slate-950 {
+  background: #ffffff !important;
+}
+.light .bg-slate-900 {
+  background: #ffffff !important;
+}
+.light .bg-slate-900\/80 {
+  background: rgba(255,255,255,0.9) !important;
+}
+.light .bg-slate-800 {
+  background: #f1f5f9 !important;
+}
+.light .bg-slate-800\/60 {
+  background: rgba(241,245,249,0.7) !important;
+}
+.light .bg-slate-800\/50 {
+  background: rgba(241,245,249,0.6) !important;
+}
+.light .bg-slate-800\/30 {
+  background: rgba(241,245,249,0.4) !important;
+}
+.light .bg-slate-800\/20 {
+  background: rgba(241,245,249,0.3) !important;
+}
+.light .bg-slate-700\/40 {
+  background: rgba(226,232,240,0.5) !important;
+}
+.light .bg-slate-700\/60 {
+  background: rgba(226,232,240,0.7) !important;
+}
+.light .bg-black\/60 {
+  background: rgba(0,0,0,0.3) !important;
+}
+.light .bg-black\/50 {
+  background: rgba(0,0,0,0.25) !important;
+}
+
+/* Translucent white-on-dark → subtle gray tints in light */
+.light .bg-white\/\[0\.04\],
+.light .bg-white\/\[0\.05\],
+.light .bg-white\/\[0\.06\],
+.light .bg-white\/\[0\.08\],
+.light .bg-white\/\[0\.09\] {
+  background: rgba(241,245,249,0.6) !important;
+}
+
+/* Hover states on translucent BGs */
+.light .hover\:bg-slate-800\/60:hover {
+  background: #f1f5f9 !important;
+}
+.light .hover\:bg-slate-800\/30:hover {
+  background: #f1f5f9 !important;
+}
+.light .hover\:bg-slate-800\/20:hover {
+  background: #f1f5f9 !important;
+}
+.light .hover\:bg-slate-800:hover {
+  background: #e2e8f0 !important;
+}
+.light .hover\:bg-white\/\[0\.05\]:hover,
+.light .hover\:bg-white\/\[0\.09\]:hover {
+  background: #f1f5f9 !important;
+}
+
+/* ── Text overrides ──────────────────────────────────────────────────── */
+.light .text-slate-100 {
+  color: #0f172a !important;
+}
+.light .text-slate-200 {
+  color: #1e293b !important;
+}
+.light .text-slate-300 {
+  color: #334155 !important;
+}
+.light .text-slate-400 {
+  color: #64748b !important;
+}
+.light .text-slate-500 {
+  color: #64748b !important;
+}
+.light .text-slate-600 {
+  color: #475569 !important;
+}
+.light .text-white {
+  /* keep white on gradient buttons etc — only override inside specific containers */
+}
+.light .hover\:text-slate-200:hover {
+  color: #1e293b !important;
+}
+.light .hover\:text-slate-300:hover {
+  color: #334155 !important;
+}
+
+/* ── Border overrides ────────────────────────────────────────────────── */
+.light .border-white\/\[0\.04\],
+.light .border-white\/\[0\.05\],
+.light .border-white\/\[0\.06\],
+.light .border-white\/\[0\.08\],
+.light .border-white\/\[0\.1\],
+.light .border-white\/5,
+.light .border-white\/10,
+.light .border-white\/20 {
+  border-color: #e2e8f0 !important;
+}
+.light .divide-white\/\[0\.04\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+.light .border-slate-950 {
+  border-color: #ffffff !important;
+}
+.light .hover\:border-white\/20:hover {
+  border-color: #cbd5e1 !important;
+}
+
+/* ── Shadow overrides ────────────────────────────────────────────────── */
+.light .shadow-black\/40,
+.light .shadow-black\/50 {
+  --tw-shadow-color: rgba(0,0,0,0.08) !important;
+}
+.light .shadow-2xl {
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1) !important;
+}
+
+/* ── Table overrides ─────────────────────────────────────────────────── */
+.light table thead tr {
+  border-color: #e2e8f0 !important;
+}
+.light table tbody tr {
+  border-color: #f1f5f9 !important;
+}
+.light td {
+  color: #475569 !important;
+}
+.light th {
+  color: #64748b !important;
+}
+
+/* ── Select / form elements ──────────────────────────────────────────── */
+.light select {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+.light textarea {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+/* ── Checkbox styling ────────────────────────────────────────────────── */
+.light input[type="checkbox"] {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* ── Modal backdrop ──────────────────────────────────────────────────── */
+.light .backdrop-blur-sm {
+  background: rgba(0,0,0,0.2) !important;
+}
+
+/* ── Gradient text (keep visible on light bg) ────────────────────────── */
+.light .from-blue-400.to-cyan-400 {
+  --tw-gradient-from: #2563eb;
+  --tw-gradient-to: #0891b2;
+}
+
+/* ── Recharts / SVG chart ────────────────────────────────────────────── */
+.light .recharts-cartesian-grid line {
+  stroke: #e2e8f0;
+}
+.light .recharts-text {
+  fill: #64748b;
+}
+
+/* ── Toast override (applied via class in Providers) ─────────────────── */
+.light .toast-custom {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #e2e8f0 !important;
+}

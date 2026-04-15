@@ -10,8 +10,14 @@ import {
   Building2,
   DollarSign,
   X,
+  Sun,
+  Moon,
+  Monitor,
+  Settings,
+  ChevronRight,
 } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
+import { useThemeStore } from "../../store/themeStore";
 import {
   authApi,
   notificationsApi,
@@ -30,6 +36,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
+  const { theme, setTheme } = useThemeStore();
   const router = useRouter();
   const queryClient = useQueryClient();
   const permissions = usePermissions();
@@ -41,13 +48,11 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const notificationsRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Debounce: fire queries 300 ms after user stops typing
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(searchQuery), 300);
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {
       if (
@@ -76,7 +81,6 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const q = debouncedQuery.trim();
   const searchEnabled = q.length >= 2;
 
-  // RBAC-scoped params
   const leadParams = permissions.canViewAllLeads
     ? { search: q, limit: 5 }
     : { search: q, limit: 5, assignedToMe: true };
@@ -166,6 +170,12 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
     router.replace("/auth/login");
   }
 
+  const themeOptions: { value: 'light' | 'dark' | 'system'; label: string; icon: typeof Sun }[] = [
+    { value: 'light', label: 'Light', icon: Sun },
+    { value: 'dark', label: 'Dark', icon: Moon },
+    { value: 'system', label: 'System', icon: Monitor },
+  ];
+
   return (
     <header className="h-14 flex-shrink-0 bg-slate-950 border-b border-white/[0.06] flex items-center justify-between px-4 gap-3">
       <div className="flex items-center gap-3">
@@ -186,9 +196,6 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
             placeholder="Search leads, companies…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => {
-              /* keep as-is; dropdown shows via showDropdown */
-            }}
           />
           {searchQuery && (
             <button
@@ -212,7 +219,6 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                 </div>
               ) : (
                 <div className="max-h-[420px] overflow-y-auto divide-y divide-white/[0.04]">
-                  {/* Leads */}
                   {leads.length > 0 && (
                     <section>
                       <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
@@ -245,7 +251,6 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                     </section>
                   )}
 
-                  {/* Contacts */}
                   {contacts.length > 0 && (
                     <section>
                       <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
@@ -276,7 +281,6 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                     </section>
                   )}
 
-                  {/* Accounts */}
                   {accounts.length > 0 && (
                     <section>
                       <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
@@ -304,7 +308,6 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                     </section>
                   )}
 
-                  {/* Opportunities */}
                   {opps.length > 0 && (
                     <section>
                       <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
@@ -343,21 +346,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* User Role Badge */}
-        {user && (
-          <Badge color={getRoleBadgeColor(user.role)}>
-            {getRoleLabel(user.role)}
-          </Badge>
-        )}
-
-        {/* Autopilot badge */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-dot" />
-          <span className="text-xs font-semibold text-emerald-400">
-            AI Autopilot ON
-          </span>
-        </div>
-
+        {/* Notifications */}
         <div className="relative" ref={notificationsRef}>
           <button
             className="btn-ghost p-2 relative"
@@ -413,6 +402,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
           )}
         </div>
 
+        {/* Profile Menu */}
         <div className="relative" ref={profileMenuRef}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
@@ -426,7 +416,53 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
             </span>
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-44 card shadow-xl shadow-black/40 py-1 z-50">
+            <div className="absolute right-0 top-full mt-1 w-56 card shadow-xl shadow-black/40 py-1 z-50">
+              {/* User info + role */}
+              <div className="px-3 py-2.5 border-b border-white/[0.06]">
+                <p className="text-sm font-semibold text-slate-200 truncate">{user?.name}</p>
+                <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+                <Badge color={getRoleBadgeColor(user?.role || '')} className="mt-1.5">
+                  {getRoleLabel(user?.role || '')}
+                </Badge>
+              </div>
+
+              {/* Theme Switcher */}
+              <div className="px-3 py-2.5 border-b border-white/[0.06]">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Theme</p>
+                <div className="flex gap-1">
+                  {themeOptions.map(({ value, label, icon: Icon }) => (
+                    <button
+                      key={value}
+                      onClick={() => setTheme(value)}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
+                        theme === value
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.05] border border-transparent'
+                      }`}
+                    >
+                      <Icon size={13} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Settings link (admin only) */}
+              {permissions.canAccessSettings && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push('/dashboard/settings');
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/[0.05] w-full text-left transition-colors"
+                >
+                  <Settings size={14} />
+                  Settings
+                  <ChevronRight size={12} className="ml-auto text-slate-600" />
+                </button>
+              )}
+
+              {/* Sign Out */}
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 w-full text-left transition-colors"
