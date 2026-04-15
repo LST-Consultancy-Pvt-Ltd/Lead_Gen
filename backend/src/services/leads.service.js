@@ -83,7 +83,7 @@ class LeadsService {
    * Uses buildOrganizationFilter for role-scoped data visibility.
    */
   async buildLeadFilters(user, queryParams) {
-    const { status, intent, search, assignedTo } = queryParams;
+    const { status, intent, search, assignedTo, assignedToMe, unassigned } = queryParams;
 
     const baseFilter = await buildOrganizationFilter(user);
     const where = Object.assign({}, baseFilter);
@@ -94,8 +94,14 @@ class LeadsService {
     // Intent level filter
     if (intent) where.intentLevel = intent;
 
-    // Assigned-to override (managers/admins only — must be within their team)
-    if (assignedTo && ['manager', 'org_admin', 'super_admin'].includes(user.role)) {
+    // Assigned-to-me filter (sales users or explicit filter)
+    if (assignedToMe === 'true' || assignedToMe === true) {
+      where.assignedToId = user.id;
+    // Unassigned filter (managers/admins only)
+    } else if ((unassigned === 'true' || unassigned === true) && ['manager', 'org_admin', 'super_admin'].includes(user.role)) {
+      where.assignedToId = null;
+    // Assigned to specific user (managers/admins only)
+    } else if (assignedTo && ['manager', 'org_admin', 'super_admin'].includes(user.role)) {
       where.assignedToId = assignedTo;
     }
 

@@ -48,6 +48,8 @@ export default function LeadsPage() {
   // Sales users only see their own leads
   if (!permissions.canViewAllLeads) {
     queryParams.assignedToMe = true;
+  } else if (ownerFilter === 'unassigned') {
+    queryParams.unassigned = true;
   } else if (ownerFilter) {
     queryParams.assignedTo = ownerFilter;
   }
