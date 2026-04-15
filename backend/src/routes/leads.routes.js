@@ -366,6 +366,17 @@ router.post(
 );
 
 /**
+ * GET /api/leads/export
+ * Export leads as CSV
+ * Access: All authenticated users (filtered by role in controller)
+ */
+router.get(
+  '/export',
+  authenticate,
+  leadController.exportLeads
+);
+
+/**
  * GET /api/leads/:id
  * Get single lead by ID
  * Access: All authenticated users (with RBAC check in controller)

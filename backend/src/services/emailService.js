@@ -100,17 +100,27 @@ function roleLabel(role) {
 async function sendSmtpEmail({ name, email, subject, txt, html }) {
   try {
     const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_SERVER_HOST,
-      port: Number(process.env.EMAIL_SERVER_PORT) || 587,
-      secure: process.env.EMAIL_SERVER_SECURE === 'true',
-      auth: {
-        user: process.env.EMAIL_SERVER_USER,
-        pass: process.env.EMAIL_SERVER_PASSWORD,
-      },
-      connectionTimeout: 5000,
-      greetingTimeout: 15000,
-      socketTimeout: 30000,
+        host: process.env.EMAIL_SERVER_HOST,
+        port: Number(process.env.EMAIL_SERVER_PORT),
+        secure: process.env.EMAIL_SERVER_SECURE === 'true',
+        auth: {
+            user: process.env.EMAIL_SERVER_USER,
+            pass: process.env.EMAIL_SERVER_PASSWORD,
+        },
+        family: 4,  // ← force IPv4, fixes timeout on Render
+        tls: {
+            rejectUnauthorized: false,
+            servername: process.env.EMAIL_SERVER_HOST,
+        },
+        connectionTimeout: 30000,  // ← also increase from 10s to 30s
+        greetingTimeout: 30000,
+        socketTimeout: 60000,
     });
+
+    console.log('[emailService] Verifying SMTP connection...');
+    await transporter.verify();
+    console.log('[emailService] SMTP connection verified ✓');
+    
     console.log(`[emailService] Sending to ${email} via ${process.env.EMAIL_SERVER_HOST}:${process.env.EMAIL_SERVER_PORT}`);
     const result = await transporter.sendMail({
       from: `"${name}" <${process.env.EMAIL_FROM}>`,

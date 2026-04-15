@@ -159,23 +159,90 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
   if (filters.workTypes?.includes('Remote')) params.ltype = 'Y';
   if (nextPageToken)                 params.next_page_token = nextPageToken;
 
-  try {
-    const { data } = await axios.get('https://serpapi.com/search', {
-      params,
-      timeout: 15000,
-    });
-    return {
-      jobs:      data.jobs_results || [],
-      nextToken: data.serpapi_pagination?.next_page_token || null,
-    };
-  } catch (err) {
-    logger.error('Google Jobs fetch failed', {
-      query,
-      status: err.response?.status,
-      err:    err.response?.data?.error || err.message,
-    });
-    return { jobs: [], nextToken: null };
+  // Retry up to 3 times with exponential backoff
+  const MAX_RETRIES = 3;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const { data } = await axios.get('https://serpapi.com/search', {
+        params,
+        timeout: 15000,
+      });
+
+      // SerpAPI returns 200 with error field when Google has no results or rate limits
+      if (data.error) {
+        logger.warn('SerpAPI returned error in response body', {
+          query, attempt, error: data.error,
+          location: params.location || 'none',
+        });
+
+        if (attempt < MAX_RETRIES) {
+          const delay = 2000 * attempt;
+          logger.info('Retrying SerpAPI after delay', { query, attempt, delayMs: delay });
+          await sleep(delay);
+
+          // On 2nd retry, drop location filter — it may be too restrictive
+          if (attempt === 2 && params.location) {
+            logger.info('Retrying without location filter', { query, droppedLocation: params.location });
+            delete params.location;
+          }
+          continue;
+        }
+
+        return { jobs: [], nextToken: null };
+      }
+
+      const jobs = data.jobs_results || [];
+
+      // If 0 results and we have a location filter, retry without it
+      if (jobs.length === 0 && attempt < MAX_RETRIES) {
+        logger.warn('SerpAPI returned 0 jobs', {
+          query, attempt,
+          location: params.location || 'none',
+          responseKeys: Object.keys(data),
+        });
+
+        const delay = 1500 * attempt;
+        await sleep(delay);
+
+        if (params.location && attempt === 1) {
+          logger.info('Retrying without location filter', { query, droppedLocation: params.location });
+          delete params.location;
+        }
+        continue;
+      }
+
+      if (jobs.length === 0) {
+        logger.warn('SerpAPI: no jobs after all retries', { query, location: params.location || 'none' });
+      }
+
+      return {
+        jobs,
+        nextToken: data.serpapi_pagination?.next_page_token || null,
+      };
+    } catch (err) {
+      logger.error('Google Jobs fetch failed', {
+        query, attempt,
+        status: err.response?.status,
+        err:    err.response?.data?.error || err.message,
+      });
+
+      if (attempt < MAX_RETRIES) {
+        const delay = 2000 * attempt;
+        await sleep(delay);
+
+        // Drop location on retry — network errors sometimes caused by bad location param
+        if (params.location && attempt === 2) {
+          delete params.location;
+        }
+        continue;
+      }
+
+      return { jobs: [], nextToken: null };
+    }
   }
+
+  return { jobs: [], nextToken: null };
 }
 
 async function fetchAllJobPages(query, filters = {}, maxPages = 5) {
@@ -288,7 +355,15 @@ async function runDiscoveryScan(job, services, filters = {}, progressCallback) {
     return true;
   }
 
-  logger.info('Dynamic service scan START', { jobId: job.id, services });
+  logger.info('Dynamic service scan START', {
+    jobId: job.id,
+    services,
+    filters: {
+      targetRegion: filters.targetRegion || 'none',
+      targetIndustry: filters.targetIndustry || 'none',
+      workTypes: filters.workTypes || [],
+    },
+  });
 
   let totalTicks  = services.length * 8; // estimated, updated after AI call
   let currentTick = 0;

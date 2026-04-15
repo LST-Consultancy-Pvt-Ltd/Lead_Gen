@@ -96,8 +96,17 @@ async function start() {
       startScheduler();
     }
 
-    app.listen(config.port, '0.0.0.0', () => {
+    const server = app.listen(config.port, '0.0.0.0', () => {
       logger.info(`LeadForge AI backend running on port ${config.port} (${config.env})`);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.error(`Port ${config.port} is already in use. Kill the existing process and restart.`);
+      } else {
+        logger.error('Server error', { err: err.message });
+      }
+      process.exit(1);
     });
   } catch (err) {
     logger.error('Startup failed', { err: err.message });

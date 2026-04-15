@@ -42,7 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  return (
+    return (
     <div className="h-screen flex overflow-hidden bg-slate-50 dark:bg-[#060b18]">
       <Sidebar collapsed={collapsed}/>
       <div className="flex-1 flex flex-col overflow-hidden">

@@ -4,11 +4,11 @@ import { usePathname } from 'next/navigation';
 import { cn } from '../../lib/utils';
 import { Avatar } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
-import { usePermissions, getRoleLabel } from '../../lib/rbac';
+import { usePermissions } from '../../lib/rbac';
 import { getInitials } from '../../lib/utils';
 import {
-  LayoutDashboard, Users, TrendingUp, CheckSquare, GitBranch,
-  BarChart3, UserCog, Settings, Sparkles, Upload, DollarSign, Search, Zap,
+  LayoutDashboard, Users, TrendingUp, CheckSquare,
+  BarChart3, UserCog, Sparkles, Upload, DollarSign, Search, Zap,
   Building2, UserCircle, Megaphone
 } from 'lucide-react';
 
@@ -19,27 +19,17 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const canViewTeam = isAdmin || isManager;
 
   const navItems = [
-    { href: '/dashboard',               label: 'Dashboard',      icon: LayoutDashboard, show: true },
-    { href: '/dashboard/leads',          label: 'Leads',     icon: Users,           show: true },
-    { href: '/dashboard/opportunities',  label: 'Opportunities', icon: DollarSign,      show: true },
-    { href: '/dashboard/activities',     label: 'Activities',    icon: CheckSquare,     show: true },
-    { href: '/dashboard/lead-discovery',label: 'Lead Discovery', icon: Search,          show: canViewTeam },
-    { href: '/dashboard/intent-signals', label: 'Intent Signals',icon: Zap,             show: canViewTeam },
-    { href: '/dashboard/team',           label: 'Team',          icon: UserCog,         show: canViewTeam },
-    { href: '/dashboard/settings',       label: 'Settings',      icon: Settings,        show: isAdmin },
-    // { href: '/dashboard/accounts',       label: 'Accounts',      icon: Building2,       show: isAdmin },
-    // { href: '/dashboard/contacts',       label: 'Contacts',      icon: UserCircle,      show: isAdmin },
-    // { href: '/dashboard/campaigns',      label: 'Campaigns',     icon: Megaphone,       show: isAdmin },
-    // { href: '/dashboard/analytics',      label: 'Analytics',     icon: BarChart3,       show: canViewTeam },
-    // { href: '/dashboard/import',         label: 'Import Data',   icon: Upload,          show: canImportData },
-    // { href: '/dashboard/integrations',   label: 'Integrations',  icon: TrendingUp,      show: isAdmin },
+    { href: '/dashboard',                label: 'Dashboard',      icon: LayoutDashboard, show: true },
+    { href: '/dashboard/leads',          label: 'Leads CRM',      icon: Users,           show: true },
+    { href: '/dashboard/opportunities',  label: 'Opportunities',  icon: DollarSign,      show: true },
+    { href: '/dashboard/activities',     label: 'Activities',     icon: CheckSquare,     show: true },
+    { href: '/dashboard/lead-discovery', label: 'Lead Discovery', icon: Search,          show: canViewTeam },
+    { href: '/dashboard/intent-signals', label: 'Intent Signals', icon: Zap,             show: canViewTeam },
+    // { href: '/dashboard/campaigns',      label: 'Campaigns',      icon: Megaphone,       show: isAdmin },
+    // { href: '/dashboard/analytics',      label: 'Analytics',      icon: BarChart3,       show: canViewTeam },
+    { href: '/dashboard/team',           label: 'Team',           icon: UserCog,         show: canViewTeam },
+    // { href: '/dashboard/integrations',   label: 'Integrations',   icon: TrendingUp,      show: isAdmin },
   ].filter(item => item.show);
-
-  const roleBadgeClass = isAdmin
-    ? 'bg-emerald-500/15 text-emerald-400'
-    : isManager
-    ? 'bg-blue-500/15 text-blue-400'
-    : 'bg-slate-500/15 text-slate-400';
 
   return (
     <aside className={cn(
@@ -72,16 +62,13 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         })}
       </nav>
 
-      {/* User */}
-      <div className="px-3 py-3 border-t border-slate-200 dark:border-white/[0.06]">
+      {/* User — name only, no role badge */}
+      <div className="px-3 py-3 border-t border-white/[0.06]">
         <div className="flex items-center gap-2.5">
           <Avatar initials={user ? getInitials(user.name) : 'U'} size="sm"/>
           {!collapsed && user && (
             <div className="overflow-hidden">
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{user.name}</p>
-              <span className={cn('inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 leading-tight', roleBadgeClass)}>
-                {getRoleLabel(user.role)}
-              </span>
+              <p className="text-xs font-semibold text-slate-200 truncate">{user.name}</p>
             </div>
           )}
         </div>
