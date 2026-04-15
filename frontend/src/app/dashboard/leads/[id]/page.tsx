@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { leadsApi } from '../../../../lib/api';
+import { leadsApi, contactsApi } from '../../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner } from '../../../../components/ui';
 import { ActivitiesList } from '../../../../components/crm/ActivitiesList';
 import { RoleGuard } from '../../../../components/common/RoleGuard';
@@ -13,7 +13,7 @@ import {
   User, Linkedin, Search, CheckCircle2, XCircle, Building2,
   MapPin, Users2, FileText, Phone, ExternalLink, Copy,
   ChevronRight, Shield, Trash2, UserCog, Calendar, DollarSign,
-  Clock, TrendingUp, Edit2, Save, X,
+  Clock, TrendingUp, Edit2, Save, X, UserPlus, Plus,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -211,6 +211,13 @@ export default function LeadDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any>({});
 
+  // Multi-contact state
+  const [isAddingContact,  setIsAddingContact]  = useState(false);
+  const [newContact,       setNewContact]       = useState({ name: '', title: '', emails: [''], phones: [''], linkedins: [''] });
+  const [contactDeleteId,  setContactDeleteId]  = useState<string | null>(null);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [editContactData,  setEditContactData]  = useState<{ name: string; title: string; phone: string; email: string; linkedin: string }>({ name: '', title: '', phone: '', email: '', linkedin: '' });
+
   // Auto-open edit form when navigated with ?edit=1
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -321,6 +328,96 @@ export default function LeadDetailPage() {
     },
     onError: () => toast.error('Failed to update lead'),
   });
+
+  // ── Contacts (multiple per lead) ──────────────────────────────────────────
+  const { data: contactsData, isLoading: contactsLoading } = useQuery({
+    queryKey: ['lead-contacts', id],
+    queryFn:  () => contactsApi.list({ leadId: id }).then(r => {
+      const d = r.data;
+      if (Array.isArray(d)) return d;
+      if (Array.isArray(d?.data)) return d.data;
+      return [];
+    }),
+    staleTime: 30000,
+  });
+  const savedContacts: any[] = contactsData ?? [];
+
+  const addContactMutation = useMutation({
+    mutationFn: (data: any) => contactsApi.create({ ...data, leadId: id }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+      toast.success('Contact added');
+      setIsAddingContact(false);
+      setNewContact({ name: '', title: '', emails: [''], phones: [''], linkedins: [''] });
+    },
+    onError: () => toast.error('Failed to add contact'),
+  });
+
+  const deleteContactMutation = useMutation({
+    mutationFn: (contactId: string) => contactsApi.delete(contactId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+      toast.success('Contact removed');
+      setContactDeleteId(null);
+    },
+    onError: () => toast.error('Failed to remove contact'),
+  });
+
+  const updateContactMutation = useMutation({
+    mutationFn: ({ contactId, data }: { contactId: string; data: any }) =>
+      contactsApi.update(contactId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+      toast.success('Contact updated');
+      setEditingContactId(null);
+    },
+    onError: () => toast.error('Failed to update contact'),
+  });
+
+  function startEditContact(c: any) {
+    setEditingContactId(c.id);
+    setEditContactData({
+      name:     c.name     || c.contactName     || '',
+      title:    c.title    || c.contactTitle    || '',
+      phone:    c.phone    || c.contactPhone    || '',
+      email:    c.email    || c.contactEmail    || '',
+      linkedin: c.linkedin || c.contactLinkedin || '',
+    });
+  }
+
+  function handleSaveContact() {
+    if (!editingContactId) return;
+    updateContactMutation.mutate({ contactId: editingContactId, data: editContactData });
+  }
+
+  function handleAddContact() {
+    const emails    = newContact.emails.map(e => e.trim()).filter(Boolean);
+    const phones    = newContact.phones.map(p => p.trim()).filter(Boolean);
+    const linkedins = newContact.linkedins.map(l => l.trim()).filter(Boolean);
+    if (!emails.length && !phones.length) {
+      toast.error('Enter at least a phone number or email address');
+      return;
+    }
+    addContactMutation.mutate({
+      name:    newContact.name,
+      title:   newContact.title,
+      email:   emails[0]    || null,
+      phone:   phones[0]    || null,
+      linkedin: linkedins[0] || null,
+      additionalEmails:       emails.slice(1),
+      additionalPhones:       phones.slice(1),
+      additionalLinkedinUrls: linkedins.slice(1),
+    });
+  }
+
+  function handleContactDelete(contactId: string) {
+    if (contactDeleteId === contactId) {
+      deleteContactMutation.mutate(contactId);
+    } else {
+      setContactDeleteId(contactId);
+      setTimeout(() => setContactDeleteId(null), 3000);
+    }
+  }
 
   async function handleSend() {
     if (!emailData) return;
@@ -629,39 +726,289 @@ export default function LeadDetailPage() {
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="section-title">Contact Details</h2>
-              {(enrichState.status === 'sh_found' || enrichState.status === 'apollo_found') && (
-                <span className={cn(
-                  'text-[10px] font-semibold px-2 py-0.5 rounded-full border',
-                  enrichState.status === 'sh_found'
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
-                    : 'bg-violet-500/10 text-violet-400 border-violet-500/25'
-                )}>
-                  ✓ via {enrichState.status === 'sh_found' ? 'SignalHire' : 'Apollo'}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {(enrichState.status === 'sh_found' || enrichState.status === 'apollo_found') && (
+                  <span className={cn(
+                    'text-[10px] font-semibold px-2 py-0.5 rounded-full border',
+                    enrichState.status === 'sh_found'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                      : 'bg-violet-500/10 text-violet-400 border-violet-500/25'
+                  )}>
+                    ✓ via {enrichState.status === 'sh_found' ? 'SignalHire' : 'Apollo'}
+                  </span>
+                )}
+                {canEditThisLead && (
+                  <button
+                    className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5"
+                    onClick={() => { setIsAddingContact(v => !v); }}
+                  >
+                    <UserPlus size={12} />
+                    Add Contact
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Contact fields */}
+            {/* ── Enriched / primary contact (from lead record) ── */}
             {hasContact && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-                <InfoRow icon={<User size={12} className="text-slate-400" />}
-                  label="Name" value={lead.contactName} />
-                <InfoRow icon={<ChevronRight size={12} className="text-slate-400" />}
-                  label="Title" value={lead.contactTitle} />
-                <InfoRow icon={<Mail size={12} className="text-emerald-400" />}
-                  label="Email" value={lead.contactEmail}
-                  href={lead.contactEmail ? `mailto:${lead.contactEmail}` : undefined}
-                  copyable />
-                <InfoRow icon={<Phone size={12} className="text-amber-400" />}
-                  label="Phone" value={lead.contactPhone} copyable />
-                <InfoRow icon={<Linkedin size={12} className="text-blue-400" />}
-                  label="Personal LinkedIn" value={lead.contactLinkedin}
-                  href={lead.contactLinkedin?.startsWith('http') ? lead.contactLinkedin : lead.contactLinkedin ? `https://${lead.contactLinkedin}` : undefined}
-                  copyable />
+              <div className="mb-4">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                  Primary Contact
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <InfoRow icon={<User size={12} className="text-slate-400" />}
+                    label="Name" value={lead.contactName} />
+                  <InfoRow icon={<ChevronRight size={12} className="text-slate-400" />}
+                    label="Title" value={lead.contactTitle} />
+                  <InfoRow icon={<Mail size={12} className="text-emerald-400" />}
+                    label="Email" value={lead.contactEmail}
+                    href={lead.contactEmail ? `mailto:${lead.contactEmail}` : undefined}
+                    copyable />
+                  <InfoRow icon={<Phone size={12} className="text-amber-400" />}
+                    label="Phone" value={lead.contactPhone} copyable />
+                  <InfoRow icon={<Linkedin size={12} className="text-blue-400" />}
+                    label="Personal LinkedIn" value={lead.contactLinkedin}
+                    href={lead.contactLinkedin?.startsWith('http') ? lead.contactLinkedin : lead.contactLinkedin ? `https://${lead.contactLinkedin}` : undefined}
+                    copyable />
+                </div>
               </div>
             )}
 
-            {/* Enrichment panel */}
+            {/* ── Saved additional contacts ── */}
+            {contactsLoading ? (
+              <div className="py-2 flex items-center gap-2 text-xs text-slate-500">
+                <Loader2 size={12} className="animate-spin" /> Loading contacts…
+              </div>
+            ) : savedContacts.length > 0 && (
+              <div className="mb-4">
+                {hasContact && (
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-2 mb-2 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                    Additional Contacts ({savedContacts.length})
+                  </p>
+                )}
+                <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] overflow-hidden">
+                  {/* Column headers */}
+                  <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] bg-slate-100 dark:bg-slate-900">
+                    <div className="px-3 py-2 flex items-center gap-1.5">
+                      <Phone size={10} className="text-amber-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Phone Numbers</span>
+                    </div>
+                    <div className="px-3 py-2 flex items-center gap-1.5">
+                      <Mail size={10} className="text-emerald-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Email Addresses</span>
+                    </div>
+                  </div>
+
+                  {/* One row per contact */}
+                  {savedContacts.map((c: any) => {
+                    const isEditingThis = editingContactId === c.id;
+                    return (
+                      <div key={c.id} className="border-t border-slate-200 dark:border-white/[0.06] group">
+                        {isEditingThis ? (
+                          /* ── Inline edit row ── */
+                          <div className="p-3 bg-blue-500/[0.04] space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="label mb-1 block">Phone</label>
+                                <div className="flex items-center gap-1.5">
+                                  <Phone size={11} className="text-amber-400 flex-shrink-0" />
+                                  <input
+                                    className="input text-xs flex-1 h-8"
+                                    placeholder="+91 XXXXX XXXXX"
+                                    value={editContactData.phone}
+                                    onChange={e => setEditContactData(d => ({ ...d, phone: e.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="label mb-1 block">Email</label>
+                                <div className="flex items-center gap-1.5">
+                                  <Mail size={11} className="text-emerald-400 flex-shrink-0" />
+                                  <input
+                                    className="input text-xs flex-1 h-8"
+                                    type="email"
+                                    placeholder="name@company.com"
+                                    value={editContactData.email}
+                                    onChange={e => setEditContactData(d => ({ ...d, email: e.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="label mb-1 block">Full Name</label>
+                                <input
+                                  className="input text-xs h-8"
+                                  placeholder="Full name"
+                                  value={editContactData.name}
+                                  onChange={e => setEditContactData(d => ({ ...d, name: e.target.value }))}
+                                />
+                              </div>
+                              <div>
+                                <label className="label mb-1 block">Job Title</label>
+                                <input
+                                  className="input text-xs h-8"
+                                  placeholder="e.g. CEO, CTO"
+                                  value={editContactData.title}
+                                  onChange={e => setEditContactData(d => ({ ...d, title: e.target.value }))}
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="label mb-1 block">LinkedIn URL</label>
+                                <div className="flex items-center gap-1.5">
+                                  <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
+                                  <input
+                                    className="input text-xs flex-1 h-8"
+                                    placeholder="https://linkedin.com/in/..."
+                                    value={editContactData.linkedin}
+                                    onChange={e => setEditContactData(d => ({ ...d, linkedin: e.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                className="btn-primary text-xs py-1.5 px-3"
+                                onClick={handleSaveContact}
+                                disabled={updateContactMutation.isPending}
+                              >
+                                {updateContactMutation.isPending
+                                  ? <><Loader2 size={11} className="animate-spin" /> Saving…</>
+                                  : <><Save size={11} /> Save</>}
+                              </button>
+                              <button
+                                className="btn-ghost text-xs py-1.5 px-3"
+                                onClick={() => setEditingContactId(null)}
+                              >
+                                <X size={11} /> Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* ── Read-only row ── */
+                          <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                            {/* LEFT — phone */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
+                              <Phone size={11} className="text-amber-400 flex-shrink-0" />
+                              {(c.phone || c.contactPhone) ? (
+                                <>
+                                  <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
+                                    {c.phone || c.contactPhone}
+                                  </span>
+                                  <button
+                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity ml-auto flex-shrink-0"
+                                    onClick={() => { navigator.clipboard.writeText(c.phone || c.contactPhone); toast.success('Copied!'); }}
+                                    title="Copy phone">
+                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </div>
+                            {/* RIGHT — email + actions */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
+                              <Mail size={11} className="text-emerald-400 flex-shrink-0" />
+                              {(c.email || c.contactEmail) ? (
+                                <>
+                                  <a href={`mailto:${c.email || c.contactEmail}`}
+                                    className="text-xs text-slate-700 dark:text-slate-300 hover:text-blue-400 truncate">
+                                    {c.email || c.contactEmail}
+                                  </a>
+                                  <button
+                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
+                                    onClick={() => { navigator.clipboard.writeText(c.email || c.contactEmail); toast.success('Copied!'); }}
+                                    title="Copy email">
+                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                              {canEditThisLead && (
+                                <div className="opacity-0 group-hover:opacity-100 transition-all ml-auto flex items-center gap-1 flex-shrink-0">
+                                  <button
+                                    onClick={() => startEditContact(c)}
+                                    className="btn-ghost text-[10px] py-0.5 px-1.5 text-slate-400"
+                                    title="Edit contact">
+                                    <Edit2 size={11} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleContactDelete(c.id)}
+                                    className={cn(
+                                      'btn-ghost text-[10px] py-0.5 px-1.5',
+                                      contactDeleteId === c.id ? 'bg-red-500/20 text-red-400' : 'text-slate-400'
+                                    )}
+                                    disabled={deleteContactMutation.isPending}
+                                    title="Delete contact">
+                                    {contactDeleteId === c.id
+                                      ? <><Trash2 size={11} /> Confirm?</>
+                                      : <Trash2 size={11} />}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ── Add new contact form ── */}
+            {isAddingContact && (
+              <div className="border border-blue-500/30 bg-blue-500/[0.04] rounded-xl p-3 mb-4">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2.5 flex items-center gap-1.5">
+                  <UserPlus size={12} className="text-blue-400" /> New Contact
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Phone size={11} className="text-amber-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="Phone number"
+                      value={newContact.phones[0] ?? ''}
+                      onChange={e => setNewContact(c => { const phones = [...c.phones]; phones[0] = e.target.value; return { ...c, phones }; })} />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Mail size={11} className="text-emerald-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" type="email" placeholder="Email address"
+                      value={newContact.emails[0] ?? ''}
+                      onChange={e => setNewContact(c => { const emails = [...c.emails]; emails[0] = e.target.value; return { ...c, emails }; })} />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-2.5">
+                  <button
+                    className="btn-primary text-xs py-1.5 px-4"
+                    onClick={handleAddContact}
+                    disabled={addContactMutation.isPending}
+                  >
+                    {addContactMutation.isPending
+                      ? <><Loader2 size={12} className="animate-spin" /> Saving…</>
+                      : <><CheckCircle2 size={12} /> Save Contact</>}
+                  </button>
+                  <button className="btn-ghost text-xs py-1.5 px-3"
+                    onClick={() => { setIsAddingContact(false); setNewContact({ name: '', title: '', emails: [''], phones: [''], linkedins: [''] }); }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── When no contact at all exists ── */}
+            {!hasContact && savedContacts.length === 0 && !isAddingContact && (
+              <div className="py-4 text-center">
+                <p className="text-xs text-slate-600 mb-3">No contact details yet</p>
+                {canEditThisLead && (
+                  <button className="btn-ghost text-xs py-1.5 px-3 mx-auto flex items-center gap-1.5"
+                    onClick={() => setIsAddingContact(true)}>
+                    <UserPlus size={12} /> Add a Contact
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── Enrichment panel ── */}
             <EnrichPanel
               enrichState={enrichState}
               onSignalHire={() => shMutation.mutate()}

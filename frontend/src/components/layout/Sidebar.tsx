@@ -20,19 +20,19 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
 
   const navItems = [
     { href: '/dashboard',               label: 'Dashboard',      icon: LayoutDashboard, show: true },
+    { href: '/dashboard/leads',          label: 'Leads',     icon: Users,           show: true },
+    { href: '/dashboard/opportunities',  label: 'Opportunities', icon: DollarSign,      show: true },
+    { href: '/dashboard/activities',     label: 'Activities',    icon: CheckSquare,     show: true },
     { href: '/dashboard/lead-discovery',label: 'Lead Discovery', icon: Search,          show: canViewTeam },
     { href: '/dashboard/intent-signals', label: 'Intent Signals',icon: Zap,             show: canViewTeam },
-    { href: '/dashboard/leads',          label: 'Leads CRM',     icon: Users,           show: true },
-    { href: '/dashboard/opportunities',  label: 'Opportunities', icon: DollarSign,      show: true },
+    { href: '/dashboard/team',           label: 'Team',          icon: UserCog,         show: canViewTeam },
+    { href: '/dashboard/settings',       label: 'Settings',      icon: Settings,        show: isAdmin },
     // { href: '/dashboard/accounts',       label: 'Accounts',      icon: Building2,       show: isAdmin },
     // { href: '/dashboard/contacts',       label: 'Contacts',      icon: UserCircle,      show: isAdmin },
-    { href: '/dashboard/activities',     label: 'Activities',    icon: CheckSquare,     show: true },
-    { href: '/dashboard/campaigns',      label: 'Campaigns',     icon: Megaphone,       show: isAdmin },
-    { href: '/dashboard/analytics',      label: 'Analytics',     icon: BarChart3,       show: canViewTeam },
-    { href: '/dashboard/team',           label: 'Team',          icon: UserCog,         show: canViewTeam },
+    // { href: '/dashboard/campaigns',      label: 'Campaigns',     icon: Megaphone,       show: isAdmin },
+    // { href: '/dashboard/analytics',      label: 'Analytics',     icon: BarChart3,       show: canViewTeam },
     // { href: '/dashboard/import',         label: 'Import Data',   icon: Upload,          show: canImportData },
-    { href: '/dashboard/integrations',   label: 'Integrations',  icon: TrendingUp,      show: isAdmin },
-    { href: '/dashboard/settings',       label: 'Settings',      icon: Settings,        show: isAdmin },
+    // { href: '/dashboard/integrations',   label: 'Integrations',  icon: TrendingUp,      show: isAdmin },
   ].filter(item => item.show);
 
   const roleBadgeClass = isAdmin

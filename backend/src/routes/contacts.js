@@ -14,10 +14,12 @@ router.use(authenticate);
 router.get('/', ctrl.getContacts);
 router.get('/:id', [param('id').isUUID()], validate, ctrl.getContactById);
 router.post('/', [
-  body('name').trim().notEmpty().withMessage('Name is required'),
-  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  // All fields are optional for lead-linked contacts — at least one must be provided (validated in controller)
+  body('name').optional({ checkFalsy: true }).trim(),
+  body('email').optional({ checkFalsy: true }).isEmail().normalizeEmail().withMessage('Valid email required'),
   body('influenceLevel').optional().isIn(['low', 'medium', 'high']),
   body('decisionMaker').optional().isBoolean(),
+  body('leadId').optional().isUUID().withMessage('leadId must be a valid UUID'),
 ], validate, ctrl.createContact);
 router.patch('/:id', [param('id').isUUID()], validate, ctrl.updateContact);
 router.delete('/:id', [param('id').isUUID()], validate, ctrl.deleteContact);

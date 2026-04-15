@@ -214,6 +214,7 @@ model Lead {
   opportunities Opportunity[]
   account       Account?       @relation(fields: [accountId], references: [id])
   importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
+  leadContacts  Contact[]
 }
 
 model Campaign {
@@ -455,10 +456,16 @@ model Contact {
   id              String   @id @default(uuid())
   organizationId  String
   name            String
-  email           String
+  email           String?
   phone           String?
   designation     String?
+  title           String?
+  linkedin        String?
+  leadId          String?
   linkedAccountId String?
+  additionalEmails       String[] @default([])
+  additionalPhones       String[] @default([])
+  additionalLinkedinUrls String[] @default([])
   decisionMaker   Boolean  @default(false)
   influenceLevel  String   @default("medium")
   ownerId         String?
@@ -468,6 +475,7 @@ model Contact {
 
   organization  Organization  @relation(fields: [organizationId], references: [id])
   linkedAccount Account?      @relation(fields: [linkedAccountId], references: [id])
+  lead          Lead?         @relation(fields: [leadId], references: [id])
   owner         User?         @relation("ContactOwner", fields: [ownerId], references: [id])
   createdByUser User?         @relation("ContactCreator", fields: [createdById], references: [id])
   opportunities Opportunity[]

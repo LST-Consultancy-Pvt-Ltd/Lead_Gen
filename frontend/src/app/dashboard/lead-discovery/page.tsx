@@ -270,7 +270,7 @@ export default function LeadDiscoveryPage() {
             Finds companies that <span className="text-emerald-400 font-medium">need</span> your service or product — not competitors
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        {/* <div className="flex items-center gap-3">
           {totalLeadsEver > 0 && (
             <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2">
               <TrendingUp size={12} className="text-emerald-400" />
@@ -286,7 +286,7 @@ export default function LeadDiscoveryPage() {
                 : <><Zap size={14} /> Launch AI Scan</>}
             </button>
           )}
-        </div>
+        </div> */}
       </div>
 
       {/* Mode tabs */}
@@ -324,6 +324,7 @@ export default function LeadDiscoveryPage() {
                           <span className="text-sm text-slate-800 dark:text-slate-200">{s.name}</span>
                         </div>
                         <button onClick={() => removeService(i)}
+                          aria-label={`Remove ${s.name}`}
                           className="text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors">
                           <X size={13} />
                         </button>
@@ -339,7 +340,7 @@ export default function LeadDiscoveryPage() {
                     onChange={e => setNewService(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addService()}
                     placeholder='"NetSuite Consultant", "Salesforce Admin", "SAP Developer"' />
-                  <button className="btn-primary flex-shrink-0 px-3" onClick={addService}><Plus size={14} /></button>
+                  <button className="btn-primary flex-shrink-0 px-3" onClick={addService} aria-label="Add service"><Plus size={14} /></button>
                 </div>
                 <p className="text-xs text-slate-600 mt-2">💡 Be specific — "NetSuite Consultant" beats "ERP"</p>
               </div>
@@ -508,7 +509,7 @@ export default function LeadDiscoveryPage() {
                       <span className="text-[10px] bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
                     </div>
                     <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.pdf"
-                      onChange={handleFileUpload} className="hidden" />
+                      onChange={handleFileUpload} className="hidden" aria-label="Upload brochure or spec sheet" />
                     {productDocumentText ? (
                       <div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-3 border border-emerald-500/20">
                         <div className="flex items-center justify-between mb-1.5">
@@ -517,6 +518,7 @@ export default function LeadDiscoveryPage() {
                             <span className="text-xs text-emerald-400 font-medium">{productFileName}</span>
                           </div>
                           <button onClick={() => { setProductDocumentText(''); setProductFileName(''); resetPrompt(); }}
+                            aria-label="Remove uploaded file"
                             className="text-slate-600 hover:text-red-400 transition-colors">
                             <X size={12} />
                           </button>
@@ -650,7 +652,7 @@ export default function LeadDiscoveryPage() {
                     disabled={!canStartProductScan || productScanMutation.isPending}>
                     {productScanMutation.isPending
                       ? <><Loader2 size={14} className="animate-spin" /> Starting scan…</>
-                      : <><Zap size={14} /> Start Product Scan</>}
+                      : <><Zap size={14} /> Generate Leads</>}
                   </button>
                 </div>
               )}

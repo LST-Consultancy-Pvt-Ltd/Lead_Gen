@@ -112,9 +112,9 @@ export function AdminDashboard() {
             Organization-wide performance — all teams, all data
           </p>
         </div>
-        <span className="text-xs bg-violet-500/10 border border-violet-500/20 text-violet-400 px-3 py-1 rounded-full font-medium">
+        {/* <span className="text-xs bg-violet-500/10 border border-violet-500/20 text-violet-400 px-3 py-1 rounded-full font-medium">
           Full system access
-        </span>
+        </span> */}
       </div>
 
       {/* System Health (if backend provides it) */}
