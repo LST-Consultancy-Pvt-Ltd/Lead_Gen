@@ -13,7 +13,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  Settings,
   ChevronRight,
 } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
@@ -464,20 +463,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
                 </div>
               </div>
 
-              {/* Settings link (admin only) */}
-              {permissions.canAccessSettings && (
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    router.push('/dashboard/settings');
-                  }}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/[0.05] w-full text-left transition-colors"
-                >
-                  <Settings size={14} />
-                  Settings
-                  <ChevronRight size={12} className="ml-auto text-slate-600" />
-                </button>
-              )}
+
 
               {/* Sign Out */}
               <button

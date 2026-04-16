@@ -9,7 +9,7 @@ import { getInitials } from '../../lib/utils';
 import {
   LayoutDashboard, Users, TrendingUp, CheckSquare,
   BarChart3, UserCog, Sparkles, Upload, DollarSign, Search, Zap,
-  Building2, UserCircle, Megaphone
+  Building2, UserCircle, Megaphone, Settings
 } from 'lucide-react';
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
@@ -28,6 +28,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
     // { href: '/dashboard/campaigns',      label: 'Campaigns',      icon: Megaphone,       show: isAdmin },
     // { href: '/dashboard/analytics',      label: 'Analytics',      icon: BarChart3,       show: canViewTeam },
     { href: '/dashboard/team',           label: 'Team',           icon: UserCog,         show: canViewTeam },
+    { href: '/dashboard/settings',       label: 'Settings',       icon: Settings,        show: isAdmin },
     // { href: '/dashboard/integrations',   label: 'Integrations',   icon: TrendingUp,      show: isAdmin },
   ].filter(item => item.show);
 
