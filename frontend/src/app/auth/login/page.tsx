@@ -91,9 +91,9 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-slate-600 mt-4">
+        {/* <p className="text-center text-xs text-slate-600 mt-4">
           Demo: admin@demo.com / password123
-        </p>
+        </p> */}
       </div>
     </div>
   );
