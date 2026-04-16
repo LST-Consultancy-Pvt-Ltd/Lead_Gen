@@ -12,7 +12,7 @@ import {
   ArrowLeft, Zap, Send, Loader2, RefreshCw, Globe, Mail,
   User, Linkedin, Search, CheckCircle2, XCircle, Building2,
   MapPin, Users2, FileText, Phone, ExternalLink, Copy,
-  ChevronRight, Shield, Trash2, UserCog, Calendar, DollarSign,
+  ChevronRight, Trash2, UserCog, Calendar, DollarSign,
   Clock, TrendingUp, Edit2, Save, X, UserPlus, Plus,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -29,12 +29,9 @@ function cn(...cls: (string | boolean | undefined | null)[]) {
 
 type EnrichState =
   | { status: 'idle' }
-  | { status: 'searching_sh' }
-  | { status: 'sh_found'; source: 'signalhire' }
-  | { status: 'sh_not_found' }
   | { status: 'searching_apollo' }
   | { status: 'apollo_found'; source: 'apollo' }
-  | { status: 'both_failed' };
+  | { status: 'apollo_failed' };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Info row
@@ -83,22 +80,16 @@ function InfoRow({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EnrichPanel({
-  enrichState, onSignalHire, onApollo, hasContact,
+  enrichState, onApollo, hasContact,
 }: {
-  enrichState: EnrichState; onSignalHire: () => void; onApollo: () => void; hasContact: boolean;
+  enrichState: EnrichState; onApollo: () => void; hasContact: boolean;
 }) {
   const { status } = enrichState;
-  const isSHLoading     = status === 'searching_sh';
   const isApolloLoading = status === 'searching_apollo';
 
   if (hasContact && status === 'idle') {
     return (
       <div className="flex gap-2 pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3">
-        <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-          onClick={onSignalHire} disabled={isSHLoading}>
-          {isSHLoading ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
-          Re-search SignalHire
-        </button>
         <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
           onClick={onApollo} disabled={isApolloLoading}>
           {isApolloLoading ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
@@ -110,47 +101,12 @@ function EnrichPanel({
 
   return (
     <div className="space-y-3 pt-3">
-      {/* SignalHire button */}
-      <div className={cn(
-        'rounded-xl border p-3.5 transition-all',
-        isSHLoading ? 'bg-emerald-500/[0.08] border-emerald-500/30'
-          : status === 'sh_found' ? 'bg-emerald-500/[0.08] border-emerald-500/30'
-          : status === 'sh_not_found' || status === 'searching_apollo' || status === 'apollo_found' || status === 'both_failed'
-            ? 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] opacity-60'
-            : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06]'
-      )}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-              <Shield size={12} className="text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">SignalHire</p>
-              <p className="text-[10px] text-slate-500">Best for LinkedIn-matched contacts</p>
-            </div>
-          </div>
-          {status === 'sh_found' && <CheckCircle2 size={14} className="text-emerald-400" />}
-          {(status === 'sh_not_found' || status === 'searching_apollo' || status === 'apollo_found' || status === 'both_failed') && <XCircle size={14} className="text-slate-600" />}
-        </div>
-        {status === 'idle' || status === 'searching_sh' ? (
-          <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition-colors disabled:opacity-60"
-            onClick={onSignalHire} disabled={isSHLoading}>
-            {isSHLoading ? <><Loader2 size={12} className="animate-spin" /> Searching SignalHire…</> : <><Search size={12} /> Search SignalHire</>}
-          </button>
-        ) : (
-          <p className="text-xs text-slate-500 text-center py-1">
-            {status === 'sh_found' ? '✓ Contact found' : '✕ Not found in SignalHire'}
-          </p>
-        )}
-      </div>
-
       {/* Apollo button */}
       <div className={cn(
         'rounded-xl border p-3.5 transition-all',
         isApolloLoading ? 'bg-violet-500/[0.08] border-violet-500/30'
           : status === 'apollo_found' ? 'bg-violet-500/[0.08] border-violet-500/30'
-          : status === 'both_failed' ? 'bg-red-500/[0.06] border-red-500/20'
-          : status === 'idle' || status === 'searching_sh' ? 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] opacity-50'
+          : status === 'apollo_failed' ? 'bg-red-500/[0.06] border-red-500/20'
           : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06]'
       )}>
         <div className="flex items-center justify-between mb-2">
@@ -160,29 +116,25 @@ function EnrichPanel({
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Apollo.io</p>
-              <p className="text-[10px] text-slate-500">Fallback — 200M+ contacts database</p>
+              <p className="text-[10px] text-slate-500">200M+ contacts database</p>
             </div>
           </div>
           {status === 'apollo_found' && <CheckCircle2 size={14} className="text-violet-400" />}
-          {status === 'both_failed' && <XCircle size={14} className="text-red-500" />}
+          {status === 'apollo_failed' && <XCircle size={14} className="text-red-500" />}
         </div>
-        {(status === 'sh_not_found' || status === 'searching_apollo' || status === 'apollo_found' || status === 'both_failed') ? (
-          <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
-            onClick={onApollo} disabled={isApolloLoading || status === 'apollo_found'}>
-            {isApolloLoading ? <><Loader2 size={12} className="animate-spin" /> Searching Apollo…</>
-              : status === 'apollo_found' ? '✓ Contact found'
-              : status === 'both_failed' ? '✕ Not found — try again'
-              : <><Search size={12} /> Search Apollo</>}
-          </button>
-        ) : (
-          <p className="text-[10px] text-slate-600 text-center py-1">Runs automatically if SignalHire fails</p>
-        )}
+        <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
+          onClick={onApollo} disabled={isApolloLoading || status === 'apollo_found'}>
+          {isApolloLoading ? <><Loader2 size={12} className="animate-spin" /> Searching Apollo…</>
+            : status === 'apollo_found' ? '✓ Contact found'
+            : status === 'apollo_failed' ? '✕ Not found — try again'
+            : <><Search size={12} /> Search Apollo</>}
+        </button>
       </div>
 
-      {status === 'both_failed' && (
+      {status === 'apollo_failed' && (
         <div className="p-3 bg-amber-500/[0.06] border border-amber-500/20 rounded-xl">
           <p className="text-xs text-amber-400 text-center">
-            No contact found in either database. Try adding a LinkedIn URL to improve search accuracy.
+            No contact found. Try adding a LinkedIn URL to improve search accuracy.
           </p>
         </div>
       )}
@@ -270,22 +222,6 @@ export default function LeadDetailPage() {
     onError:    () => toast.error('Save failed'),
   });
 
-  const shMutation = useMutation({
-    mutationFn: () => { setEnrichState({ status: 'searching_sh' }); return leadsApi.enrichSignalHire(id); },
-    onSuccess: (res) => {
-      const d = res.data.data;
-      if (d.found) {
-        setEnrichState({ status: 'sh_found', source: 'signalhire' });
-        qc.invalidateQueries({ queryKey: ['lead', id] });
-        toast.success('Contact found via SignalHire!');
-      } else {
-        setEnrichState({ status: 'sh_not_found' });
-        toast('SignalHire: not found — trying Apollo next', { icon: 'ℹ️' });
-      }
-    },
-    onError: () => { setEnrichState({ status: 'sh_not_found' }); toast('SignalHire failed', { icon: '⚠️' }); },
-  });
-
   const apolloMutation = useMutation({
     mutationFn: () => { setEnrichState({ status: 'searching_apollo' }); return leadsApi.enrichApollo(id); },
     onSuccess: (res) => {
@@ -295,11 +231,11 @@ export default function LeadDetailPage() {
         qc.invalidateQueries({ queryKey: ['lead', id] });
         toast.success('Contact found via Apollo!');
       } else {
-        setEnrichState({ status: 'both_failed' });
-        toast.error('Apollo: not found either.');
+        setEnrichState({ status: 'apollo_failed' });
+        toast.error('No contact found in Apollo.');
       }
     },
-    onError: () => { setEnrichState({ status: 'both_failed' }); toast.error('Apollo search failed.'); },
+    onError: () => { setEnrichState({ status: 'apollo_failed' }); toast.error('Apollo search failed.'); },
   });
 
   const generateEmailMutation = useMutation({
@@ -703,14 +639,9 @@ export default function LeadDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="section-title">Contact Details</h2>
               <div className="flex items-center gap-2">
-                {(enrichState.status === 'sh_found' || enrichState.status === 'apollo_found') && (
-                  <span className={cn(
-                    'text-[10px] font-semibold px-2 py-0.5 rounded-full border',
-                    enrichState.status === 'sh_found'
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
-                      : 'bg-violet-500/10 text-violet-400 border-violet-500/25'
-                  )}>
-                    ✓ via {enrichState.status === 'sh_found' ? 'SignalHire' : 'Apollo'}
+                {enrichState.status === 'apollo_found' && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-violet-500/10 text-violet-400 border-violet-500/25">
+                    ✓ via Apollo
                   </span>
                 )}
                 {canEditThisLead && (
@@ -957,7 +888,6 @@ export default function LeadDetailPage() {
             {/* ── Enrichment panel ── */}
             <EnrichPanel
               enrichState={enrichState}
-              onSignalHire={() => shMutation.mutate()}
               onApollo={() => apolloMutation.mutate()}
               hasContact={hasContact}
             />
@@ -1114,7 +1044,7 @@ export default function LeadDetailPage() {
               <div className="space-y-3">
                 {!lead.contactEmail && (
                   <div className="p-3 bg-amber-500/[0.08] border border-amber-500/20 rounded-xl">
-                    <p className="text-xs text-amber-400">⚠ No email yet — use Contact Details to search SignalHire or Apollo.</p>
+                    <p className="text-xs text-amber-400">⚠ No email yet — use Contact Details to search Apollo.</p>
                   </div>
                 )}
                 {emailData ? (
