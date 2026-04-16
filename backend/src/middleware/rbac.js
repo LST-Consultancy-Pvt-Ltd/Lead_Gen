@@ -144,7 +144,10 @@ async function buildOrganizationFilter(user) {
     const teamMemberIds = teamMembers.map((m) => m.id);
     return {
       organizationId: user.organizationId,
-      assignedToId: { in: [...teamMemberIds, user.id] },
+      OR: [
+        { assignedToId: { in: [...teamMemberIds, user.id] } },
+        { assignedToId: null },
+      ],
     };
   }
 

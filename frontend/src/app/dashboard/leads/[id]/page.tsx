@@ -696,30 +696,6 @@ export default function LeadDetailPage() {
               </div>
             )}
 
-            {/* Edit LinkedIn */}
-            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/[0.06]">
-              {editingLinkedin ? (
-                <div className="flex items-center gap-2">
-                  <input className="input text-xs flex-1"
-                    placeholder="https://www.linkedin.com/company/your-company"
-                    value={linkedinInput} onChange={e => setLinkedinInput(e.target.value)} autoFocus />
-                  <button className="btn-primary text-xs py-1.5 px-3"
-                    onClick={() => saveLinkedinMutation.mutate(linkedinInput)}
-                    disabled={saveLinkedinMutation.isPending || !linkedinInput.trim()}>
-                    {saveLinkedinMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : 'Save'}
-                  </button>
-                  <button className="btn-ghost text-xs py-1.5 px-3" onClick={() => setEditingLinkedin(false)}>
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button className="text-xs text-slate-600 hover:text-blue-400 transition-colors flex items-center gap-1"
-                  onClick={() => { setLinkedinInput(lead.linkedinUrl || ''); setEditingLinkedin(true); }}>
-                  <Linkedin size={10} />
-                  {lead.linkedinUrl ? 'Edit LinkedIn URL' : '+ Add LinkedIn URL (improves contact search)'}
-                </button>
-              )}
-            </div>
           </div>
 
           {/* ── Contact Details ──────────────────────────────────────────── */}
@@ -832,36 +808,6 @@ export default function LeadDetailPage() {
                                     placeholder="name@company.com"
                                     value={editContactData.email}
                                     onChange={e => setEditContactData(d => ({ ...d, email: e.target.value }))}
-                                  />
-                                </div>
-                              </div>
-                              <div>
-                                <label className="label mb-1 block">Full Name</label>
-                                <input
-                                  className="input text-xs h-8"
-                                  placeholder="Full name"
-                                  value={editContactData.name}
-                                  onChange={e => setEditContactData(d => ({ ...d, name: e.target.value }))}
-                                />
-                              </div>
-                              <div>
-                                <label className="label mb-1 block">Job Title</label>
-                                <input
-                                  className="input text-xs h-8"
-                                  placeholder="e.g. CEO, CTO"
-                                  value={editContactData.title}
-                                  onChange={e => setEditContactData(d => ({ ...d, title: e.target.value }))}
-                                />
-                              </div>
-                              <div className="col-span-2">
-                                <label className="label mb-1 block">LinkedIn URL</label>
-                                <div className="flex items-center gap-1.5">
-                                  <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
-                                  <input
-                                    className="input text-xs flex-1 h-8"
-                                    placeholder="https://linkedin.com/in/..."
-                                    value={editContactData.linkedin}
-                                    onChange={e => setEditContactData(d => ({ ...d, linkedin: e.target.value }))}
                                   />
                                 </div>
                               </div>

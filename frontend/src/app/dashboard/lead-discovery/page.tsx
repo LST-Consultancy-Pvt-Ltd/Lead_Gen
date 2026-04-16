@@ -346,7 +346,7 @@ export default function LeadDiscoveryPage() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Work Profile" subtitle="Filter by arrangement (optional)">
+            {/* <SectionCard title="Work Profile" subtitle="Filter by arrangement (optional)">
               <div className="pt-4 flex gap-2 flex-wrap">
                 {WORK_TYPES.map(({ label, icon }) => {
                   const active = workTypes.includes(label);
@@ -363,7 +363,7 @@ export default function LeadDiscoveryPage() {
                   );
                 })}
               </div>
-            </SectionCard>
+            </SectionCard> */}
 
             <SectionCard title="Target Filters" subtitle="Leave blank for worldwide">
               <div className="pt-4 grid grid-cols-2 gap-3">
