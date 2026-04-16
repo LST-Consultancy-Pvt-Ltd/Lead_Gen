@@ -205,6 +205,11 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     setUtmOpen(false);
   };
 
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
   const onSubmit = (formData: any) => {
     // Filter out empty values; exclude assignedToId when cannot reassign
     const cleanedData = Object.fromEntries(
@@ -267,7 +272,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create New Lead">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Create New Lead">
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4">
         {/* Company Info */}
         <div className="space-y-3">
@@ -529,7 +534,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
         <div className="flex gap-3 pt-4">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="btn-ghost flex-1"
             disabled={createMutation.isPending}
           >
@@ -572,7 +577,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               onClick={() => {
                 if (duplicateConfirm.existingId) {
                   window.location.href = `/dashboard/leads/${duplicateConfirm.existingId}`;
-                  onClose();
+                  handleClose();
                 } else {
                   toast("Existing lead not available");
                 }
