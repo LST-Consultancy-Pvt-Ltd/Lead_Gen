@@ -524,4 +524,30 @@ router.post(
   leadController.enrichLeadViaApollo
 );
 
+/**
+ * POST /api/leads/:id/generate-email
+ * Generate outreach email for a lead
+ * Access: All authenticated users
+ */
+router.post(
+  '/:id/generate-email',
+  authenticate,
+  leadIdValidation,
+  validate,
+  leadController.generateEmail
+);
+
+/**
+ * POST /api/leads/:id/send-outreach
+ * Send outreach email to a lead
+ * Access: All authenticated users
+ */
+router.post(
+  '/:id/send-outreach',
+  authenticate,
+  leadIdValidation,
+  validate,
+  leadController.sendOutreach
+);
+
 module.exports = router;
