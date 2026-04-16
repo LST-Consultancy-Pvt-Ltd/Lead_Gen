@@ -8,7 +8,7 @@ import { usePermissions as useAuthPermissions } from '../../../store/authStore';
 import { RoleGuard } from '../../../components/common/RoleGuard';
 import { Badge, Avatar, Spinner, EmptyState } from '../../../components/ui';
 import { getInitials, timeAgo, getRoleLabel, getRoleBadgeColor } from '../../../lib/utils';
-import { UserCog, Plus, Loader2, Users, Mail, X, ChevronRight } from 'lucide-react';
+import { UserCog, Plus, Loader2, Users, Mail, X, ChevronRight, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function TeamPage() {
@@ -18,6 +18,8 @@ export default function TeamPage() {
   const qc = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: '', role: 'sales_user', managerId: '' });
+  const [expandedAdmins, setExpandedAdmins] = useState<Record<string, boolean>>({});
+  const [expandedManagers, setExpandedManagers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (permissions.isSalesUser) {
@@ -101,42 +103,35 @@ export default function TeamPage() {
           <div className="space-y-2">
             {admins.map((a: any) => (
               <div key={a.id}>
-                <div className="flex items-center gap-2 py-1.5">
+                <button
+                  className="w-full flex items-center gap-2 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.03] rounded-lg px-2 transition-colors"
+                  onClick={() => setExpandedAdmins(prev => ({ ...prev, [a.id]: !prev[a.id] }))}
+                >
+                  {expandedAdmins[a.id] ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
                   <Avatar initials={getInitials(a.name)} size="sm" />
-                  <div>
+                  <div className="text-left">
                     <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{a.name}</span>
                     <span className="text-xs text-slate-500 ml-2">{a.email}</span>
                   </div>
                   <Badge color="green" className="ml-auto">Admin</Badge>
-                </div>
-                {managers.map((mgr: any) => (
+                </button>
+                {expandedAdmins[a.id] && managers.map((mgr: any) => (
                   <div key={mgr.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
-                    <div className="flex items-center gap-2 py-1.5">
-                      <ChevronRight size={12} className="text-slate-600 -ml-2" />
+                    <button
+                      className="w-full flex items-center gap-2 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.03] rounded-lg px-2 transition-colors"
+                      onClick={() => setExpandedManagers(prev => ({ ...prev, [mgr.id]: !prev[mgr.id] }))}
+                    >
+                      {expandedManagers[mgr.id] ? <ChevronDown size={12} className="text-slate-400" /> : <ChevronRight size={12} className="text-slate-400" />}
                       <Avatar initials={getInitials(mgr.name)} size="sm" />
-                      <div>
+                      <div className="text-left">
                         <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{mgr.name}</span>
                         <span className="text-xs text-slate-500 ml-2">{mgr.email}</span>
                       </div>
                       <Badge color="blue" className="ml-auto">Sales Manager</Badge>
-                    </div>
-                    {salesUsers.filter((s: any) => s.managerId === mgr.id).map((su: any) => (
+                    </button>
+                    {expandedManagers[mgr.id] && salesUsers.filter((s: any) => s.managerId === mgr.id).map((su: any) => (
                       <div key={su.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
-                        <div className="flex items-center gap-2 py-1.5">
-                          <ChevronRight size={12} className="text-slate-600 -ml-2" />
-                          <Avatar initials={getInitials(su.name)} size="sm" />
-                          <div>
-                            <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
-                            <span className="text-xs text-slate-500 ml-2">{su.email}</span>
-                          </div>
-                          <Badge color="teal" className="ml-auto">Sales Executive</Badge>
-                        </div>
-                      </div>
-                    ))}
-                    {salesUsers.filter((s: any) => !s.managerId).map((su: any) => (
-                      <div key={su.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
-                        <div className="flex items-center gap-2 py-1.5">
-                          <ChevronRight size={12} className="text-slate-600 -ml-2" />
+                        <div className="flex items-center gap-2 py-1.5 px-2">
                           <Avatar initials={getInitials(su.name)} size="sm" />
                           <div>
                             <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
@@ -148,6 +143,22 @@ export default function TeamPage() {
                     ))}
                   </div>
                 ))}
+                {/* Unassigned sales users shown directly under admin */}
+                {expandedAdmins[a.id] && salesUsers.filter((s: any) => !s.managerId).length > 0 && (
+                  <div className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4 mt-1">
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 py-1">Unassigned</div>
+                    {salesUsers.filter((s: any) => !s.managerId).map((su: any) => (
+                      <div key={su.id} className="flex items-center gap-2 py-1.5 px-2">
+                        <Avatar initials={getInitials(su.name)} size="sm" />
+                        <div>
+                          <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
+                          <span className="text-xs text-slate-500 ml-2">{su.email}</span>
+                        </div>
+                        <Badge color="teal" className="ml-auto">Sales Executive</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
