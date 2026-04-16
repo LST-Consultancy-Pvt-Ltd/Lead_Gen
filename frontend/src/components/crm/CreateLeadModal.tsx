@@ -408,7 +408,21 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             </div>
             <div>
               <label className="label">Follow-up Date</label>
-              <input type="date" {...register("followUpDate")} title="Follow-up Date" placeholder="Follow-up Date" className="input" />
+              <input
+                type="date"
+                {...register("followUpDate")}
+                title="Follow-up Date"
+                className="input"
+                min={new Date().toISOString().split('T')[0]}
+                max="2099-12-31"
+                onKeyDown={(e) => {
+                  // Prevent manual typing to avoid year overflow issues
+                  if (!/Tab|Backspace|Delete|Arrow/.test(e.key)) {
+                    // Allow only if it's a digit or slash or hyphen
+                    if (!/[\d\-\/]/.test(e.key)) e.preventDefault();
+                  }
+                }}
+              />
               {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
             </div>
           </div>
