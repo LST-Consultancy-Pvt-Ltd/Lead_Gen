@@ -86,7 +86,11 @@ const createLeadValidation = [
   body('website')
     .optional({ checkFalsy: true })
     .trim()
-    .isURL()
+    .customSanitizer((val) => {
+      if (!val) return val;
+      return /^https?:\/\//i.test(val) ? val : `https://${val}`;
+    })
+    .isURL({ require_protocol: false, require_tld: true })
     .withMessage('Website must be a valid URL'),
 
   body('contactPhone')
@@ -151,7 +155,11 @@ const updateLeadValidation = [
   body('website')
     .optional({ checkFalsy: true })
     .trim()
-    .isURL()
+    .customSanitizer((val) => {
+      if (!val) return val;
+      return /^https?:\/\//i.test(val) ? val : `https://${val}`;
+    })
+    .isURL({ require_protocol: false, require_tld: true })
     .withMessage('Website must be a valid URL'),
   
   body('contactEmail')

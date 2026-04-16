@@ -99,7 +99,12 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     companyName: yup.string().trim().required("Company name is required"),
     website: yup
       .string()
-      .transform((value) => (value === '' ? undefined : value))
+      .transform((value) => {
+        if (!value || value.trim() === '') return undefined;
+        const trimmed = value.trim();
+        if (!/^https?:\/\//i.test(trimmed)) return `https://${trimmed}`;
+        return trimmed;
+      })
       .url("Enter a valid URL")
       .optional(),
     industry: yup.string().optional(),
@@ -293,10 +298,10 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             <div>
               <label className="label">Website</label>
               <input
-                type="url"
+                type="text"
                 {...register("website")}
                 className="input"
-                placeholder="https://example.com"
+                placeholder="facebook.com"
               />
               {errors.website && <p className="text-xs text-red-400 mt-1">{errors.website.message}</p>}
             </div>
