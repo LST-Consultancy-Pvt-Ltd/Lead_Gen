@@ -118,7 +118,7 @@ export default function TeamPage() {
                         <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{mgr.name}</span>
                         <span className="text-xs text-slate-500 ml-2">{mgr.email}</span>
                       </div>
-                      <Badge color="blue" className="ml-auto">Manager</Badge>
+                      <Badge color="blue" className="ml-auto">Sales Manager</Badge>
                     </div>
                     {salesUsers.filter((s: any) => s.managerId === mgr.id).map((su: any) => (
                       <div key={su.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
@@ -129,7 +129,7 @@ export default function TeamPage() {
                             <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
                             <span className="text-xs text-slate-500 ml-2">{su.email}</span>
                           </div>
-                          <span className="text-xs text-slate-600 ml-auto">→ {mgr.name}</span>
+                          <Badge color="teal" className="ml-auto">Sales Executive</Badge>
                         </div>
                       </div>
                     ))}
@@ -142,6 +142,7 @@ export default function TeamPage() {
                             <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
                             <span className="text-xs text-slate-500 ml-2">{su.email}</span>
                           </div>
+                          <Badge color="teal" className="ml-auto">Sales Executive</Badge>
                         </div>
                       </div>
                     ))}
