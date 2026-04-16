@@ -99,7 +99,12 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     companyName: yup.string().trim().required("Company name is required"),
     website: yup
       .string()
-      .transform((value) => (value === '' ? undefined : value))
+      .transform((value) => {
+        if (!value || value.trim() === '') return undefined;
+        const trimmed = value.trim();
+        if (!/^https?:\/\//i.test(trimmed)) return `https://${trimmed}`;
+        return trimmed;
+      })
       .url("Enter a valid URL")
       .optional(),
     industry: yup.string().optional(),
@@ -205,6 +210,11 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     setUtmOpen(false);
   };
 
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
   const onSubmit = (formData: any) => {
     // Filter out empty values; exclude assignedToId when cannot reassign
     const cleanedData = Object.fromEntries(
@@ -267,7 +277,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create New Lead">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Create New Lead">
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4">
         {/* Company Info */}
         <div className="space-y-3">
@@ -288,10 +298,10 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             <div>
               <label className="label">Website</label>
               <input
-                type="url"
+                type="text"
                 {...register("website")}
                 className="input"
-                placeholder="https://example.com"
+                placeholder="facebook.com"
               />
               {errors.website && <p className="text-xs text-red-400 mt-1">{errors.website.message}</p>}
             </div>
@@ -529,7 +539,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
         <div className="flex gap-3 pt-4">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="btn-ghost flex-1"
             disabled={createMutation.isPending}
           >
@@ -572,7 +582,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               onClick={() => {
                 if (duplicateConfirm.existingId) {
                   window.location.href = `/dashboard/leads/${duplicateConfirm.existingId}`;
-                  onClose();
+                  handleClose();
                 } else {
                   toast("Existing lead not available");
                 }

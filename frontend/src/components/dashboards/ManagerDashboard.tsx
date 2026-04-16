@@ -100,15 +100,17 @@ export function buildManagerWidgets(data: any): DashboardWidget[] {
   widgets.push({
     id: 'leads_by_executive',
     type: 'bar_chart',
-    title: 'Leads by Executive',
+    title: 'Leads Assigned',
     icon: 'bar_chart',
     color: 'blue',
     layout: 'half',
     data: {
-      items: leadsByExec.map((e: any) => ({
-        name: e.user?.name || e.executiveName || e.name || '—',
-        value: e.count ?? e.leadCount ?? e.total ?? 0,
-      })),
+      items: leadsByExec
+        .map((e: any) => ({
+          name: e.user?.name || e.executiveName || e.name || '—',
+          value: e.count ?? e.leadCount ?? e.total ?? 0,
+        }))
+        .sort((a: any, b: any) => a.value - b.value),
       dataKey: 'value',
       nameKey: 'name',
       barColor: '#3b82f6',

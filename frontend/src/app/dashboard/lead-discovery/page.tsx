@@ -405,7 +405,7 @@ export default function LeadDiscoveryPage() {
                 <button className="btn-primary px-8 py-3 text-sm w-full justify-center"
                   onClick={() => scanMutation.mutate()} disabled={scanMutation.isPending || services.length === 0}>
                   {scanMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
-                  Launch AI Scan
+                  Generate Leads
                 </button>
                 {services.length === 0 && (
                   <p className="text-xs text-amber-400">↑ Add at least one service first</p>

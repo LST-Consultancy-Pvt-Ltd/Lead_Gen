@@ -297,8 +297,9 @@ function BarChartWidget({ widget }: { widget: DashboardWidget }) {
             <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
               <XAxis type="number" 
                 domain={isPercentage ? [0, 100] : undefined}
+                allowDecimals={false}
                 tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false}
-                tickFormatter={isPercentage ? (v: number) => `${v}%` : undefined}
+                tickFormatter={isPercentage ? (v: number) => `${v}%` : (v: number) => Math.floor(v).toString()}
               />
               <YAxis type="category" dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
               <Tooltip content={<DarkTooltip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />

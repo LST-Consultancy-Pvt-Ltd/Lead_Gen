@@ -20,10 +20,10 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
 
   const navItems = [
     { href: '/dashboard',                label: 'Dashboard',      icon: LayoutDashboard, show: true },
-    { href: '/dashboard/leads',          label: 'Leads CRM',      icon: Users,           show: true },
+    { href: '/dashboard/lead-discovery', label: 'Lead Discovery', icon: Search,          show: canViewTeam },
     { href: '/dashboard/opportunities',  label: 'Opportunities',  icon: DollarSign,      show: true },
     { href: '/dashboard/activities',     label: 'Activities',     icon: CheckSquare,     show: true },
-    { href: '/dashboard/lead-discovery', label: 'Lead Discovery', icon: Search,          show: canViewTeam },
+    { href: '/dashboard/leads',          label: 'Leads',      icon: Users,           show: true },
     { href: '/dashboard/intent-signals', label: 'Intent Signals', icon: Zap,             show: canViewTeam },
     // { href: '/dashboard/campaigns',      label: 'Campaigns',      icon: Megaphone,       show: isAdmin },
     // { href: '/dashboard/analytics',      label: 'Analytics',      icon: BarChart3,       show: canViewTeam },
