@@ -227,13 +227,13 @@ export default function LeadsPage() {
             description={permissions.canViewAllLeads ? 
               "No leads match your current filters" : 
               "You don't have any leads assigned yet. Contact your manager."}
-            action={
-              permissions.canCreateLead ? (
-                <button onClick={() => setIsCreateModalOpen(true)} className="btn-primary">
-                  <Plus size={14} /> Add Lead
-                </button>
-              ) : undefined
-            }
+            // action={
+            //   permissions.canCreateLead ? (
+            //     <button onClick={() => setIsCreateModalOpen(true)} className="btn-primary">
+            //       <Plus size={14} /> Add Lead
+            //     </button>
+            //   ) : undefined
+            // }
           />
         ) : (
           <div className="overflow-x-auto">

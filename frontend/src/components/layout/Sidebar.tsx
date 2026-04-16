@@ -63,7 +63,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
       </nav>
 
       {/* User — name only, no role badge */}
-      <div className="px-3 py-3 border-t border-white/[0.06]">
+      {/* <div className="px-3 py-3 border-t border-white/[0.06]">
         <div className="flex items-center gap-2.5">
           <Avatar initials={user ? getInitials(user.name) : 'U'} size="sm"/>
           {!collapsed && user && (
@@ -72,7 +72,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
             </div>
           )}
         </div>
-      </div>
+      </div> */}
     </aside>
   );
 }
