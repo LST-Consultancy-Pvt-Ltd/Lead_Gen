@@ -52,6 +52,8 @@ export default function LeadsPage() {
     queryParams.unassigned = true;
   } else if (ownerFilter) {
     queryParams.assignedTo = ownerFilter;
+  } else if (authPerms.isManager) {
+    queryParams.includeUnassigned = true;
   }
 
   const { data, isLoading } = useQuery({
