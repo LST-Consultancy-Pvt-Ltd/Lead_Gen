@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: 'LeadForge AI — AI-Powered Lead Discovery',
   description: 'Autonomous AI sales intelligence. Discover, research, and reach out to leads automatically.',
   keywords: ['lead generation', 'AI sales', 'B2B leads', 'sales automation'],
+  icons: { icon: '/icon.svg' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
