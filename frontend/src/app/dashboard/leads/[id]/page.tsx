@@ -811,36 +811,6 @@ export default function LeadDetailPage() {
                                   />
                                 </div>
                               </div>
-                              <div>
-                                <label className="label mb-1 block">Full Name</label>
-                                <input
-                                  className="input text-xs h-8"
-                                  placeholder="Full name"
-                                  value={editContactData.name}
-                                  onChange={e => setEditContactData(d => ({ ...d, name: e.target.value }))}
-                                />
-                              </div>
-                              <div>
-                                <label className="label mb-1 block">Job Title</label>
-                                <input
-                                  className="input text-xs h-8"
-                                  placeholder="e.g. CEO, CTO"
-                                  value={editContactData.title}
-                                  onChange={e => setEditContactData(d => ({ ...d, title: e.target.value }))}
-                                />
-                              </div>
-                              <div className="col-span-2">
-                                <label className="label mb-1 block">LinkedIn URL</label>
-                                <div className="flex items-center gap-1.5">
-                                  <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
-                                  <input
-                                    className="input text-xs flex-1 h-8"
-                                    placeholder="https://linkedin.com/in/..."
-                                    value={editContactData.linkedin}
-                                    onChange={e => setEditContactData(d => ({ ...d, linkedin: e.target.value }))}
-                                  />
-                                </div>
-                              </div>
                             </div>
                             <div className="flex gap-2 pt-1">
                               <button
