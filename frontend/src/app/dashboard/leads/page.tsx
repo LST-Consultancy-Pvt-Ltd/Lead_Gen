@@ -92,7 +92,8 @@ export default function LeadsPage() {
 
   async function handleExport() {
     try {
-      const resp = await leadsApi.export();
+      const ids = selectedLeads.size > 0 ? Array.from(selectedLeads) : undefined;
+      const resp = await leadsApi.export(ids);
       downloadBlob(resp.data, 'leads.csv');
       toast.success('CSV exported');
     } catch {

@@ -225,7 +225,11 @@ async function sendOutreach(req, res) {
 
 async function exportLeads(req, res) {
   try {
-    const leads = await prisma.lead.findMany({ where: { organizationId: req.user.organizationId }, orderBy: { createdAt: 'desc' } });
+    const where = { organizationId: req.user.organizationId };
+    if (req.query.ids) {
+      where.id = { in: req.query.ids.split(',') };
+    }
+    const leads = await prisma.lead.findMany({ where, orderBy: { createdAt: 'desc' } });
     const rows  = leads.map(l => ({
       companyName:  l.companyName,
       domainName:   l.website ? l.website.replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0] : '',
