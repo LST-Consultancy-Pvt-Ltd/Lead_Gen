@@ -11,6 +11,8 @@ router.get('/', ctrl.getTeam);
 // Only org_admin / super_admin can manage team membership and roles
 router.post('/', requireAdmin, ctrl.inviteUser);
 router.patch('/bulk-reassign', requireAdmin, ctrl.bulkReassignLeads);
+router.post('/:id/deactivate', requireAdmin, ctrl.deleteUser);
+router.post('/:id/activate', requireAdmin, ctrl.activateUser);
 router.patch('/:id', requireAdmin, ctrl.updateUser);
 router.delete('/:id', requireAdmin, ctrl.deleteUser);
 

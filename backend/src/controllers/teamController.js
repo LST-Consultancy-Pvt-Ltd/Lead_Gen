@@ -85,10 +85,21 @@ async function deleteUser(req, res) {
     const target = await prisma.user.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!target) return error(res, 'User not found', 404);
     if (target.id === req.user.id) return error(res, 'Cannot delete your own account', 422);
-    await prisma.user.update({ where: { id: req.params.id }, data: { isActive: false } });
-    return success(res, null, 'User deactivated');
+    const user = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: false }, select: { id: true, isActive: true } });
+    return success(res, user, 'User deactivated');
   } catch (err) {
     return error(res, 'Failed to delete user', 500);
+  }
+}
+
+async function activateUser(req, res) {
+  try {
+    const target = await prisma.user.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    if (!target) return error(res, 'User not found', 404);
+    const user = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: true }, select: { id: true, isActive: true } });
+    return success(res, user, 'User activated');
+  } catch (err) {
+    return error(res, 'Failed to activate user', 500);
   }
 }
 
@@ -141,4 +152,5 @@ async function bulkReassignLeads(req, res) {
   }
 }
 
-module.exports = { getTeam, inviteUser, updateUser, deleteUser, bulkReassignLeads };
+module.exports = {
+  activateUser, getTeam, inviteUser, updateUser, deleteUser, bulkReassignLeads };

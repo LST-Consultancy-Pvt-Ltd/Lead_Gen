@@ -407,14 +407,30 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
         <div className="relative" ref={profileMenuRef}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 btn-ghost py-1.5 px-2"
+            className="group relative flex items-center gap-2.5 pl-1.5 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-slate-900 hover:border-blue-400/50 hover:shadow-md hover:shadow-blue-500/10 transition-all duration-200"
           >
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white text-xs font-bold">
-              {user?.name?.charAt(0).toUpperCase() ?? "U"}
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm shadow-blue-500/30">
+              {user?.name ? user.name.split(' ').filter(Boolean).map((n: string) => n[0].toUpperCase()).slice(0, 2).join('') : 'U'}
             </div>
-            <span className="text-sm text-slate-600 dark:text-slate-300 hidden sm:block">
-              {user?.name?.split(" ")[0]}
-            </span>
+            <div className="hidden sm:flex flex-col items-start gap-0.5 w-[90px]">
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-none tracking-tight w-full truncate">
+                {user?.name && user.name.length > 10 ? user.name.slice(0, 10) + '…' : user?.name}
+              </span>
+              <span className={`text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-md ${
+                user?.role === 'org_admin' || user?.role === 'super_admin'
+                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                  : user?.role === 'manager'
+                  ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                  : 'bg-teal-500/10 text-teal-600 dark:text-teal-400'
+              }`}>
+                {getRoleLabel(user?.role || '')}
+              </span>
+            </div>
+            {/* Hover tooltip */}
+            <div className="absolute right-0 top-[calc(100%+8px)] z-[60] hidden group-hover:flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 px-4 py-3 min-w-[180px] pointer-events-none">
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap">{user?.name}</span>
+              <span className="text-xs text-slate-500 mt-1">{getRoleLabel(user?.role || '')}</span>
+            </div>
           </button>
           {menuOpen && (
             <div className="absolute right-0 top-full mt-1 w-56 card shadow-xl shadow-black/40 py-1 z-50">

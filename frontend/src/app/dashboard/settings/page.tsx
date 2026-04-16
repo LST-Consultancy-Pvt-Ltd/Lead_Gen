@@ -146,7 +146,7 @@ export default function SettingsPage() {
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center justify-between">
           <h2 className="section-title">User Management</h2>
-          <button className="btn-ghost" onClick={() => setBulkOpen(true)}>Bulk Reassign Leads</button>
+          {/* <button className="btn-ghost" onClick={() => setBulkOpen(true)}>Bulk Reassign Leads</button> */}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -186,14 +186,22 @@ export default function SettingsPage() {
                   <td className="px-4 py-3 text-sm text-slate-400">{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Never'}</td>
                   <td className="px-4 py-3">
                     <button
-                      className="btn-ghost text-xs text-red-400 hover:text-red-300"
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                        u.isActive
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-500/20 dark:text-green-400 dark:hover:bg-green-500/30'
+                          : 'bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30'
+                      }`}
                       onClick={() => {
-                        if (window.confirm('Deactivate this user?')) {
-                          deactivateMutation.mutate(u.id);
+                        if (u.isActive) {
+                          if (window.confirm('Deactivate this user?')) {
+                            deactivateMutation.mutate(u.id);
+                          }
+                        } else {
+                          updateUserMutation.mutate({ id: u.id, data: { isActive: true } });
                         }
                       }}
                     >
-                      Deactivate
+                      {u.isActive ? 'Active' : 'Inactive'}
                     </button>
                   </td>
                 </tr>
