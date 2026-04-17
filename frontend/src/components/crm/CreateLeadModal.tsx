@@ -42,7 +42,7 @@ const timelineOptions = [
   "Exploring / No Timeline",
 ];
 
-type LeadFormData = Omit<CreateLeadInput, "leadCost"> & {
+type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
   leadCost?: string;
   subSource?: string;
   utmSource?: string;
