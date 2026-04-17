@@ -53,7 +53,7 @@ type LeadFormData = Omit<CreateLeadInput, "leadCost"> & {
   requirementDescription?: string;
   budgetRange: string;
   timeline?: string;
-  temperature: "hot" | "warm" | "cold";
+  temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won";
   disqualificationReason?: string;
 };
 
@@ -80,7 +80,7 @@ const defaultValues: LeadFormData = {
   requirementDescription: "",
   budgetRange: "",
   timeline: "",
-  temperature: "cold",
+  temperature: "prospect",
   disqualificationReason: "",
 };
 
@@ -88,9 +88,9 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
   const { canReassignLead, canManageDropdowns } = usePermissions();
   const [utmOpen, setUtmOpen] = useState(false);
-  const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" }) | null>(null);
+  const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
-    payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" };
+    payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" };
     companyName: string;
     existingId?: string;
   } | null>(null);
@@ -135,7 +135,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     requirementDescription: yup.string().max(2000, "Requirement description must be 2000 characters or less").optional(),
     budgetRange: yup.string().required("Budget range is required"),
     timeline: yup.string().optional(),
-    temperature: yup.mixed<"hot" | "warm" | "cold">().oneOf(["hot", "warm", "cold"]).required(),
+    temperature: yup.mixed<"hot" | "warm" | "cold" | "prospect" | "lost" | "won">().oneOf(["hot", "warm", "cold", "prospect", "lost", "won"]).required(),
     disqualificationReason: yup.string().when("status", {
       is: "disqualified",
       then: (rule) => rule.trim().min(10, "Disqualification reason must be at least 10 characters.").required("Disqualification reason is required"),
@@ -350,7 +350,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
         if (k === "disqualificationReason" && formData.status !== "disqualified") return false;
         return v !== "" && v !== undefined;
       }),
-    ) as unknown as CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" };
+    ) as unknown as CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" };
     // Convert leadCost to number if present
     if ((cleanedData as any).leadCost) {
       (cleanedData as any).leadCost = parseFloat((cleanedData as any).leadCost);
@@ -596,11 +596,14 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Temperature</label>
+              <label className="label">Intent Signal</label>
               <select {...register("temperature")} title="Temperature" className="input">
                 <option value="hot">Hot</option>
                 <option value="warm">Warm</option>
                 <option value="cold">Cold</option>
+                <option value="prospect">Prospect</option>
+                <option value="lost">Lost</option>
+                <option value="won">Won</option>
               </select>
             </div>
             <div>
