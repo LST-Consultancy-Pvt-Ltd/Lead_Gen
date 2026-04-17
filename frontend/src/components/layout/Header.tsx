@@ -153,14 +153,92 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
     : (notificationsData?.items ?? []);
   const unread = notifications.filter((n: any) => !n.isRead);
 
+  console.log("Notifications:", notifications);
+  console.log("Unread count:", unread.length);
+
   const markReadMutation = useMutation({
     mutationFn: (ids: string[]) => notificationsApi.markRead(ids),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      toast.success("Notifications marked as read");
+    onMutate: async (ids) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["notifications"] });
+
+      // Snapshot previous value
+      const previousNotifications = queryClient.getQueryData(["notifications"]);
+
+      // Optimistically remove notifications from list
+      queryClient.setQueryData(["notifications"], (old: any) => {
+        if (Array.isArray(old)) {
+          return old.filter((n: any) => !ids.includes(n.id));
+        }
+        if (old?.items) {
+          return {
+            ...old,
+            items: old.items.filter((n: any) => !ids.includes(n.id)),
+          };
+        }
+        return old;
+      });
+
+      return { previousNotifications };
     },
-    onError: () => toast.error("Failed to mark notifications as read"),
+    onSuccess: () => {
+      toast.success("Notifications marked as read");
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (err, variables, context: any) => {
+      // Rollback on error
+      if (context?.previousNotifications) {
+        queryClient.setQueryData(["notifications"], context.previousNotifications);
+      }
+      toast.error("Failed to mark notifications as read");
+    },
   });
+
+  // Handle individual notification click
+  const handleNotificationClick = async (notification: any) => {
+    console.log("Notification clicked:", notification);
+    
+    // Prevent event bubbling
+    try {
+      // Optimistically remove notification from UI immediately
+      queryClient.setQueryData(["notifications"], (old: any) => {
+        if (Array.isArray(old)) {
+          return old.filter((n: any) => n.id !== notification.id);
+        }
+        if (old?.items) {
+          return {
+            ...old,
+            items: old.items.filter((n: any) => n.id !== notification.id),
+          };
+        }
+        return old;
+      });
+
+      // Close dropdown
+      setNotificationsOpen(false);
+
+      // Mark as read in background (don't wait for it)
+      notificationsApi.markRead([notification.id])
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        })
+        .catch((error) => {
+          console.error("Failed to mark notification as read:", error);
+          toast.error("Failed to mark notification as read");
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        });
+
+      // Redirect to lead details if leadId exists
+      if (notification.leadId) {
+        console.log("Navigating to lead:", notification.leadId);
+        router.push(`/dashboard/leads/${notification.leadId}`);
+      } else {
+        console.log("No leadId in notification:", notification);
+      }
+    } catch (error) {
+      console.error("Error in handleNotificationClick:", error);
+    }
+  };
 
   async function handleLogout() {
     try {
@@ -354,7 +432,7 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
           >
             <Bell size={16} />
             {unread.length > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[10px] text-white font-semibold flex items-center justify-center border border-white dark:border-slate-950">
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#EF4444] text-[10px] text-white font-semibold flex items-center justify-center border border-white dark:border-slate-950">
                 {unread.length > 99 ? "99+" : unread.length}
               </span>
             )}
@@ -368,18 +446,33 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
               </div>
               <div className="max-h-80 overflow-y-auto">
                 {notifications.slice(0, 10).map((n: any) => (
-                  <div
+                  <button
                     key={n.id}
-                    className={`px-3 py-2 border-b border-slate-100 dark:border-white/[0.04] ${!n.isRead ? "bg-blue-500/10" : ""}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleNotificationClick(n);
+                    }}
+                    type="button"
+                    className={`
+                      w-full text-left px-3 py-2 border-b border-slate-100 dark:border-white/[0.04]
+                      transition-all duration-200 cursor-pointer
+                      ${!n.isRead 
+                        ? 'bg-[#E8F0FE] dark:bg-[#1E3A5F] border-l-4 border-l-[#2563EB] hover:bg-[#D1E3FC] dark:hover:bg-[#2A4A70]' 
+                        : 'bg-white dark:bg-slate-900 hover:bg-[#F3F4F6] dark:hover:bg-slate-800/60'
+                      }
+                    `}
                   >
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    <p className={`text-sm font-semibold ${!n.isRead ? 'text-[#1A1A1A] dark:text-slate-100' : 'text-[#6B7280] dark:text-slate-400'}`}>
                       {n.title}
                     </p>
-                    <p className="text-xs text-slate-400 mt-0.5">{n.message}</p>
-                    <p className="text-[10px] text-slate-500 mt-1">
+                    <p className={`text-xs mt-0.5 ${!n.isRead ? 'text-[#1A1A1A] dark:text-slate-300' : 'text-[#6B7280] dark:text-slate-500'}`}>
+                      {n.message}
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-600 mt-1">
                       {n.createdAt ? timeAgo(n.createdAt) : "Just now"}
                     </p>
-                  </div>
+                  </button>
                 ))}
                 {notifications.length === 0 && (
                   <div className="px-3 py-8 text-center text-xs text-slate-500">
@@ -389,13 +482,17 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
               </div>
               <div className="p-2 border-t border-slate-200 dark:border-white/[0.06]">
                 <button
+                  type="button"
                   className="btn-ghost w-full justify-center text-xs"
                   disabled={!unread.length || markReadMutation.isPending}
-                  onClick={() =>
-                    markReadMutation.mutate(unread.map((n: any) => n.id))
-                  }
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log("Mark all read clicked, unread:", unread);
+                    markReadMutation.mutate(unread.map((n: any) => n.id));
+                  }}
                 >
-                  Mark All Read
+                  {markReadMutation.isPending ? "Marking..." : "Mark All Read"}
                 </button>
               </div>
             </div>

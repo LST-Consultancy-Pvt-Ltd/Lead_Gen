@@ -8,8 +8,8 @@ const error = (res, message = 'Internal server error', statusCode = 500, errors 
   return res.status(statusCode).json(body);
 };
 
-const paginated = (res, data, total, page, limit) => {
-  return res.status(200).json({
+const paginated = (res, data, total, page, limit, meta = null) => {
+  const response = {
     success: true,
     data,
     pagination: {
@@ -18,7 +18,14 @@ const paginated = (res, data, total, page, limit) => {
       limit: parseInt(limit),
       totalPages: Math.ceil(total / limit),
     },
-  });
+  };
+  
+  // Add optional meta information
+  if (meta) {
+    response.meta = meta;
+  }
+  
+  return res.status(200).json(response);
 };
 
 module.exports = { success, error, paginated };
