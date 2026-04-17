@@ -192,6 +192,21 @@ export interface ImportBatch {
   createdAt: string;
 }
 
+// ── Notification Types ─────────────────────────────────────────────────────
+export interface Notification {
+  id: string;
+  userId: string;
+  type: 'lead_assigned' | 'lead_updated' | 'lead_commented' | 'system';
+  title: string;
+  message: string;
+  isRead: boolean;
+  leadId?: string;
+  opportunityId?: string;
+  metadata?: any;
+  createdAt: string;
+  readAt?: string;
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────
 export const ROLES = {
   ORG_ADMIN: 'org_admin' as const,
