@@ -235,7 +235,7 @@ async function apolloEnrichPersonById(apolloId, headers) {
       email:       person.email ?? null,
       phone:       person.sanitized_phone ?? person.phone_numbers?.[0]?.raw_number ?? null,
       linkedinUrl: person.linkedin_url ?? null,
-      name:        [person.first_name, person.last_name].filter(Boolean).join(' ') || null,
+      name:        [person.first_name, person.last_name || person.last_name_obfuscated].filter(Boolean).join(' ') || null,
       title:       person.title ?? null,
       source:      'apollo',
       company:     org.name ?? null,
@@ -332,7 +332,7 @@ async function enrichViaApollo(lead) {
 
     logger.info('Apollo: enriching person by ID', {
       apolloId,
-      name: [person.first_name, person.last_name].filter(Boolean).join(' '),
+      name: [person.first_name, person.last_name || person.last_name_obfuscated].filter(Boolean).join(' '),
       title: person.title,
       hasEmail: person.has_email,
       leadId: lead.id,

@@ -393,7 +393,7 @@ async function apolloEnrichPersonById(apolloId, headers) {
       email:       person.email ?? null,
       phone:       person.sanitized_phone ?? person.phone_numbers?.[0]?.raw_number ?? null,
       linkedinUrl: person.linkedin_url ?? null,
-      name:        [person.first_name, person.last_name].filter(Boolean).join(' ') || null,
+      name:        [person.first_name, person.last_name || person.last_name_obfuscated].filter(Boolean).join(' ') || null,
       title:       person.title ?? null,
       source:      'apollo',
       company:     org.name ?? null,
@@ -501,7 +501,8 @@ async function enrichViaApollo(lead, options = {}) {
     const seenEmails = new Set();
 
     for (const person of sorted) {
-      const name = [person.first_name, person.last_name].filter(Boolean).join(' ') || null;
+      const lastName = person.last_name || person.last_name_obfuscated || null;
+      const name = [person.first_name, lastName].filter(Boolean).join(' ') || null;
       const email = person.email ?? null;
       const linkedinUrl = person.linkedin_url ?? null;
       const phone = person.phone_numbers?.[0]?.raw_number ?? null;
@@ -523,7 +524,8 @@ async function enrichViaApollo(lead, options = {}) {
       const result = await apolloEnrichPersonById(person.id, apolloHeaders);
       if (result && result.email) {
         // Find and update the matching contact in allContacts
-        const name = [person.first_name, person.last_name].filter(Boolean).join(' ');
+        const lastName = person.last_name || person.last_name_obfuscated || null;
+        const name = [person.first_name, lastName].filter(Boolean).join(' ');
         const idx = allContacts.findIndex(c => c.name === name || (c.linkedinUrl && c.linkedinUrl === result.linkedinUrl));
         if (idx >= 0) {
           allContacts[idx] = { ...allContacts[idx], ...result };
