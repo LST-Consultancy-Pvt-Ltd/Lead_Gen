@@ -226,30 +226,69 @@ async function sendOutreach(req, res) {
 async function exportLeads(req, res) {
   try {
     const where = { organizationId: req.user.organizationId };
+    
+    // Handle selected leads export
     if (req.query.ids) {
       where.id = { in: req.query.ids.split(',') };
+    } else {
+      // Apply filters when no specific IDs are selected
+      if (req.query.search) {
+        where.OR = [
+          { companyName: { contains: req.query.search, mode: 'insensitive' } },
+          { contactName: { contains: req.query.search, mode: 'insensitive' } },
+          { contactEmail: { contains: req.query.search, mode: 'insensitive' } },
+        ];
+      }
+      if (req.query.status) {
+        where.status = req.query.status;
+      }
+      if (req.query.assignedTo) {
+        where.assignedToId = req.query.assignedTo;
+      }
+      if (req.query.unassigned === 'true') {
+        where.assignedToId = null;
+      }
+      if (req.query.assignedToMe === 'true') {
+        where.assignedToId = req.user.userId;
+      }
     }
+    
     const leads = await prisma.lead.findMany({ where, orderBy: { createdAt: 'desc' } });
-    const rows  = leads.map(l => ({
-      companyName:  l.companyName,
-      domainName:   l.website ? l.website.replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0] : '',
-      website:      l.website || '',
-      industry:     l.industry || '',
-      location:     l.location || '',
-      companySize:  l.companySize || '',
-      contactName:  l.contactName || '',
-      contactTitle: l.contactTitle || '',
-      contactEmail: l.contactEmail || '',
-      contactPhone: l.contactPhone || '',
-      contactLinkedin: l.contactLinkedin || '',
-      linkedinUrl:  l.linkedinUrl || '',
-      leadScore:    l.leadScore,
-      intentLevel:  l.intentLevel,
-      status:       l.status,
-      intentSignals: (l.intentSignals||[]).map(s=>s.text||s.type||JSON.stringify(s)).join('; '),
-      source:       l.source || '',
-      createdAt:    l.createdAt,
-    }));
+    const rows  = leads.map(l => {
+      // Format date as YYYY-MM-DD HH:mm:ss
+      const formatDate = (date) => {
+        if (!date) return '';
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        const seconds = String(d.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      };
+      
+      return {
+        companyName:  l.companyName,
+        domainName:   l.website ? l.website.replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0] : '',
+        website:      l.website || '',
+        industry:     l.industry || '',
+        location:     l.location || '',
+        companySize:  l.companySize || '',
+        contactName:  l.contactName || '',
+        contactTitle: l.contactTitle || '',
+        contactEmail: l.contactEmail || '',
+        contactPhone: l.contactPhone || '',
+        contactLinkedin: l.contactLinkedin || '',
+        linkedinUrl:  l.linkedinUrl || '',
+        leadScore:    l.leadScore,
+        intentLevel:  l.intentLevel,
+        status:       l.status,
+        intentSignals: (l.intentSignals||[]).map(s=>s.text||s.type||JSON.stringify(s)).join('; '),
+        source:       l.source || '',
+        createdAt:    formatDate(l.createdAt),
+      };
+    });
     const parser = new Parser({ fields: [
       'companyName','domainName','website','industry','location','companySize',
       'contactName','contactTitle','contactEmail','contactPhone','contactLinkedin',

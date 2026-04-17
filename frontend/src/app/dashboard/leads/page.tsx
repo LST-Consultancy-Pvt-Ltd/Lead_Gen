@@ -95,7 +95,27 @@ export default function LeadsPage() {
   async function handleExport() {
     try {
       const ids = selectedLeads.size > 0 ? Array.from(selectedLeads) : undefined;
-      const resp = await leadsApi.export(ids);
+      const params: any = {};
+      
+      // If specific leads are selected, export only those
+      if (ids && ids.length > 0) {
+        params.ids = ids.join(',');
+      } else {
+        // Otherwise, export with current filters
+        if (search) params.search = search;
+        if (statusFilter) params.status = statusFilter;
+        
+        // Apply role-based filters
+        if (!permissions.canViewAllLeads) {
+          params.assignedToMe = true;
+        } else if (ownerFilter === 'unassigned') {
+          params.unassigned = true;
+        } else if (ownerFilter) {
+          params.assignedTo = ownerFilter;
+        }
+      }
+      
+      const resp = await leadsApi.export(params);
       downloadBlob(resp.data, 'leads.csv');
       toast.success('CSV exported');
     } catch {
@@ -168,11 +188,13 @@ export default function LeadsPage() {
               <UserCog size={14} /> Assign ({selectedLeads.size})
             </button>
           )}
-          <RoleGuard permission="canExportData">
-            <button className="btn-ghost" onClick={handleExport}>
-              <Download size={14} /> Export CSV
-            </button>
-          </RoleGuard>
+          {total > 0 && (
+            <RoleGuard permission="canExportData">
+              <button className="btn-ghost" onClick={handleExport}>
+                <Download size={14} /> Export CSV
+              </button>
+            </RoleGuard>
+          )}
           <RoleGuard permission="canCreateLead">
             <button className="btn-primary" onClick={() => setIsCreateModalOpen(true)}>
               <Plus size={14} /> Add Lead

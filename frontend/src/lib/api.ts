@@ -248,7 +248,7 @@ export const leadsApi = {
   enrichApollo: (id: string) => api.post(`/leads/${id}/enrich/apollo`),
   generateEmail: (id: string) => api.post(`/leads/${id}/generate-email`),
   sendOutreach: (id: string, data: any) => api.post(`/leads/${id}/send-outreach`, data),
-  export: (ids?: string[]) => api.get('/leads/export', { params: ids?.length ? { ids: ids.join(',') } : {}, responseType: 'blob' }),
+  export: (params?: any) => api.get('/leads/export', { params, responseType: 'blob' }),
 };
 
 export const activitiesApi = {
