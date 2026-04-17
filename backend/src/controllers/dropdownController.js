@@ -9,6 +9,7 @@ const { success, error } = require("../utils/response");
 const VALID_CATEGORIES = [
   "lead_source",
   "industry",
+  "location",
   "budget_range",
   "pipeline_stage",
   "business_line",
@@ -63,7 +64,7 @@ async function listAllCategories(req, res) {
   }
 }
 
-// POST /api/dropdowns — org_admin only
+// POST /api/dropdowns — all authenticated roles
 async function addValue(req, res) {
   try {
     const { category, value, displayOrder } = req.body;
@@ -88,7 +89,7 @@ async function addValue(req, res) {
   }
 }
 
-// PATCH /api/dropdowns/:id — org_admin only
+// PATCH /api/dropdowns/:id — all authenticated roles
 async function updateValue(req, res) {
   try {
     const { value, displayOrder, isActive } = req.body;
@@ -138,4 +139,46 @@ async function updateValue(req, res) {
   }
 }
 
-module.exports = { listByCategory, listAllCategories, addValue, updateValue };
+// DELETE /api/dropdowns/:id — all authenticated roles
+async function deleteValue(req, res) {
+  try {
+    const existing = await prisma.dropdownConfig.findFirst({
+      where: { id: req.params.id, organizationId: req.user.organizationId },
+    });
+    if (!existing) return error(res, "Dropdown value not found", 404);
+
+    // Check if any lead record references this value before deleting
+    const categoryFieldMap = {
+      lead_source: "source",
+      industry: "industry",
+      location: "location",
+      budget_range: "budgetRange",
+      business_line: "businessLine",
+    };
+    const leadField = categoryFieldMap[existing.category];
+    if (leadField) {
+      const refCount = await prisma.lead.count({
+        where: {
+          organizationId: req.user.organizationId,
+          [leadField]: existing.value,
+        },
+      });
+      if (refCount > 0) {
+        return error(
+          res,
+          `This value cannot be deleted because ${refCount} lead(s) reference it. Update those leads first.`,
+          400,
+        );
+      }
+    }
+
+    await prisma.dropdownConfig.delete({
+      where: { id: req.params.id },
+    });
+    return success(res, null, "Dropdown value deleted");
+  } catch (err) {
+    return error(res, "Failed to delete dropdown value", 500);
+  }
+}
+
+module.exports = { listByCategory, listAllCategories, addValue, updateValue, deleteValue };

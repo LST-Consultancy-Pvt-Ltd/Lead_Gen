@@ -364,6 +364,7 @@ export const dropdownsApi = {
   listByCategory: (category: string) => api.get('/dropdowns', { params: { category } }),
   add: (data: any) => api.post('/dropdowns', data),
   update: (id: string, data: any) => api.patch(`/dropdowns/${id}`, data),
+  delete: (id: string) => api.delete(`/dropdowns/${id}`),
 };
 
 export const settingsApi = {

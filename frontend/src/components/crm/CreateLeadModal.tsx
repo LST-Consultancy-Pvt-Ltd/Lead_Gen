@@ -1,8 +1,8 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { leadsApi, usersApi } from "../../lib/api";
-import { Modal, Spinner } from "../ui";
+import { leadsApi, usersApi, dropdownsApi } from "../../lib/api";
+import { Modal, Spinner, SearchableDropdown } from "../ui";
 import toast from "react-hot-toast";
 import type { CreateLeadInput } from "../../lib/types";
 import { PIPELINE_OPTIONS, LEAD_SOURCES } from "../../lib/types";
@@ -86,7 +86,7 @@ const defaultValues: LeadFormData = {
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
-  const { canReassignLead } = usePermissions();
+  const { canReassignLead, canManageDropdowns } = usePermissions();
   const [utmOpen, setUtmOpen] = useState(false);
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
@@ -169,6 +169,8 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const status = watch("status");
   const requirementType = watch("requirementType") || [];
   const requirementDescription = watch("requirementDescription") || "";
+  const industry = watch("industry") || "";
+  const location = watch("location") || "";
 
   // Fetch users for assignment dropdown — only when canReassign
   const { data: usersData } = useQuery({
@@ -178,6 +180,131 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   });
 
   const users = usersData?.data || [];
+
+  // Fetch industry dropdown options
+  const { data: industriesData, refetch: refetchIndustries } = useQuery({
+    queryKey: ["dropdowns", "industry"],
+    queryFn: () => dropdownsApi.listByCategory("industry").then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+
+  // Fetch location dropdown options
+  const { data: locationsData, refetch: refetchLocations } = useQuery({
+    queryKey: ["dropdowns", "location"],
+    queryFn: () => dropdownsApi.listByCategory("location").then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+
+  // Format dropdown data with IDs
+  const industries = (Array.isArray(industriesData) ? industriesData : industriesData?.items || [])
+    .map((item: any) => ({
+      id: item.id || item._id || item.value,
+      value: item.value || item,
+    }));
+  
+  const locations = (Array.isArray(locationsData) ? locationsData : locationsData?.items || [])
+    .map((item: any) => ({
+      id: item.id || item._id || item.value,
+      value: item.value || item,
+    }));
+
+  // Create new industry option
+  const createIndustryMutation = useMutation({
+    mutationFn: (value: string) => dropdownsApi.add({ category: "industry", value }),
+    onSuccess: () => {
+      refetchIndustries();
+      toast.success("Industry added successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to add industry");
+    },
+  });
+
+  // Create new location option
+  const createLocationMutation = useMutation({
+    mutationFn: (value: string) => dropdownsApi.add({ category: "location", value }),
+    onSuccess: () => {
+      refetchLocations();
+      toast.success("Location added successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to add location");
+    },
+  });
+
+  // Edit industry option
+  const editIndustryMutation = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: string }) => 
+      dropdownsApi.update(id, { value }),
+    onSuccess: () => {
+      refetchIndustries();
+      toast.success("Industry updated successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to update industry");
+    },
+  });
+
+  // Edit location option
+  const editLocationMutation = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: string }) => 
+      dropdownsApi.update(id, { value }),
+    onSuccess: () => {
+      refetchLocations();
+      toast.success("Location updated successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to update location");
+    },
+  });
+
+  // Delete industry option
+  const deleteIndustryMutation = useMutation({
+    mutationFn: (id: string) => dropdownsApi.delete(id),
+    onSuccess: () => {
+      refetchIndustries();
+      toast.success("Industry deleted successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to delete industry");
+    },
+  });
+
+  // Delete location option
+  const deleteLocationMutation = useMutation({
+    mutationFn: (id: string) => dropdownsApi.delete(id),
+    onSuccess: () => {
+      refetchLocations();
+      toast.success("Location deleted successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to delete location");
+    },
+  });
+
+  const handleCreateIndustry = async (value: string) => {
+    await createIndustryMutation.mutateAsync(value);
+  };
+
+  const handleCreateLocation = async (value: string) => {
+    await createLocationMutation.mutateAsync(value);
+  };
+
+  const handleEditIndustry = async (id: string, oldValue: string, newValue: string) => {
+    await editIndustryMutation.mutateAsync({ id, value: newValue });
+  };
+
+  const handleEditLocation = async (id: string, oldValue: string, newValue: string) => {
+    await editLocationMutation.mutateAsync({ id, value: newValue });
+  };
+
+  const handleDeleteIndustry = async (id: string, value: string) => {
+    await deleteIndustryMutation.mutateAsync(id);
+  };
+
+  const handleDeleteLocation = async (id: string, value: string) => {
+    await deleteLocationMutation.mutateAsync(id);
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: CreateLeadInput) => leadsApi.create(data),
@@ -306,23 +433,31 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               {errors.website && <p className="text-xs text-red-400 mt-1">{errors.website.message}</p>}
             </div>
             <div>
-              <label className="label">Industry</label>
-              <input
-                type="text"
-                {...register("industry")}
-                className="input"
-                placeholder="Technology"
+              <SearchableDropdown
+                label="Industry"
+                value={industry}
+                onChange={(value) => setValue("industry", value, { shouldValidate: true })}
+                options={industries}
+                onCreateNew={canManageDropdowns ? handleCreateIndustry : undefined}
+                onEdit={canManageDropdowns ? handleEditIndustry : undefined}
+                onDelete={canManageDropdowns ? handleDeleteIndustry : undefined}
+                placeholder="Select or search industry..."
+                error={errors.industry?.message}
               />
             </div>
           </div>
 
           <div>
-            <label className="label">Location</label>
-            <input
-              type="text"
-              {...register("location")}
-              className="input"
-              placeholder="San Francisco, CA"
+            <SearchableDropdown
+              label="Location"
+              value={location}
+              onChange={(value) => setValue("location", value, { shouldValidate: true })}
+              options={locations}
+              onCreateNew={canManageDropdowns ? handleCreateLocation : undefined}
+              onEdit={canManageDropdowns ? handleEditLocation : undefined}
+              onDelete={canManageDropdowns ? handleDeleteLocation : undefined}
+              placeholder="Select or search location..."
+              error={errors.location?.message}
             />
           </div>
         </div>
