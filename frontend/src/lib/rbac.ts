@@ -47,6 +47,7 @@ export interface Permissions {
   canAccessSettings: boolean;
   canModifySettings: boolean;
   canManageIntegrations: boolean;
+  canManageDropdowns: boolean;
   
   // Campaign & Outreach
   canCreateCampaigns: boolean;
@@ -88,6 +89,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canAccessSettings: true,
     canModifySettings: true,
     canManageIntegrations: true,
+    canManageDropdowns: true,
     canCreateCampaigns: true,
     canManageCampaigns: true,
     canSendEmails: true,
@@ -118,6 +120,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canAccessSettings: true,
     canModifySettings: true,
     canManageIntegrations: true,
+    canManageDropdowns: true,
     canCreateCampaigns: true,
     canManageCampaigns: true,
     canSendEmails: true,
@@ -148,6 +151,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canAccessSettings: false,
     canModifySettings: false,
     canManageIntegrations: false,
+    canManageDropdowns: true,
     canCreateCampaigns: true,
     canManageCampaigns: true,
     canSendEmails: true,
@@ -178,6 +182,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canAccessSettings: false,
     canModifySettings: false,
     canManageIntegrations: false,
+    canManageDropdowns: true,
     canCreateCampaigns: false,
     canManageCampaigns: false,
     canSendEmails: true,

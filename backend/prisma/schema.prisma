@@ -60,6 +60,9 @@ enum LeadTemperature {
   hot
   warm
   cold
+  prospect
+  lost
+  won
 }
 
 enum OpportunityStage {

@@ -1,8 +1,8 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { leadsApi, usersApi } from "../../lib/api";
-import { Modal, Spinner } from "../ui";
+import { leadsApi, usersApi, dropdownsApi } from "../../lib/api";
+import { Modal, Spinner, SearchableDropdown } from "../ui";
 import toast from "react-hot-toast";
 import type { CreateLeadInput } from "../../lib/types";
 import { PIPELINE_OPTIONS, LEAD_SOURCES } from "../../lib/types";
@@ -42,7 +42,7 @@ const timelineOptions = [
   "Exploring / No Timeline",
 ];
 
-type LeadFormData = Omit<CreateLeadInput, "leadCost"> & {
+type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
   leadCost?: string;
   subSource?: string;
   utmSource?: string;
@@ -53,7 +53,7 @@ type LeadFormData = Omit<CreateLeadInput, "leadCost"> & {
   requirementDescription?: string;
   budgetRange: string;
   timeline?: string;
-  temperature: "hot" | "warm" | "cold";
+  temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won";
   disqualificationReason?: string;
 };
 
@@ -80,17 +80,17 @@ const defaultValues: LeadFormData = {
   requirementDescription: "",
   budgetRange: "",
   timeline: "",
-  temperature: "cold",
+  temperature: "prospect",
   disqualificationReason: "",
 };
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
-  const { canReassignLead } = usePermissions();
+  const { canReassignLead, canManageDropdowns } = usePermissions();
   const [utmOpen, setUtmOpen] = useState(false);
-  const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" }) | null>(null);
+  const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
-    payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" };
+    payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" };
     companyName: string;
     existingId?: string;
   } | null>(null);
@@ -135,7 +135,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     requirementDescription: yup.string().max(2000, "Requirement description must be 2000 characters or less").optional(),
     budgetRange: yup.string().required("Budget range is required"),
     timeline: yup.string().optional(),
-    temperature: yup.mixed<"hot" | "warm" | "cold">().oneOf(["hot", "warm", "cold"]).required(),
+    temperature: yup.mixed<"hot" | "warm" | "cold" | "prospect" | "lost" | "won">().oneOf(["hot", "warm", "cold", "prospect", "lost", "won"]).required(),
     disqualificationReason: yup.string().when("status", {
       is: "disqualified",
       then: (rule) => rule.trim().min(10, "Disqualification reason must be at least 10 characters.").required("Disqualification reason is required"),
@@ -169,6 +169,8 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const status = watch("status");
   const requirementType = watch("requirementType") || [];
   const requirementDescription = watch("requirementDescription") || "";
+  const industry = watch("industry") || "";
+  const location = watch("location") || "";
 
   // Fetch users for assignment dropdown — only when canReassign
   const { data: usersData } = useQuery({
@@ -178,6 +180,131 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   });
 
   const users = usersData?.data || [];
+
+  // Fetch industry dropdown options
+  const { data: industriesData, refetch: refetchIndustries } = useQuery({
+    queryKey: ["dropdowns", "industry"],
+    queryFn: () => dropdownsApi.listByCategory("industry").then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+
+  // Fetch location dropdown options
+  const { data: locationsData, refetch: refetchLocations } = useQuery({
+    queryKey: ["dropdowns", "location"],
+    queryFn: () => dropdownsApi.listByCategory("location").then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+
+  // Format dropdown data with IDs
+  const industries = (Array.isArray(industriesData) ? industriesData : industriesData?.items || [])
+    .map((item: any) => ({
+      id: item.id || item._id || item.value,
+      value: item.value || item,
+    }));
+  
+  const locations = (Array.isArray(locationsData) ? locationsData : locationsData?.items || [])
+    .map((item: any) => ({
+      id: item.id || item._id || item.value,
+      value: item.value || item,
+    }));
+
+  // Create new industry option
+  const createIndustryMutation = useMutation({
+    mutationFn: (value: string) => dropdownsApi.add({ category: "industry", value }),
+    onSuccess: () => {
+      refetchIndustries();
+      toast.success("Industry added successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to add industry");
+    },
+  });
+
+  // Create new location option
+  const createLocationMutation = useMutation({
+    mutationFn: (value: string) => dropdownsApi.add({ category: "location", value }),
+    onSuccess: () => {
+      refetchLocations();
+      toast.success("Location added successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to add location");
+    },
+  });
+
+  // Edit industry option
+  const editIndustryMutation = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: string }) => 
+      dropdownsApi.update(id, { value }),
+    onSuccess: () => {
+      refetchIndustries();
+      toast.success("Industry updated successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to update industry");
+    },
+  });
+
+  // Edit location option
+  const editLocationMutation = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: string }) => 
+      dropdownsApi.update(id, { value }),
+    onSuccess: () => {
+      refetchLocations();
+      toast.success("Location updated successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to update location");
+    },
+  });
+
+  // Delete industry option
+  const deleteIndustryMutation = useMutation({
+    mutationFn: (id: string) => dropdownsApi.delete(id),
+    onSuccess: () => {
+      refetchIndustries();
+      toast.success("Industry deleted successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to delete industry");
+    },
+  });
+
+  // Delete location option
+  const deleteLocationMutation = useMutation({
+    mutationFn: (id: string) => dropdownsApi.delete(id),
+    onSuccess: () => {
+      refetchLocations();
+      toast.success("Location deleted successfully!");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to delete location");
+    },
+  });
+
+  const handleCreateIndustry = async (value: string) => {
+    await createIndustryMutation.mutateAsync(value);
+  };
+
+  const handleCreateLocation = async (value: string) => {
+    await createLocationMutation.mutateAsync(value);
+  };
+
+  const handleEditIndustry = async (id: string, oldValue: string, newValue: string) => {
+    await editIndustryMutation.mutateAsync({ id, value: newValue });
+  };
+
+  const handleEditLocation = async (id: string, oldValue: string, newValue: string) => {
+    await editLocationMutation.mutateAsync({ id, value: newValue });
+  };
+
+  const handleDeleteIndustry = async (id: string, value: string) => {
+    await deleteIndustryMutation.mutateAsync(id);
+  };
+
+  const handleDeleteLocation = async (id: string, value: string) => {
+    await deleteLocationMutation.mutateAsync(id);
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: CreateLeadInput) => leadsApi.create(data),
@@ -223,7 +350,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
         if (k === "disqualificationReason" && formData.status !== "disqualified") return false;
         return v !== "" && v !== undefined;
       }),
-    ) as unknown as CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" };
+    ) as unknown as CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" };
     // Convert leadCost to number if present
     if ((cleanedData as any).leadCost) {
       (cleanedData as any).leadCost = parseFloat((cleanedData as any).leadCost);
@@ -306,23 +433,31 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               {errors.website && <p className="text-xs text-red-400 mt-1">{errors.website.message}</p>}
             </div>
             <div>
-              <label className="label">Industry</label>
-              <input
-                type="text"
-                {...register("industry")}
-                className="input"
-                placeholder="Technology"
+              <SearchableDropdown
+                label="Industry"
+                value={industry}
+                onChange={(value) => setValue("industry", value, { shouldValidate: true })}
+                options={industries}
+                onCreateNew={canManageDropdowns ? handleCreateIndustry : undefined}
+                onEdit={canManageDropdowns ? handleEditIndustry : undefined}
+                onDelete={canManageDropdowns ? handleDeleteIndustry : undefined}
+                placeholder="Select or search industry..."
+                error={errors.industry?.message}
               />
             </div>
           </div>
 
           <div>
-            <label className="label">Location</label>
-            <input
-              type="text"
-              {...register("location")}
-              className="input"
-              placeholder="San Francisco, CA"
+            <SearchableDropdown
+              label="Location"
+              value={location}
+              onChange={(value) => setValue("location", value, { shouldValidate: true })}
+              options={locations}
+              onCreateNew={canManageDropdowns ? handleCreateLocation : undefined}
+              onEdit={canManageDropdowns ? handleEditLocation : undefined}
+              onDelete={canManageDropdowns ? handleDeleteLocation : undefined}
+              placeholder="Select or search location..."
+              error={errors.location?.message}
             />
           </div>
         </div>
@@ -461,11 +596,14 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Temperature</label>
+              <label className="label">Intent Signal</label>
               <select {...register("temperature")} title="Temperature" className="input">
                 <option value="hot">Hot</option>
                 <option value="warm">Warm</option>
                 <option value="cold">Cold</option>
+                <option value="prospect">Prospect</option>
+                <option value="lost">Lost</option>
+                <option value="won">Won</option>
               </select>
             </div>
             <div>

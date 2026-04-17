@@ -41,7 +41,7 @@ export interface Lead {
   budget?: string;
   budgetRange?: string;
   timeline?: string;
-  temperature?: 'hot' | 'warm' | 'cold';
+  temperature?: 'hot' | 'warm' | 'cold' | 'prospect' | 'lost' | 'won';
   disqualificationReason?: string;
   campaignSource?: string;
   notes?: string;
@@ -155,7 +155,7 @@ export interface CreateLeadInput {
   requirementDescription?: string;
   budgetRange?: string;
   timeline?: string;
-  temperature?: 'hot' | 'warm' | 'cold';
+  temperature?: 'hot' | 'warm' | 'cold' | 'prospect' | 'lost' | 'won';
   disqualificationReason?: string;
   leadCost?: number;
   subSource?: string;

@@ -248,7 +248,7 @@ export const leadsApi = {
   enrichApollo: (id: string, personTitles?: string[]) => api.post(`/leads/${id}/enrich/apollo`, personTitles?.length ? { personTitles } : {}),
   generateEmail: (id: string) => api.post(`/leads/${id}/generate-email`),
   sendOutreach: (id: string, data: any) => api.post(`/leads/${id}/send-outreach`, data),
-  export: (ids?: string[]) => api.get('/leads/export', { params: ids?.length ? { ids: ids.join(',') } : {}, responseType: 'blob' }),
+  export: (params?: any) => api.get('/leads/export', { params, responseType: 'blob' }),
 };
 
 export const activitiesApi = {
@@ -364,6 +364,7 @@ export const dropdownsApi = {
   listByCategory: (category: string) => api.get('/dropdowns', { params: { category } }),
   add: (data: any) => api.post('/dropdowns', data),
   update: (id: string, data: any) => api.patch(`/dropdowns/${id}`, data),
+  delete: (id: string) => api.delete(`/dropdowns/${id}`),
 };
 
 export const settingsApi = {
