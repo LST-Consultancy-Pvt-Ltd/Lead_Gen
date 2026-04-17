@@ -14,6 +14,7 @@ import {
   MapPin, Users2, FileText, Phone, ExternalLink, Copy,
   ChevronRight, Trash2, UserCog, Calendar, DollarSign,
   Clock, TrendingUp, Edit2, Save, X, UserPlus, Plus,
+  ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -76,32 +77,143 @@ function InfoRow({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Common title suggestions (shown as quick-pick options)
+// Users can also type any custom title not listed here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TITLE_SUGGESTIONS = [
+  // C-Suite
+  'CEO', 'CTO', 'CFO', 'COO', 'CMO', 'CIO', 'CISO', 'CPO', 'CRO', 'CDO', 'CLO', 'CHRO', 'C Suite',
+  // Founders & Owners
+  'Founder', 'Co-Founder', 'Owner', 'Partner', 'Principal',
+  // Directors
+  'Managing Director', 'Director', 'IT Director', 'Finance Director',
+  'Sales Director', 'Marketing Director', 'Operations Director', 'HR Director',
+  'Technology Director', 'Engineering Director', 'Digital Director',
+  'Director of IT', 'Director of Finance', 'Director of Operations',
+  'Director of Engineering', 'Director of Sales', 'Director of Marketing',
+  // VPs
+  'VP Engineering', 'VP Sales', 'VP Marketing', 'VP Operations', 'VP Product',
+  'VP Finance', 'VP HR', 'VP IT', 'VP Technology', 'VP Business Development',
+  // Heads
+  'Head of IT', 'Head of Engineering', 'Head of Sales', 'Head of Marketing',
+  'Head of Product', 'Head of HR', 'Head of Operations', 'Head of Design',
+  'Head of Finance', 'Head of Technology', 'Head of Digital',
+  'Head of Procurement', 'Head of Supply Chain', 'Head of Data',
+  // Finance & Accounting
+  'Finance Manager', 'Controller', 'Financial Controller', 'Accounts Manager',
+  'Finance Controller', 'Treasurer', 'Comptroller',
+  // IT & ERP
+  'IT Manager', 'ERP Manager', 'ERP Director', 'ERP Consultant',
+  'NetSuite Administrator', 'NetSuite Manager', 'NetSuite Consultant',
+  'SAP Manager', 'SAP Consultant', 'Systems Manager', 'Infrastructure Manager',
+  'IT Administrator', 'Technology Manager', 'Digital Transformation Manager',
+  // Hiring & Talent
+  'Talent Acquisition Manager', 'Talent Acquisition Specialist',
+  'Talent Acquisition for ERP', 'Talent Acquisition for NetSuite',
+  'Hiring Manager', 'Hiring Manager IT', 'Recruitment Manager',
+  'HR Manager', 'HR Director', 'People Manager',
+  // Operations & Procurement
+  'Operations Manager', 'Procurement Manager', 'Supply Chain Manager',
+  'Logistics Manager', 'General Manager', 'Plant Manager',
+  // Engineering & Technical
+  'Engineering Manager', 'Software Engineer', 'Data Scientist', 'DevOps Engineer',
+  'Architect', 'Solutions Architect', 'Enterprise Architect', 'Technical Lead',
+  // Sales & Business Development
+  'Sales Manager', 'Business Development Manager', 'Account Manager',
+  'Account Executive', 'Revenue Manager', 'Partnerships Manager',
+  // Marketing
+  'Marketing Manager', 'Digital Marketing Manager', 'Brand Manager',
+  'Growth Manager', 'Demand Generation Manager',
+  // Product & Project
+  'Product Manager', 'Project Manager', 'Program Manager', 'Scrum Master',
+  // Other Decision Makers
+  'Board Member', 'Advisor', 'Consultant', 'President', 'Vice President',
+  'Executive Director', 'Department Head', 'Business Owner',
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EnrichPanel
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EnrichPanel({
   enrichState, onApollo, hasContact,
 }: {
-  enrichState: EnrichState; onApollo: () => void; hasContact: boolean;
+  enrichState: EnrichState; onApollo: (titles?: string[]) => void; hasContact: boolean;
 }) {
   const { status } = enrichState;
   const isApolloLoading = status === 'searching_apollo';
+  const [showTitlePicker, setShowTitlePicker] = useState(false);
+  const [selectedTitles, setSelectedTitles] = useState<string[]>([]);
+  const [titleSearch, setTitleSearch] = useState('');
+  const [customTitles, setCustomTitles] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem('apollo_custom_titles') || '[]'); } catch { return []; }
+  });
+
+  const allTitles = [...TITLE_SUGGESTIONS, ...customTitles.filter(t => !TITLE_SUGGESTIONS.some(s => s.toLowerCase() === t.toLowerCase()))];
+
+  const filteredTitles = titleSearch
+    ? allTitles.filter(t => t.toLowerCase().includes(titleSearch.toLowerCase()))
+    : allTitles;
+
+  // Check if typed text is a custom title (not in suggestions)
+  const customTitleCandidate = titleSearch.trim();
+  const isCustomTitle = customTitleCandidate.length > 0
+    && !allTitles.some(t => t.toLowerCase() === customTitleCandidate.toLowerCase())
+    && !selectedTitles.some(t => t.toLowerCase() === customTitleCandidate.toLowerCase());
+
+  function addCustomTitle() {
+    if (isCustomTitle) {
+      const updated = [...customTitles, customTitleCandidate];
+      setCustomTitles(updated);
+      try { localStorage.setItem('apollo_custom_titles', JSON.stringify(updated)); } catch {}
+      setSelectedTitles(prev => [...prev, customTitleCandidate]);
+      setTitleSearch('');
+    }
+  }
+
+  function toggleTitle(title: string) {
+    setSelectedTitles(prev =>
+      prev.includes(title) ? prev.filter(t => t !== title) : [...prev, title]
+    );
+  }
+
+  function handleSearch() {
+    onApollo(selectedTitles.length > 0 ? selectedTitles : undefined);
+    setShowTitlePicker(false);
+  }
 
   if (hasContact && status === 'idle') {
     return (
-      <div className="flex gap-2 pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3">
-        <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
-          onClick={onApollo} disabled={isApolloLoading}>
+      <div className="pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3 space-y-2">
+        <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
+          onClick={() => setShowTitlePicker(v => !v)} disabled={isApolloLoading}>
           {isApolloLoading ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
-          Re-search Apollo
+          Search Apollo for More Contacts
+          <ChevronDown size={11} className={cn('transition-transform', showTitlePicker && 'rotate-180')} />
         </button>
+
+        {showTitlePicker && (
+          <TitlePickerDropdown
+            filteredTitles={filteredTitles}
+            selectedTitles={selectedTitles}
+            titleSearch={titleSearch}
+            setTitleSearch={setTitleSearch}
+            toggleTitle={toggleTitle}
+            setSelectedTitles={setSelectedTitles}
+            handleSearch={handleSearch}
+            isLoading={isApolloLoading}
+            isCustomTitle={isCustomTitle}
+            addCustomTitle={addCustomTitle}
+          />
+        )}
       </div>
     );
   }
 
   return (
     <div className="space-y-3 pt-3">
-      {/* Apollo button */}
       <div className={cn(
         'rounded-xl border p-3.5 transition-all',
         isApolloLoading ? 'bg-violet-500/[0.08] border-violet-500/30'
@@ -119,25 +231,149 @@ function EnrichPanel({
               <p className="text-[10px] text-slate-500">200M+ contacts database</p>
             </div>
           </div>
-          {status === 'apollo_found' && <CheckCircle2 size={14} className="text-violet-400" />}
-          {status === 'apollo_failed' && <XCircle size={14} className="text-red-500" />}
+          <div className="flex items-center gap-2">
+            {/* Title selector toggle */}
+            <button
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-white/[0.12] text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-white/[0.06] hover:border-violet-500/40 transition-colors"
+              onClick={() => setShowTitlePicker(v => !v)}
+              disabled={isApolloLoading}
+            >
+              {selectedTitles.length > 0
+                ? `${selectedTitles.length} title${selectedTitles.length > 1 ? 's' : ''} selected`
+                : 'Job Titles'}
+              <ChevronDown size={10} className={cn('transition-transform', showTitlePicker && 'rotate-180')} />
+            </button>
+            {status === 'apollo_found' && <CheckCircle2 size={14} className="text-violet-400" />}
+            {status === 'apollo_failed' && <XCircle size={14} className="text-red-500" />}
+          </div>
         </div>
-        <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
-          onClick={onApollo} disabled={isApolloLoading || status === 'apollo_found'}>
-          {isApolloLoading ? <><Loader2 size={12} className="animate-spin" /> Searching Apollo…</>
-            : status === 'apollo_found' ? '✓ Contact found'
-            : status === 'apollo_failed' ? '✕ Not found — try again'
-            : <><Search size={12} /> Search Apollo</>}
-        </button>
+
+        {showTitlePicker && (
+          <TitlePickerDropdown
+            filteredTitles={filteredTitles}
+            selectedTitles={selectedTitles}
+            titleSearch={titleSearch}
+            setTitleSearch={setTitleSearch}
+            toggleTitle={toggleTitle}
+            setSelectedTitles={setSelectedTitles}
+            handleSearch={handleSearch}
+            isLoading={isApolloLoading}
+            isCustomTitle={isCustomTitle}
+            addCustomTitle={addCustomTitle}
+          />
+        )}
+
+        {!showTitlePicker && (
+          <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
+            onClick={handleSearch} disabled={isApolloLoading || status === 'apollo_found'}>
+            {isApolloLoading ? <><Loader2 size={12} className="animate-spin" /> Searching Apollo…</>
+              : status === 'apollo_found' ? '✓ Contacts found'
+              : status === 'apollo_failed' ? '✕ Not found — try again'
+              : <><Search size={12} /> Search Apollo</>}
+          </button>
+        )}
       </div>
 
       {status === 'apollo_failed' && (
         <div className="p-3 bg-amber-500/[0.06] border border-amber-500/20 rounded-xl">
           <p className="text-xs text-amber-400 text-center">
-            No contact found. Try adding a LinkedIn URL to improve search accuracy.
+            No contact found. Try selecting different job titles or adding a LinkedIn URL.
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function TitlePickerDropdown({
+  filteredTitles, selectedTitles, titleSearch, setTitleSearch,
+  toggleTitle, setSelectedTitles, handleSearch, isLoading,
+  isCustomTitle, addCustomTitle,
+}: {
+  filteredTitles: string[]; selectedTitles: string[]; titleSearch: string;
+  setTitleSearch: (v: string) => void; toggleTitle: (t: string) => void;
+  setSelectedTitles: (v: string[]) => void; handleSearch: () => void; isLoading: boolean;
+  isCustomTitle: boolean; addCustomTitle: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-slate-900 overflow-hidden mb-2">
+      {/* Search / add custom title input */}
+      <div className="p-2 border-b border-white/[0.06]">
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            className="input text-xs h-7 flex-1"
+            placeholder="Search or type any job title…"
+            value={titleSearch}
+            onChange={e => setTitleSearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTitle(); } }}
+          />
+          {isCustomTitle && (
+            <button
+              className="px-2.5 h-7 rounded-md text-[10px] font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors whitespace-nowrap flex items-center gap-1"
+              onClick={addCustomTitle}
+            >
+              <Plus size={10} /> Add
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Selected titles as tags */}
+      {selectedTitles.length > 0 && (
+        <div className="px-2.5 py-2 border-b border-white/[0.06]">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] text-violet-400 font-semibold">{selectedTitles.length} selected</span>
+            <button className="text-[10px] text-slate-500 hover:text-slate-300" onClick={() => setSelectedTitles([])}>
+              Clear all
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {selectedTitles.map(t => (
+              <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-500/15 border border-violet-500/25 text-[10px] text-violet-300">
+                {t}
+                <button onClick={() => toggleTitle(t)} className="hover:text-white transition-colors">
+                  <X size={9} />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Suggestion checkboxes */}
+      <div className="max-h-48 overflow-y-auto py-1">
+        {filteredTitles.map(title => (
+          <label key={title} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-white/[0.04] cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              checked={selectedTitles.includes(title)}
+              onChange={() => toggleTitle(title)}
+              className="w-3.5 h-3.5 rounded border-slate-600 text-violet-500 focus:ring-violet-500/30 bg-slate-800"
+            />
+            <span className="text-xs text-slate-300">{title}</span>
+          </label>
+        ))}
+        {filteredTitles.length === 0 && !isCustomTitle && (
+          <p className="text-xs text-slate-500 px-2.5 py-2 text-center">No matching titles</p>
+        )}
+        {filteredTitles.length === 0 && isCustomTitle && (
+          <p className="text-xs text-slate-400 px-2.5 py-2 text-center">Press Enter or click Add to use &quot;{titleSearch.trim()}&quot;</p>
+        )}
+      </div>
+
+      {/* Search button */}
+      <div className="p-2 border-t border-white/[0.06]">
+        <button
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
+          onClick={handleSearch}
+          disabled={isLoading}
+        >
+          {isLoading
+            ? <><Loader2 size={12} className="animate-spin" /> Searching…</>
+            : <><Search size={12} /> Search {selectedTitles.length > 0 ? `(${selectedTitles.length} titles)` : 'All Titles'}</>}
+        </button>
+      </div>
     </div>
   );
 }
@@ -223,13 +459,15 @@ export default function LeadDetailPage() {
   });
 
   const apolloMutation = useMutation({
-    mutationFn: () => { setEnrichState({ status: 'searching_apollo' }); return leadsApi.enrichApollo(id); },
+    mutationFn: (titles?: string[]) => { setEnrichState({ status: 'searching_apollo' }); return leadsApi.enrichApollo(id, titles); },
     onSuccess: (res) => {
       const d = res.data.data;
       if (d.found) {
         setEnrichState({ status: 'apollo_found', source: 'apollo' });
         qc.invalidateQueries({ queryKey: ['lead', id] });
-        toast.success('Contact found via Apollo!');
+        qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+        const count = d.contactsFound || 1;
+        toast.success(`${count} contact${count > 1 ? 's' : ''} found via Apollo!`);
       } else {
         setEnrichState({ status: 'apollo_failed' });
         toast.error('No contact found in Apollo.');
@@ -697,14 +935,22 @@ export default function LeadDetailPage() {
                 )}
                 <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] overflow-hidden">
                   {/* Column headers */}
-                  <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] bg-slate-100 dark:bg-slate-900">
+                  <div className="grid grid-cols-4 divide-x divide-slate-200 dark:divide-white/[0.06] bg-slate-100 dark:bg-slate-900">
                     <div className="px-3 py-2 flex items-center gap-1.5">
-                      <Phone size={10} className="text-amber-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Phone Numbers</span>
+                      <User size={10} className="text-slate-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Name</span>
+                    </div>
+                    <div className="px-3 py-2 flex items-center gap-1.5">
+                      <ChevronRight size={10} className="text-slate-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Title</span>
                     </div>
                     <div className="px-3 py-2 flex items-center gap-1.5">
                       <Mail size={10} className="text-emerald-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Email Addresses</span>
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Email</span>
+                    </div>
+                    <div className="px-3 py-2 flex items-center gap-1.5">
+                      <Linkedin size={10} className="text-blue-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">LinkedIn</span>
                     </div>
                   </div>
 
@@ -718,16 +964,22 @@ export default function LeadDetailPage() {
                           <div className="p-3 bg-blue-500/[0.04] space-y-2">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="label mb-1 block">Phone</label>
-                                <div className="flex items-center gap-1.5">
-                                  <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                                  <input
-                                    className="input text-xs flex-1 h-8"
-                                    placeholder="+91 XXXXX XXXXX"
-                                    value={editContactData.phone}
-                                    onChange={e => setEditContactData(d => ({ ...d, phone: e.target.value }))}
-                                  />
-                                </div>
+                                <label className="label mb-1 block">Name</label>
+                                <input
+                                  className="input text-xs flex-1 h-8"
+                                  placeholder="Full name"
+                                  value={editContactData.name || ''}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, name: e.target.value }))}
+                                />
+                              </div>
+                              <div>
+                                <label className="label mb-1 block">Title</label>
+                                <input
+                                  className="input text-xs flex-1 h-8"
+                                  placeholder="Job title"
+                                  value={editContactData.title || ''}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, title: e.target.value }))}
+                                />
                               </div>
                               <div>
                                 <label className="label mb-1 block">Email</label>
@@ -738,7 +990,19 @@ export default function LeadDetailPage() {
                                     type="email"
                                     placeholder="name@company.com"
                                     value={editContactData.email}
-                                    onChange={e => setEditContactData(d => ({ ...d, email: e.target.value }))}
+                                    onChange={e => setEditContactData((d: any) => ({ ...d, email: e.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="label mb-1 block">Phone</label>
+                                <div className="flex items-center gap-1.5">
+                                  <Phone size={11} className="text-amber-400 flex-shrink-0" />
+                                  <input
+                                    className="input text-xs flex-1 h-8"
+                                    placeholder="+91 XXXXX XXXXX"
+                                    value={editContactData.phone}
+                                    onChange={e => setEditContactData((d: any) => ({ ...d, phone: e.target.value }))}
                                   />
                                 </div>
                               </div>
@@ -763,27 +1027,21 @@ export default function LeadDetailPage() {
                           </div>
                         ) : (
                           /* ── Read-only row ── */
-                          <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                            {/* LEFT — phone */}
-                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
-                              <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                              {(c.phone || c.contactPhone) ? (
-                                <>
-                                  <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
-                                    {c.phone || c.contactPhone}
-                                  </span>
-                                  <button
-                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity ml-auto flex-shrink-0"
-                                    onClick={() => { navigator.clipboard.writeText(c.phone || c.contactPhone); toast.success('Copied!'); }}
-                                    title="Copy phone">
-                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )}
+                          <div className="grid grid-cols-4 divide-x divide-slate-200 dark:divide-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                            {/* Name */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
+                              <User size={11} className="text-slate-400 flex-shrink-0" />
+                              <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
+                                {c.name || '—'}
+                              </span>
                             </div>
-                            {/* RIGHT — email + actions */}
+                            {/* Title */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
+                              <span className="text-xs text-slate-500 truncate">
+                                {c.title || c.designation || '—'}
+                              </span>
+                            </div>
+                            {/* Email */}
                             <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
                               <Mail size={11} className="text-emerald-400 flex-shrink-0" />
                               {(c.email || c.contactEmail) ? (
@@ -796,6 +1054,27 @@ export default function LeadDetailPage() {
                                     className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
                                     onClick={() => { navigator.clipboard.writeText(c.email || c.contactEmail); toast.success('Copied!'); }}
                                     title="Copy email">
+                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </div>
+                            {/* LinkedIn + actions */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
+                              {c.linkedin ? (
+                                <>
+                                  <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
+                                  <a href={c.linkedin.startsWith('http') ? c.linkedin : `https://${c.linkedin}`}
+                                    target="_blank" rel="noopener noreferrer"
+                                    className="text-xs text-blue-400 hover:text-blue-300 truncate">
+                                    Profile
+                                  </a>
+                                  <button
+                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
+                                    onClick={() => { navigator.clipboard.writeText(c.linkedin); toast.success('Copied!'); }}
+                                    title="Copy LinkedIn URL">
                                     <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
                                   </button>
                                 </>
@@ -888,7 +1167,7 @@ export default function LeadDetailPage() {
             {/* ── Enrichment panel ── */}
             <EnrichPanel
               enrichState={enrichState}
-              onApollo={() => apolloMutation.mutate()}
+              onApollo={(titles) => apolloMutation.mutate(titles)}
               hasContact={hasContact}
             />
           </div>

@@ -181,7 +181,80 @@ async function enrichLeadViaApollo(req, res) {
   try {
     const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!lead) return error(res, 'Lead not found', 404);
-    logger.info('Enriching via Apollo', { leadId: lead.id, company: lead.companyName, website: lead.website });
+
+    const personTitles = Array.isArray(req.body?.personTitles) ? req.body.personTitles : null;
+    const returnAll = !!(personTitles && personTitles.length > 0);
+
+    logger.info('Enriching via Apollo', {
+      leadId: lead.id, company: lead.companyName, website: lead.website,
+      personTitles: personTitles || 'default', returnAll,
+    });
+
+    if (returnAll) {
+      // Multi-contact mode: return all matching contacts
+      const contacts = await enrichViaApollo(lead, { personTitles, returnAll: true });
+      if (!contacts || contacts.length === 0) {
+        return success(res, { found: false, enrichedVia: 'apollo', contacts: [] }, 'Apollo: no contacts found');
+      }
+
+      // Save first contact as primary if lead has no primary contact yet
+      let updated = lead;
+      if (!lead.contactEmail && !lead.contactName) {
+        updated = await _saveContact(lead, contacts[0], req.user.id, req.user.organizationId);
+      }
+
+      // Save remaining contacts as additional contacts
+      const savedAdditional = [];
+      const startIdx = (!lead.contactEmail && !lead.contactName) ? 1 : 0;
+      for (let i = startIdx; i < contacts.length; i++) {
+        const c = contacts[i];
+        try {
+          // Deduplicate: check by email if available, otherwise by name+title
+          let existing = null;
+          if (c.email) {
+            existing = await prisma.contact.findFirst({
+              where: { leadId: lead.id, email: c.email },
+            });
+          } else if (c.name) {
+            existing = await prisma.contact.findFirst({
+              where: { leadId: lead.id, name: c.name, title: c.title || undefined },
+            });
+          }
+          if (!existing) {
+            const saved = await prisma.contact.create({
+              data: {
+                leadId:         lead.id,
+                organizationId: req.user.organizationId,
+                name:           c.name || 'Unknown',
+                title:          c.title || null,
+                email:          c.email || null,
+                phone:          c.phone || null,
+                linkedin:       c.linkedinUrl || null,
+                designation:    c.title || null,
+              },
+            });
+            savedAdditional.push(saved);
+          }
+        } catch (err) {
+          logger.warn('Failed to save additional Apollo contact', { err: err.message });
+        }
+      }
+
+      await prisma.activityLog.create({ data: {
+        organizationId: req.user.organizationId, userId: req.user.id, leadId: lead.id,
+        action: 'contact_enriched',
+        description: `Found ${contacts.length} contacts via Apollo (titles: ${personTitles.join(', ')})`,
+      }}).catch(()=>{});
+
+      return success(res, {
+        found: true, enrichedVia: 'apollo',
+        contactsFound: contacts.length,
+        contacts,
+        lead: updated,
+      }, `Found ${contacts.length} contacts via Apollo`);
+    }
+
+    // Single contact mode (original behavior)
     const contact = await enrichViaApollo(lead);
     if (!hasContact(contact)) return success(res, { found: false, enrichedVia: 'apollo' }, 'Apollo: no contact found');
     const updated = await _saveContact(lead, contact, req.user.id, req.user.organizationId);
