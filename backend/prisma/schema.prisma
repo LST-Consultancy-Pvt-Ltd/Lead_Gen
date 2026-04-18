@@ -172,6 +172,7 @@ model Lead {
   contactEmail    String?
   contactPhone    String?
   contactLinkedin String?
+  companyPhone    String?
   techStack     String[]
   intentSignals Json[]   @default([])
   funding       Json?

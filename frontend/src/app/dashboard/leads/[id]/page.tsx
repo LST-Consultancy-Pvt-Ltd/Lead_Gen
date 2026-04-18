@@ -81,7 +81,7 @@ function InfoRow({
 // Users can also type any custom title not listed here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TITLE_SUGGESTIONS = [
+const TITLE_SUGGESTIONS = [...new Set([
   // C-Suite
   'CEO', 'CTO', 'CFO', 'COO', 'CMO', 'CIO', 'CISO', 'CPO', 'CRO', 'CDO', 'CLO', 'CHRO', 'C Suite',
   // Founders & Owners
@@ -130,7 +130,7 @@ const TITLE_SUGGESTIONS = [
   // Other Decision Makers
   'Board Member', 'Advisor', 'Consultant', 'President', 'Vice President',
   'Executive Director', 'Department Head', 'Business Owner',
-];
+])];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EnrichPanel
@@ -860,6 +860,8 @@ export default function LeadDetailPage() {
                 label="LinkedIn" value={lead.linkedinUrl}
                 href={lead.linkedinUrl?.startsWith('http') ? lead.linkedinUrl : lead.linkedinUrl ? `https://${lead.linkedinUrl}` : undefined}
                 copyable />
+              <InfoRow icon={<Phone size={12} className="text-amber-400" />}
+                label="Company Phone" value={lead.companyPhone} copyable />
             </div>
 
             {/* Description */}

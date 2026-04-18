@@ -197,6 +197,16 @@ async function enrichLeadViaApollo(req, res) {
         return success(res, { found: false, enrichedVia: 'apollo', contacts: [] }, 'Apollo: no contacts found');
       }
 
+      // Save org phone to companyPhone (company-level, not personal contact)
+      const orgPhone = contacts._orgPhone || null;
+      if (orgPhone && !lead.companyPhone) {
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: { companyPhone: orgPhone },
+        });
+        lead.companyPhone = orgPhone;
+      }
+
       // Save first contact as primary if lead has no primary contact yet
       let updated = lead;
       if (!lead.contactEmail && !lead.contactName) {
@@ -326,33 +336,33 @@ async function exportLeads(req, res) {
       }
     }
     
-    const leads = await prisma.lead.findMany({ where, orderBy: { createdAt: 'desc' } });
-    const rows  = leads.map(l => {
-      // Format date as YYYY-MM-DD HH:mm:ss
-      const formatDate = (date) => {
-        if (!date) return '';
-        const d = new Date(date);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const hours = String(d.getHours()).padStart(2, '0');
-        const minutes = String(d.getMinutes()).padStart(2, '0');
-        const seconds = String(d.getSeconds()).padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-      };
-      
-      return {
+    const leads = await prisma.lead.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { leadContacts: true },
+    });
+    const rows = [];
+    const formatDate = (date) => {
+      if (!date) return '';
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const seconds = String(d.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    };
+
+    for (const l of leads) {
+      const base = {
         companyName:  l.companyName,
         domainName:   l.website ? l.website.replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0] : '',
         website:      l.website || '',
         industry:     l.industry || '',
         location:     l.location || '',
         companySize:  l.companySize || '',
-        contactName:  l.contactName || '',
-        contactTitle: l.contactTitle || '',
-        contactEmail: l.contactEmail || '',
-        contactPhone: l.contactPhone || '',
-        contactLinkedin: l.contactLinkedin || '',
+        companyPhone: l.companyPhone || '',
         linkedinUrl:  l.linkedinUrl || '',
         leadScore:    l.leadScore,
         intentLevel:  l.intentLevel,
@@ -361,10 +371,37 @@ async function exportLeads(req, res) {
         source:       l.source || '',
         createdAt:    formatDate(l.createdAt),
       };
-    });
+
+      // Primary contact row
+      rows.push({
+        ...base,
+        contactType:    'Primary',
+        contactName:    l.contactName || '',
+        contactTitle:   l.contactTitle || '',
+        contactEmail:   l.contactEmail || '',
+        contactPhone:   l.contactPhone || '',
+        contactLinkedin: l.contactLinkedin || '',
+      });
+
+      // Additional contact rows
+      if (l.leadContacts && l.leadContacts.length > 0) {
+        for (const c of l.leadContacts) {
+          rows.push({
+            ...base,
+            contactType:    'Additional',
+            contactName:    c.name || '',
+            contactTitle:   c.title || c.designation || '',
+            contactEmail:   c.email || '',
+            contactPhone:   c.phone || '',
+            contactLinkedin: c.linkedin || '',
+          });
+        }
+      }
+    }
+
     const parser = new Parser({ fields: [
-      'companyName','domainName','website','industry','location','companySize',
-      'contactName','contactTitle','contactEmail','contactPhone','contactLinkedin',
+      'companyName','domainName','website','industry','location','companySize','companyPhone',
+      'contactType','contactName','contactTitle','contactEmail','contactPhone','contactLinkedin',
       'linkedinUrl','leadScore','intentLevel','status','intentSignals','source','createdAt',
     ]});
     const csv = parser.parse(rows);

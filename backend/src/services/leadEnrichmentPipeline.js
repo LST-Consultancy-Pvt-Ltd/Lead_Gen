@@ -363,8 +363,21 @@ async function apolloSearchPeopleByOrgId(orgId, headers, jobTitle = null, perPag
       payload,
       { headers, timeout: 15000 }
     );
-    const people = data?.people || [];
+    let people = data?.people || [];
     logger.info('Apollo: people search by org_id', { orgId, found: people.length });
+
+    // Apollo's person_titles does substring matching (e.g. "Director" matches "Managing Director").
+    // When user picked specific titles, filter to exact title matches only.
+    if (personTitles && personTitles.length > 0 && people.length > 0) {
+      const lowerTitles = personTitles.map(t => t.toLowerCase().trim());
+      const filtered = people.filter(p => {
+        const pTitle = (p.title || '').toLowerCase().trim();
+        return lowerTitles.some(t => pTitle === t);
+      });
+      logger.info('Apollo: exact title filter', { before: people.length, after: filtered.length, titles: personTitles });
+      people = filtered;
+    }
+
     return people;
   } catch (err) {
     logger.warn('Apollo: people search by org_id failed', { orgId, err: err.message });
@@ -425,9 +438,14 @@ async function enrichViaApollo(lead, options = {}) {
 
   // ── Step 1: Enrich organization by domain → get org ID (FREE) ──
   let orgId = null;
+  let orgPhone = null;
   if (domain) {
     const org = await apolloEnrichOrganization(domain, apolloHeaders);
     orgId = org?.id || null;
+    orgPhone = org?.sanitized_phone || org?.phone || null;
+    if (orgPhone) {
+      logger.info('Apollo: org phone found', { domain, orgPhone });
+    }
   }
 
   // ── Step 2: Search people by org ID (FREE, more reliable) ──
@@ -451,36 +469,6 @@ async function enrichViaApollo(lead, options = {}) {
     }
   }
 
-  // Fallback: if org enrich failed or found no people, try search by domain/name directly
-  if (people.length === 0) {
-    logger.info('Apollo: org_id route found no people, falling back to domain/name search', { leadId: lead.id });
-    const searchBody = {
-      page: 1,
-      per_page: userTitles ? 25 : 5,
-      person_titles: userTitles || [
-        'CEO', 'CTO', 'Founder', 'Co-Founder', 'Managing Director',
-        'VP Engineering', 'Head of IT', 'Director',
-      ],
-      include_similar_titles: !userTitles,
-    };
-    if (domain) {
-      searchBody.organization_domains = [domain];
-    } else if (lead.companyName) {
-      searchBody.q_organization_name = lead.companyName;
-    }
-
-    try {
-      const searchRes = await axios.post(
-        'https://api.apollo.io/api/v1/mixed_people/api_search',
-        searchBody,
-        { headers: apolloHeaders, timeout: 15000 }
-      );
-      people = searchRes.data?.people || [];
-    } catch (err) {
-      logger.error('Apollo: fallback search failed', { err: err.message, leadId: lead.id });
-    }
-  }
-
   if (!people.length) {
     logger.info('Apollo: no people found at all', { leadId: lead.id });
     return returnAll ? [] : null;
@@ -494,48 +482,52 @@ async function enrichViaApollo(lead, options = {}) {
   });
 
   if (returnAll) {
-    // Multi-contact mode: use search results directly (FREE, no credits)
-    // The /people/match enrich endpoint often returns 422 for bulk IDs,
-    // and search results already contain useful name/title/linkedin data
+    // Multi-contact mode: enrich each person by Apollo ID to get full name/email/linkedin/phone
+    // Each enrich costs 1 credit, but reveals the real (unmasked) data
     const allContacts = [];
-    const seenEmails = new Set();
+    const seenKeys = new Set();   // dedup by email or name
 
     for (const person of sorted) {
-      const lastName = person.last_name || person.last_name_obfuscated || null;
-      const name = [person.first_name, lastName].filter(Boolean).join(' ') || null;
-      const email = person.email ?? null;
-      const linkedinUrl = person.linkedin_url ?? null;
-      const phone = person.phone_numbers?.[0]?.raw_number ?? null;
-      const title = person.title ?? null;
+      const apolloId = person.id;
+      if (!apolloId) continue;
 
-      // Skip duplicates by email
-      if (email && seenEmails.has(email.toLowerCase())) continue;
-      if (email) seenEmails.add(email.toLowerCase());
+      // Try enrich-by-ID to get full data (1 CREDIT per person)
+      const enriched = await apolloEnrichPersonById(apolloId, apolloHeaders);
 
-      // Include contact if it has any useful data beyond just a name
-      if (name && (email || linkedinUrl || title)) {
-        allContacts.push({ email, phone, linkedinUrl, name, title, source: 'apollo' });
-      }
-    }
-
-    // For the top 3 contacts with has_email, try enrich-by-ID to reveal full email (1 credit each)
-    const toEnrich = sorted.filter(p => p.has_email && p.id).slice(0, 3);
-    for (const person of toEnrich) {
-      const result = await apolloEnrichPersonById(person.id, apolloHeaders);
-      if (result && result.email) {
-        // Find and update the matching contact in allContacts
+      let contact;
+      if (enriched && (enriched.name || enriched.email)) {
+        contact = enriched;
+      } else {
+        // Fallback: use raw search data (masked last name)
         const lastName = person.last_name || person.last_name_obfuscated || null;
-        const name = [person.first_name, lastName].filter(Boolean).join(' ');
-        const idx = allContacts.findIndex(c => c.name === name || (c.linkedinUrl && c.linkedinUrl === result.linkedinUrl));
-        if (idx >= 0) {
-          allContacts[idx] = { ...allContacts[idx], ...result };
-        } else if (!seenEmails.has(result.email.toLowerCase())) {
-          allContacts.push(result);
-        }
+        contact = {
+          name:        [person.first_name, lastName].filter(Boolean).join(' ') || null,
+          email:       person.email ?? null,
+          phone:       person.phone_numbers?.[0]?.raw_number ?? null,
+          linkedinUrl: person.linkedin_url ?? null,
+          title:       person.title ?? null,
+          source:      'apollo',
+        };
       }
+
+      if (!contact.name && !contact.email) continue;
+
+      // Dedup by email if available, otherwise by name+title
+      const dedupKey = contact.email
+        ? `email:${contact.email.toLowerCase()}`
+        : `name:${(contact.name || '').toLowerCase()}|${(contact.title || '').toLowerCase()}`;
+      if (seenKeys.has(dedupKey)) continue;
+      seenKeys.add(dedupKey);
+
+      allContacts.push(contact);
     }
 
-    logger.info('Apollo: multi-contact search done', { leadId: lead.id, total: allContacts.length });
+    // Attach org phone to the result metadata
+    if (orgPhone) {
+      allContacts._orgPhone = orgPhone;
+    }
+
+    logger.info('Apollo: multi-contact search done', { leadId: lead.id, total: allContacts.length, orgPhone });
     return allContacts;
   }
 
