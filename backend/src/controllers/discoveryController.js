@@ -154,7 +154,8 @@ async function startProductScan(req, res) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function saveDiscoveredLead(organizationId, dl, services) {
-  // Deduplicate
+  // Deduplicate: skip only if same company + same job title already exists
+  const jobTitle = dl.jobPostings?.[0]?.title || '';
   const existing = await prisma.lead.findFirst({
     where: {
       organizationId,
@@ -164,8 +165,34 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       ],
     },
   });
-  if (existing) {
-    logger.debug('Lead skipped (duplicate)', { company: dl.companyName, source: dl.source, existingId: existing.id });
+  if (existing && jobTitle) {
+    // Check if this exact job title already exists on any lead for this company
+    const allCompanyLeads = await prisma.lead.findMany({
+      where: {
+        organizationId,
+        OR: [
+          { companyName: { equals: dl.companyName, mode: 'insensitive' } },
+          ...(dl.website ? [{ website: { equals: dl.website, mode: 'insensitive' } }] : []),
+        ],
+      },
+      select: { id: true, jobPostings: true },
+    });
+    const titleLower = jobTitle.toLowerCase();
+    const hasSameJob = allCompanyLeads.some(lead =>
+      Array.isArray(lead.jobPostings) && lead.jobPostings.some(
+        jp => (jp.title || '').toLowerCase() === titleLower
+      )
+    );
+    if (hasSameJob) {
+      logger.debug('Lead skipped (exact same job exists)', {
+        company: dl.companyName, jobTitle, source: dl.source,
+      });
+      return null;
+    }
+    // Different job from same company — allow creation (fall through)
+  } else if (existing && !jobTitle) {
+    // Non-job lead (e.g. community intent) — skip if same company already exists
+    logger.debug('Lead skipped (duplicate, no job title)', { company: dl.companyName, source: dl.source });
     return null;
   }
 
@@ -186,6 +213,7 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       contactName:     dl.contactName        || null,
       contactTitle:    dl.contactTitle       || null,
       contactLinkedin: dl.contactLinkedin    || null,
+      jobPostings:  dl.jobPostings || [],
       intentSignals: [{
         type:       dl.signalType  || 'general',
         text:       dl.signalText  || '',

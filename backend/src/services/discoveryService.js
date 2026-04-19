@@ -504,18 +504,26 @@ Return an empty array [] if none are valid.`;
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function runDiscoveryScan(job, services, filters = {}, progressCallback) {
-  const allLeads    = [];
-  const seenNames   = new Set();
-  const seenDomains = new Set();
+  const allLeads  = [];
+  const seenKeys  = new Set();   // composite: company + job title
 
   function tryAdd(lead) {
     if (!lead?.companyName) return false;
     const nk = normName(lead.companyName);
-    const dk = lead.website ? normDomain(lead.website) : '';
-    if (!nk || seenNames.has(nk)) return false;
-    if (dk && seenDomains.has(dk)) return false;
-    seenNames.add(nk);
-    if (dk) seenDomains.add(dk);
+    if (!nk) return false;
+
+    // Build composite key: company + job title (so same company with different job = new lead)
+    const jobTitle = normName(lead.jobPostings?.[0]?.title || lead.signalText || '');
+    const compositeKey = `${nk}::${jobTitle}`;
+
+    if (seenKeys.has(compositeKey)) {
+      logger.debug('Lead skipped (exact duplicate)', {
+        company: lead.companyName,
+        jobTitle: lead.jobPostings?.[0]?.title || 'N/A',
+      });
+      return false;
+    }
+    seenKeys.add(compositeKey);
     allLeads.push(lead);
     logger.info('Lead discovered', {
       company: lead.companyName,
@@ -524,6 +532,7 @@ async function runDiscoveryScan(job, services, filters = {}, progressCallback) {
       website: lead.website || 'N/A',
       location: lead.location || 'N/A',
       relevance: lead.relevanceScore,
+      jobTitle: lead.jobPostings?.[0]?.title || 'N/A',
       totalSoFar: allLeads.length,
     });
     return true;
