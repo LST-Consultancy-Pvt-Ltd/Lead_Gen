@@ -164,7 +164,10 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       ],
     },
   });
-  if (existing) return null;
+  if (existing) {
+    logger.debug('Lead skipped (duplicate)', { company: dl.companyName, source: dl.source, existingId: existing.id });
+    return null;
+  }
 
   // Score the lead (uses fallback if OpenAI unavailable — never blocks)
   const analysis = await analyzeLeadIntent(dl, services);
@@ -217,6 +220,15 @@ async function saveDiscoveredLead(organizationId, dl, services) {
   runBackgroundEnrichment(lead, prisma).catch(err =>
     logger.error('runBackgroundEnrichment failed', { leadId: lead.id, err: err.message })
   );
+
+  logger.info('Lead saved to DB', {
+    leadId: lead.id,
+    company: dl.companyName,
+    source: dl.source,
+    signalType: dl.signalType || 'general',
+    score: analysis.leadScore,
+    intent: analysis.intentLevel,
+  });
 
   return lead.id;
 }

@@ -19,6 +19,30 @@ const { callOpenAI } = require('./aiService');
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+/**
+ * Truncate text at a sentence boundary near maxLen.
+ * Avoids cutting mid-sentence (the "half sentence" problem).
+ */
+function truncateAtSentence(text, maxLen = 300) {
+  if (!text || text.length <= maxLen) return text;
+  // Find the last sentence-ending punctuation within maxLen
+  const chunk = text.slice(0, maxLen + 50); // look a bit ahead
+  const sentenceEnd = chunk.search(/[.!?]\s/g);
+  let cutIdx = -1;
+  let lastIdx = 0;
+  const regex = /[.!?]\s/g;
+  let match;
+  while ((match = regex.exec(chunk)) !== null) {
+    if (match.index <= maxLen) {
+      cutIdx = match.index + 1; // include the punctuation
+    }
+  }
+  if (cutIdx > maxLen * 0.4) return text.slice(0, cutIdx).trim();
+  // Fallback: cut at last space before maxLen
+  const spaceIdx = text.lastIndexOf(' ', maxLen);
+  return (spaceIdx > 0 ? text.slice(0, spaceIdx) : text.slice(0, maxLen)).trim() + '…';
+}
+
 const TEST_MODE         = process.env.TEST_MODE === 'true';
 const TEST_MAX_VARIANTS = 2;
 const TEST_MAX_PAGES    = 1;
@@ -311,7 +335,7 @@ function jobToLead(jr, service, profile) {
     description:     '',
     techStack:       [],
     signalType:      'hiring',
-    signalText:      `Actively hiring: "${jr.title}" — ${(jr.description || '').slice(0, 160)}`,
+    signalText:      `Actively hiring: "${jr.title}" — ${jr.description || ''}`,
     confidence:      92,
     relevanceScore:  freshScore,
     contactName:     null,
@@ -322,7 +346,7 @@ function jobToLead(jr, service, profile) {
     jobPostings: [{
       title:           jr.title || service,
       url:             applyUrl,
-      snippet:         (jr.description || '').slice(0, 300),
+      snippet:         jr.description || '',
       postedAt,
       workArrangement: isRemote ? 'Remote' : scheduleType || 'On-site',
       platform:        jr.via   || '',
@@ -332,6 +356,147 @@ function jobToLead(jr, service, profile) {
     sourceUrl: applyUrl,
     _isJobLead: true,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reddit & community intent search
+// Searches Google for Reddit/community discussions mentioning pain points
+// related to the service — signals buying intent even before a job is posted
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function searchCommunityLeads(service, filters = {}) {
+  if (!config.serpapi?.key) return [];
+
+  const queries = [
+    `site:reddit.com "${service}" looking for company OR vendor OR recommend`,
+    `site:reddit.com "${service}" need help OR implementation OR migration`,
+    `site:reddit.com "${service}" hiring OR consultant OR freelancer`,
+  ];
+
+  const rawResults = [];
+
+  for (const query of queries) {
+    try {
+      const { data } = await axios.get('https://serpapi.com/search', {
+        params: {
+          api_key: config.serpapi.key,
+          engine:  'google',
+          q:       query,
+          num:     10,
+          tbs:     'qdr:m',   // last month only
+        },
+        timeout: 12000,
+      });
+
+      const results = data.organic_results || [];
+      for (const r of results) {
+        const link = r.link || '';
+        // Only keep Reddit/Quora links
+        if (!link.includes('reddit.com') && !link.includes('quora.com')) continue;
+        rawResults.push({
+          title:   r.title || '',
+          snippet: r.snippet || '',
+          link,
+          source:  link.includes('reddit.com') ? 'Reddit' : 'Quora',
+        });
+      }
+
+      await sleep(800);
+    } catch (err) {
+      logger.warn('Community search failed', { query, err: err.message });
+    }
+  }
+
+  if (rawResults.length === 0) {
+    logger.info('Community search: no results found', { service });
+    return [];
+  }
+
+  // Deduplicate by link
+  const uniqueResults = [];
+  const seenLinks = new Set();
+  for (const r of rawResults) {
+    if (!seenLinks.has(r.link)) {
+      seenLinks.add(r.link);
+      uniqueResults.push(r);
+    }
+  }
+
+  // ── AI filter: extract real companies with buying intent ──────────────
+  // Send all snippets to AI in one call for efficiency
+  const leads = [];
+  try {
+    const systemPrompt = `You are a B2B lead qualification expert. You will be given snippets from Reddit/Quora posts about "${service}".
+
+For each snippet, determine if it mentions a REAL company (not a product, subreddit, or generic term) that has buying intent for ${service}-related services.
+
+Return ONLY valid JSON array. Each item must have:
+- "index": the snippet index (0-based)
+- "companyName": the real company name mentioned (must be an actual business, not a product name or generic word)  
+- "buyingIntent": brief explanation of why this is buying intent
+- "isValid": true only if a REAL company with REAL buying intent is mentioned
+
+If a snippet has no real company or no buying intent, set isValid to false.
+Return an empty array [] if none are valid.`;
+
+    const userPrompt = uniqueResults.map((r, i) =>
+      `[${i}] Title: ${r.title}\nSnippet: ${r.snippet}\nURL: ${r.link}`
+    ).join('\n\n');
+
+    const aiResponse = await callOpenAI(systemPrompt, userPrompt, 800);
+
+    // Parse AI response
+    let parsed = [];
+    try {
+      const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      logger.warn('Community AI filter: failed to parse response', { err: parseErr.message });
+    }
+
+    for (const item of parsed) {
+      if (!item.isValid || !item.companyName) continue;
+      const idx = item.index;
+      if (idx < 0 || idx >= uniqueResults.length) continue;
+
+      const r = uniqueResults[idx];
+
+      leads.push({
+        companyName:       item.companyName.trim(),
+        website:           '',
+        industry:          '',
+        location:          '',
+        companySize:       '',
+        description:       '',
+        techStack:         [],
+        signalType:        'community_intent',
+        signalText:        `${r.source} post: "${r.title}" — ${r.snippet}`,
+        confidence:        70,
+        relevanceScore:    75,
+        contactName:       null,
+        contactTitle:      null,
+        contactEmail:      null,
+        contactLinkedin:   null,
+        companyLinkedinUrl: null,
+        jobPostings:       [],
+        source:            `${r.source} — ${r.link}`,
+        sourceUrl:         r.link,
+        _isJobLead:        false,
+      });
+
+      logger.info('Community lead validated by AI', {
+        company: item.companyName,
+        intent: item.buyingIntent,
+        source: r.source,
+        url: r.link,
+      });
+    }
+  } catch (err) {
+    logger.warn('Community AI filter failed', { err: err.message });
+  }
+
+  logger.info('Community intent search done', { service, rawResults: uniqueResults.length, validLeads: leads.length });
+  return leads;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -352,6 +517,15 @@ async function runDiscoveryScan(job, services, filters = {}, progressCallback) {
     seenNames.add(nk);
     if (dk) seenDomains.add(dk);
     allLeads.push(lead);
+    logger.info('Lead discovered', {
+      company: lead.companyName,
+      source: lead.source,
+      signalType: lead.signalType,
+      website: lead.website || 'N/A',
+      location: lead.location || 'N/A',
+      relevance: lead.relevanceScore,
+      totalSoFar: allLeads.length,
+    });
     return true;
   }
 
@@ -409,6 +583,18 @@ async function runDiscoveryScan(job, services, filters = {}, progressCallback) {
     }
 
     if (TEST_MODE && allLeads.length >= TEST_MAX_LEADS) break;
+  }
+
+  // ── Phase 2: Reddit & community intent signals ──────────────────────────
+  if (!TEST_MODE || allLeads.length < TEST_MAX_LEADS) {
+    for (const service of services) {
+      const communityLeads = await searchCommunityLeads(service, filters);
+      for (const lead of communityLeads) {
+        if (TEST_MODE && allLeads.length >= TEST_MAX_LEADS) break;
+        tryAdd(lead);
+      }
+      await tick('community-' + service);
+    }
   }
 
   if (progressCallback) await progressCallback(100, allLeads.length);

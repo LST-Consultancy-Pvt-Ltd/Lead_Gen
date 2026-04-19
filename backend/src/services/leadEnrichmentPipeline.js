@@ -141,10 +141,12 @@ async function kgLookup(lead) {
     if (!kg) return null;
 
     let companySize = null;
+    let rawEmployeeCount = undefined;
     const empRaw = kg.employees || kg.number_of_employees || '';
     if (empRaw) {
       const num = parseInt(empRaw.toString().replace(/[^0-9]/g, ''));
       if (!isNaN(num)) {
+        rawEmployeeCount = num;
         if (num > 10000) companySize = '10000+';
         else if (num > 1000) companySize = '1000-10000';
         else if (num > 200)  companySize = '200-1000';
@@ -172,6 +174,7 @@ async function kgLookup(lead) {
 
     return {
       companySize,
+      rawEmployeeCount,
       industry,
       location:      headquarters,
       description,
@@ -632,6 +635,20 @@ async function runBackgroundEnrichment(lead, prisma) {
       if (Object.keys(safePatch).length > 0) {
         await prisma.lead.update({ where: { id: cur.id }, data: safePatch });
         logger.info('Background enrichment saved', { leadId: cur.id, fields: Object.keys(safePatch) });
+      }
+    }
+
+    // ── Auto-archive tiny companies (0-1 employees) ──────────────────────
+    const finalSize = patch.companySize || cur.companySize || '';
+    if (finalSize === '1-10') {
+      // Check if KG gave us the raw employee count — if ≤ 1, archive
+      const rawEmpCount = kg?.rawEmployeeCount;
+      if (rawEmpCount !== undefined && rawEmpCount <= 1) {
+        await prisma.lead.update({
+          where: { id: cur.id },
+          data: { status: 'disqualified', notes: (cur.notes || '') + '\n[Auto] Disqualified: company has 0-1 employees.' },
+        });
+        logger.info('Auto-disqualified tiny company', { leadId: cur.id, employees: rawEmpCount });
       }
     }
   } catch (err) {

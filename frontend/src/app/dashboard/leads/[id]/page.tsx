@@ -1268,6 +1268,12 @@ export default function LeadDetailPage() {
             {lead.source && (
               <p className="text-xs text-slate-600 mt-2">Source: {lead.source}</p>
             )}
+            {lead.sourceUrl && (
+              <a href={lead.sourceUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-400 hover:underline mt-1">
+                View source <ExternalLink size={10} />
+              </a>
+            )}
             <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/[0.06]">
               <div className="flex items-center gap-2 text-xs">
                 <Calendar size={12} className="text-slate-500" />
