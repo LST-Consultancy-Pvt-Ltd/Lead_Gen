@@ -200,11 +200,15 @@ async function enrichLeadViaApollo(req, res) {
       // Save org phone to companyPhone (company-level, not personal contact)
       const orgPhone = contacts._orgPhone || null;
       if (orgPhone && !lead.companyPhone) {
-        await prisma.lead.update({
-          where: { id: lead.id },
-          data: { companyPhone: orgPhone },
-        });
-        lead.companyPhone = orgPhone;
+        try {
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: { companyPhone: orgPhone },
+          });
+          lead.companyPhone = orgPhone;
+        } catch (phoneErr) {
+          logger.warn('Failed to save companyPhone (non-fatal)', { err: phoneErr.message });
+        }
       }
 
       // Save first contact as primary if lead has no primary contact yet

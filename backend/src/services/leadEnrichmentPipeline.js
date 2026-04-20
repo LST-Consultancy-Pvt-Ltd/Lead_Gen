@@ -346,6 +346,90 @@ async function apolloEnrichOrganization(domain, headers) {
   }
 }
 
+// ── Title synonym groups ──
+// Each array contains equivalent title variations. When a user searches for
+// any variant, all variants in the group are sent to Apollo, and the post-filter
+// treats all variants as matches.
+const TITLE_SYNONYM_GROUPS = [
+  ['ceo', 'chief executive officer'],
+  ['cto', 'chief technology officer'],
+  ['cfo', 'chief financial officer'],
+  ['coo', 'chief operating officer'],
+  ['cmo', 'chief marketing officer'],
+  ['cio', 'chief information officer'],
+  ['ciso', 'chief information security officer'],
+  ['cpo', 'chief product officer'],
+  ['cro', 'chief revenue officer'],
+  ['cdo', 'chief data officer', 'chief digital officer'],
+  ['clo', 'chief legal officer'],
+  ['chro', 'chief human resources officer'],
+  ['it director', 'director of it', 'director of information technology'],
+  ['hr director', 'director of hr', 'director of human resources'],
+  ['finance director', 'director of finance'],
+  ['sales director', 'director of sales'],
+  ['marketing director', 'director of marketing'],
+  ['operations director', 'director of operations'],
+  ['engineering director', 'director of engineering'],
+  ['vp engineering', 'vice president of engineering', 'vice president engineering'],
+  ['vp sales', 'vice president of sales', 'vice president sales'],
+  ['vp marketing', 'vice president of marketing', 'vice president marketing'],
+  ['vp operations', 'vice president of operations', 'vice president operations'],
+  ['vp product', 'vice president of product', 'vice president product'],
+  ['vp finance', 'vice president of finance', 'vice president finance'],
+  ['vp hr', 'vice president of hr', 'vice president hr'],
+  ['vp it', 'vice president of it', 'vice president it'],
+  ['vp technology', 'vice president of technology', 'vice president technology'],
+  ['vp business development', 'vice president of business development'],
+  ['erp manager', 'enterprise resource planning manager'],
+  ['it manager', 'information technology manager'],
+  ['hr manager', 'human resources manager'],
+  ['c suite', 'c-suite', 'csuite'],
+];
+
+/**
+ * Expand an array of titles by adding known synonyms.
+ * E.g. ['CEO', 'IT Director'] → ['CEO', 'Chief Executive Officer', 'IT Director', 'Director of IT', ...]
+ */
+function expandTitlesWithSynonyms(titles) {
+  const expanded = new Set(titles.map(t => t.toLowerCase().trim()));
+  for (const title of titles) {
+    const lower = title.toLowerCase().trim();
+    for (const group of TITLE_SYNONYM_GROUPS) {
+      if (group.includes(lower)) {
+        group.forEach(syn => expanded.add(syn));
+      }
+    }
+  }
+  return [...expanded];
+}
+
+/**
+ * Check if a person's title matches any of the user-selected titles,
+ * accounting for synonyms and word-boundary-aware matching.
+ */
+function titleMatchesAny(personTitle, searchTitles) {
+  if (!personTitle) return false;
+  const pTitle = personTitle.toLowerCase().trim();
+
+  // Build expanded set of all acceptable titles (with synonyms)
+  const expandedTitles = expandTitlesWithSynonyms(searchTitles);
+
+  // 1) Exact match against expanded synonyms
+  if (expandedTitles.some(t => pTitle === t)) return true;
+
+  // 2) Word-boundary match: search term appears as whole words inside the person's title
+  //    E.g. "Finance Manager" matches "Senior Finance Manager"
+  //    But "CEO" does NOT match "Process Coordinator"
+  //    Uses word boundary regex (\b) for precise matching
+  for (const t of expandedTitles) {
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b${escaped}\\b`, 'i');
+    if (re.test(pTitle)) return true;
+  }
+
+  return false;
+}
+
 async function apolloSearchPeopleByOrgId(orgId, headers, jobTitle = null, perPage = 10, personTitles = null) {
   const payload = {
     organization_ids: [orgId],
@@ -353,10 +437,14 @@ async function apolloSearchPeopleByOrgId(orgId, headers, jobTitle = null, perPag
     page: 1,
   };
   if (personTitles && personTitles.length > 0) {
-    payload.person_titles = personTitles;
-    payload.include_similar_titles = false;
+    // Expand with synonyms so Apollo can find both "CEO" and "Chief Executive Officer"
+    const expandedTitles = expandTitlesWithSynonyms(personTitles);
+    payload.person_titles = expandedTitles;
+    payload.include_similar_titles = true;
   } else if (jobTitle) {
-    payload.person_titles = [jobTitle];
+    // Expand single title too
+    const expandedTitles = expandTitlesWithSynonyms([jobTitle]);
+    payload.person_titles = expandedTitles;
     payload.include_similar_titles = true;
   }
 
@@ -369,15 +457,11 @@ async function apolloSearchPeopleByOrgId(orgId, headers, jobTitle = null, perPag
     let people = data?.people || [];
     logger.info('Apollo: people search by org_id', { orgId, found: people.length });
 
-    // Apollo's person_titles does substring matching (e.g. "Director" matches "Managing Director").
-    // When user picked specific titles, filter to exact title matches only.
+    // Post-filter: keep only people whose title matches the user's selected titles
+    // Uses synonym-aware + contains matching instead of exact match
     if (personTitles && personTitles.length > 0 && people.length > 0) {
-      const lowerTitles = personTitles.map(t => t.toLowerCase().trim());
-      const filtered = people.filter(p => {
-        const pTitle = (p.title || '').toLowerCase().trim();
-        return lowerTitles.some(t => pTitle === t);
-      });
-      logger.info('Apollo: exact title filter', { before: people.length, after: filtered.length, titles: personTitles });
+      const filtered = people.filter(p => titleMatchesAny(p.title, personTitles));
+      logger.info('Apollo: title filter (synonym-aware)', { before: people.length, after: filtered.length, titles: personTitles });
       people = filtered;
     }
 

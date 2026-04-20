@@ -180,11 +180,18 @@ function EnrichPanel({
   }
 
   function handleSearch() {
-    onApollo(selectedTitles.length > 0 ? selectedTitles : undefined);
+    // Auto-include typed text as a title if user hasn't explicitly added it
+    const typed = titleSearch.trim();
+    let titles = [...selectedTitles];
+    if (typed.length > 0 && !titles.some(t => t.toLowerCase() === typed.toLowerCase())) {
+      titles.push(typed);
+    }
+    onApollo(titles.length > 0 ? titles : undefined);
     setShowTitlePicker(false);
+    setTitleSearch('');
   }
 
-  if (hasContact && status === 'idle') {
+  if (hasContact && (status === 'idle' || status === 'apollo_found' || status === 'apollo_failed')) {
     return (
       <div className="pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3 space-y-2">
         <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
@@ -265,9 +272,9 @@ function EnrichPanel({
 
         {!showTitlePicker && (
           <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
-            onClick={handleSearch} disabled={isApolloLoading || status === 'apollo_found'}>
+            onClick={handleSearch} disabled={isApolloLoading}>
             {isApolloLoading ? <><Loader2 size={12} className="animate-spin" /> Searching Apollo…</>
-              : status === 'apollo_found' ? '✓ Contacts found'
+              : status === 'apollo_found' ? <><Search size={12} /> Search Again</>
               : status === 'apollo_failed' ? '✕ Not found — try again'
               : <><Search size={12} /> Search Apollo</>}
           </button>
