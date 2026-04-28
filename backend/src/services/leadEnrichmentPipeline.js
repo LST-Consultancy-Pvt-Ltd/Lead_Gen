@@ -766,10 +766,105 @@ async function aggregateCompanyProfile(lead) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Auto Apollo enrichment — called in background after a lead is saved during a scan.
+// Finds contacts for the decision-maker roles chosen by the user on the discovery page.
+// Safe to fire-and-forget; never throws.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function runApolloEnrichmentBackground(lead, prisma, { organizationId, createdById = null, roles = [] } = {}) {
+  try {
+    if (!config.apollo?.apiKey) {
+      logger.info('Apollo auto-enrich: skipped (no API key)', { leadId: lead.id });
+      return;
+    }
+
+    const personTitles = Array.isArray(roles) && roles.length > 0 ? roles : null;
+
+    logger.info('Apollo auto-enrich: starting', {
+      leadId: lead.id,
+      company: lead.companyName,
+      roles: personTitles || 'defaults',
+    });
+
+    const contacts = await enrichViaApollo(lead, {
+      personTitles,
+      returnAll: !!(personTitles && personTitles.length > 0),
+    });
+
+    if (!contacts || (Array.isArray(contacts) ? contacts.length === 0 : !contacts.email && !contacts.name)) {
+      logger.info('Apollo auto-enrich: no contacts found', { leadId: lead.id });
+      return;
+    }
+
+    const contactList = Array.isArray(contacts) ? contacts : [contacts];
+    const orgPhone = contacts._orgPhone || null;
+
+    // Save org phone on lead if missing
+    if (orgPhone) {
+      await prisma.lead.update({ where: { id: lead.id }, data: { companyPhone: orgPhone } }).catch(() => {});
+    }
+
+    // Save first contact as primary if lead has none
+    const freshLead = await prisma.lead.findUnique({ where: { id: lead.id } }).catch(() => lead);
+    let primarySaved = !!(freshLead?.contactEmail || freshLead?.contactName);
+
+    for (const c of contactList) {
+      if (!c.name && !c.email) continue;
+
+      if (!primarySaved) {
+        // Set as primary contact on the lead record
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: {
+            contactName:     c.name  || null,
+            contactTitle:    c.title || null,
+            contactEmail:    c.email || null,
+            contactPhone:    c.phone || null,
+            contactLinkedin: c.linkedinUrl || null,
+          },
+        }).catch(err => logger.warn('Apollo auto-enrich: failed to set primary contact', { err: err.message }));
+        primarySaved = true;
+      }
+
+      // Save as a Contact record (dedup by email or name+title)
+      try {
+        let existing = null;
+        if (c.email) {
+          existing = await prisma.contact.findFirst({ where: { leadId: lead.id, email: c.email } });
+        } else if (c.name) {
+          existing = await prisma.contact.findFirst({ where: { leadId: lead.id, name: c.name, title: c.title || undefined } });
+        }
+        if (!existing) {
+          await prisma.contact.create({
+            data: {
+              leadId:         lead.id,
+              organizationId: organizationId || lead.organizationId,
+              name:           c.name  || 'Unknown',
+              title:          c.title || null,
+              email:          c.email || null,
+              phone:          c.phone || null,
+              linkedin:       c.linkedinUrl || null,
+              designation:    c.title || null,
+            },
+          });
+        }
+      } catch (err) {
+        logger.warn('Apollo auto-enrich: failed to save contact record', { err: err.message });
+      }
+    }
+
+    logger.info('Apollo auto-enrich: done', { leadId: lead.id, saved: contactList.length });
+  } catch (err) {
+    logger.warn('Apollo auto-enrich: failed (non-fatal)', { leadId: lead.id, err: err.message });
+  }
+}
+
 module.exports = {
   enrichViaSignalHire,
   enrichViaApollo,
   runBackgroundEnrichment,
+  runApolloEnrichmentBackground,
   aggregateCompanyProfile,
   resolveDomain,
   findLinkedinUrl,

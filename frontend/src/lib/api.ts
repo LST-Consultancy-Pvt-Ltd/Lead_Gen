@@ -305,6 +305,8 @@ export const campaignsApi = {
 
 export const discoveryApi = {
   startScan: (data?: any) => api.post('/discovery/scan', data || {}),
+  smartScan: (prompt: string) => api.post('/discovery/scan/smart', { prompt }),
+  parsePrompt: (prompt: string) => api.post('/discovery/parse-prompt', { prompt }),
   startProductScan: (data?: any) => api.post('/discovery/scan/product', data || {}),
   generateProductPrompt: (data: any) => api.post('/discovery/product/generate-prompt', data),
   getActiveScan: () => api.get('/discovery/scan/active'),

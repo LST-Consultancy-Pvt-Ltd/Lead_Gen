@@ -1,0 +1,203 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.page { padding: 1.5rem 0; max-width: 780px; margin: auto; }
+.toggle-bar { display: flex; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 4px; margin-bottom: 1.5rem; }
+.toggle-btn { flex: 1; padding: 10px; border: none; background: transparent; border-radius: var(--border-radius-md); font-size: 14px; font-weight: 400; color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s; }
+.toggle-btn.active { background: var(--color-background-primary); color: var(--color-text-primary); font-weight: 500; border: 0.5px solid var(--color-border-secondary); }
+.section { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+.section-label { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 13px; color: var(--color-text-secondary); }
+.field input, .field select, .field textarea { font-family: var(--font-sans); font-size: 14px; padding: 8px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-primary); outline: none; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--color-border-primary); background: var(--color-background-primary); }
+.field textarea { resize: vertical; min-height: 72px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+.tag { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: 999px; font-size: 12px; color: var(--color-text-secondary); cursor: pointer; background: var(--color-background-secondary); transition: all 0.12s; user-select: none; }
+.tag.selected { border-color: #534AB7; background: #EEEDFE; color: #3C3489; }
+.tag .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+.tag.selected .dot { opacity: 1; }
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row input[type=range] { flex: 1; }
+.range-val { font-size: 13px; font-weight: 500; color: var(--color-text-primary); min-width: 60px; text-align: right; }
+.submit-bar { display: flex; gap: 10px; align-items: center; margin-top: 1.25rem; }
+.btn-primary { flex: 1; padding: 12px; background: #534AB7; color: #EEEDFE; border: none; border-radius: var(--border-radius-md); font-size: 15px; font-weight: 500; cursor: pointer; }
+.btn-primary:hover { background: #3C3489; }
+.btn-secondary { padding: 12px 20px; background: transparent; color: var(--color-text-secondary); border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); font-size: 14px; cursor: pointer; }
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
+.badge-opt { background: var(--color-background-secondary); color: var(--color-text-tertiary); border: 0.5px solid var(--color-border-tertiary); }
+.field-row { display: flex; align-items: center; gap: 8px; }
+.field-row label { font-size: 13px; color: var(--color-text-secondary); flex: 1; }
+</style>
+
+<div class="page">
+
+<div class="toggle-bar">
+  <button class="toggle-btn active" onclick="switchMode('service')" id="btn-service">Services</button>
+  <button class="toggle-btn" onclick="switchMode('product')" id="btn-product">Products</button>
+</div>
+
+<div class="section">
+  <div class="section-label">Target company profile</div>
+  <div class="grid-2" style="margin-bottom:12px;">
+    <div class="field">
+      <label>Industry / vertical</label>
+      <select><option>Any industry</option><option>Technology</option><option>Healthcare</option><option>Finance & Banking</option><option>Manufacturing</option><option>Retail & E-commerce</option><option>Real Estate</option><option>Education</option><option>Logistics</option><option>Media & Marketing</option><option>Legal & Professional Services</option></select>
+    </div>
+    <div class="field">
+      <label>Company size</label>
+      <select><option>Any size</option><option>1–10 (Micro)</option><option>11–50 (Small)</option><option>51–200 (Mid-market)</option><option>201–500</option><option>500–1000</option><option>1000+ (Enterprise)</option></select>
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:12px;">
+    <div class="field">
+      <label>Geography / region</label>
+      <input type="text" placeholder="e.g. India, Southeast Asia, USA…" />
+    </div>
+    <div class="field">
+      <label>Company type</label>
+      <select><option>Any</option><option>B2B</option><option>B2C</option><option>Government / PSU</option><option>Non-profit / NGO</option><option>Startup</option></select>
+    </div>
+  </div>
+  <div class="field">
+    <label>Annual revenue range <span class="badge badge-opt">optional</span></label>
+    <div class="tag-row" id="rev-tags">
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>&lt; ₹1 Cr</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>₹1–10 Cr</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>₹10–100 Cr</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>₹100–500 Cr</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>₹500 Cr+</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-label" id="offer-label">What you're offering</div>
+  <div class="grid-2" style="margin-bottom:12px;">
+    <div class="field">
+      <label id="offer-name-label">Service name / category</label>
+      <input type="text" id="offer-name" placeholder="e.g. Digital Marketing, HR Consulting…" />
+    </div>
+    <div class="field">
+      <label id="price-label">Pricing model</label>
+      <select id="price-select">
+        <option>Monthly retainer</option>
+        <option>Project-based</option>
+        <option>Per hour</option>
+        <option>Revenue share</option>
+        <option>Custom / negotiable</option>
+      </select>
+    </div>
+  </div>
+  <div class="field" style="margin-bottom:12px;">
+    <label>Value proposition / key benefit</label>
+    <textarea id="value-prop" placeholder="What problem do you solve? What outcome does the client get?"></textarea>
+  </div>
+  <div class="field">
+    <label>Keywords / pain points to target</label>
+    <input type="text" placeholder="e.g. cost reduction, compliance, scalability, lead time…" />
+  </div>
+</div>
+
+<div class="section" id="decision-section">
+  <div class="section-label">Decision maker targeting</div>
+  <div class="field" style="margin-bottom:12px;">
+    <label>Job titles / roles to reach</label>
+    <div class="tag-row" id="role-tags">
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>CEO / Founder</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>CTO / CIO</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>CMO</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>CFO</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>VP Sales</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>Head of HR</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>Procurement</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>Operations</div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="field">
+      <label>Preferred contact channel</label>
+      <select><option>Email</option><option>LinkedIn</option><option>Phone</option><option>WhatsApp</option><option>Any</option></select>
+    </div>
+    <div class="field">
+      <label>Seniority level</label>
+      <select><option>C-suite</option><option>VP / Director</option><option>Manager</option><option>Any</option></select>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-label">Lead quality filters</div>
+  <div class="field" style="margin-bottom:12px;">
+    <label>Number of leads to generate</label>
+    <div class="range-row">
+      <input type="range" min="10" max="500" step="10" value="50" id="lead-count" oninput="document.getElementById('lead-val').textContent=this.value+' leads'" />
+      <span class="range-val" id="lead-val">50 leads</span>
+    </div>
+  </div>
+  <div class="field" style="margin-bottom:12px;">
+    <label>Minimum lead score threshold <span class="badge badge-opt">optional</span></label>
+    <div class="tag-row">
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>All leads</div>
+      <div class="tag selected" onclick="toggleTag(this)"><span class="dot"></span>Warm (60%+)</div>
+      <div class="tag" onclick="toggleTag(this)"><span class="dot"></span>Hot (80%+)</div>
+    </div>
+  </div>
+  <div class="field">
+    <label>Exclude <span class="badge badge-opt">optional</span></label>
+    <input type="text" placeholder="Competitors, existing clients, blacklisted domains…" />
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-label">Output preferences</div>
+  <div class="grid-2" style="margin-bottom:12px;">
+    <div class="field">
+      <label>Output format</label>
+      <select><option>CSV / Excel</option><option>Google Sheets</option><option>CRM (Salesforce)</option><option>HubSpot</option><option>JSON</option></select>
+    </div>
+    <div class="field">
+      <label>Fields to include</label>
+      <select><option>Standard (Name, Email, Phone, Company)</option><option>Extended (+ LinkedIn, Website, Revenue)</option><option>Full profile</option></select>
+    </div>
+  </div>
+  <div class="field">
+    <label>Additional notes <span class="badge badge-opt">optional</span></label>
+    <textarea placeholder="Any special instructions for the AI…" style="min-height:56px;"></textarea>
+  </div>
+</div>
+
+<div class="submit-bar">
+  <button class="btn-secondary">Reset</button>
+  <button class="btn-primary" onclick="sendPrompt('Generate leads based on my search criteria')">Generate leads ↗</button>
+</div>
+
+</div>
+
+<script>
+function switchMode(mode) {
+  document.getElementById('btn-service').classList.toggle('active', mode==='service');
+  document.getElementById('btn-product').classList.toggle('active', mode==='product');
+  if(mode==='product') {
+    document.getElementById('offer-name-label').textContent = 'Product name / category';
+    document.getElementById('offer-name').placeholder = 'e.g. SaaS tool, Industrial Equipment…';
+    document.getElementById('price-label').textContent = 'Pricing model';
+    document.getElementById('price-select').innerHTML = '<option>One-time purchase</option><option>Subscription (SaaS)</option><option>Freemium</option><option>Volume / tiered</option><option>Distributor / reseller</option>';
+    document.getElementById('offer-label').textContent = 'What you\'re selling';
+    document.getElementById('value-prop').placeholder = 'What does your product do? What outcome does the buyer get?';
+  } else {
+    document.getElementById('offer-name-label').textContent = 'Service name / category';
+    document.getElementById('offer-name').placeholder = 'e.g. Digital Marketing, HR Consulting…';
+    document.getElementById('price-label').textContent = 'Pricing model';
+    document.getElementById('price-select').innerHTML = '<option>Monthly retainer</option><option>Project-based</option><option>Per hour</option><option>Revenue share</option><option>Custom / negotiable</option>';
+    document.getElementById('offer-label').textContent = 'What you\'re offering';
+    document.getElementById('value-prop').placeholder = 'What problem do you solve? What outcome does the client get?';
+  }
+}
+function toggleTag(el) {
+  el.classList.toggle('selected');
+}
+</script>

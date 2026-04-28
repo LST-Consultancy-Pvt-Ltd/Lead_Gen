@@ -5,7 +5,7 @@ import { discoveryApi } from '../../../lib/api';
 import { Badge, ProgressBar, Spinner } from '../../../components/ui';
 import {
   Plus, X, Zap, Loader2, CheckCircle2,
-  Link2, FileText, AlignLeft, Package, Briefcase,
+  Link2, FileText, AlignLeft,
   ChevronDown, ChevronUp, Upload, ExternalLink,
   TrendingUp, Target, Users, Edit3,
   Sparkles, ArrowRight, RotateCcw,
@@ -56,13 +56,43 @@ function SectionCard({
 export default function LeadDiscoveryPage() {
   const qc = useQueryClient();
 
-  const [scanMode, setScanMode] = useState<'service' | 'product'>('service');
+  const [scanMode, setScanMode] = useState<'service' | 'product' | null>(null);
 
   // Service mode
-  const [newService,     setNewService]     = useState('');
-  const [workTypes,      setWorkTypes]      = useState<string[]>([]);
-  const [targetIndustry, setTargetIndustry] = useState('');
-  const [targetRegion,   setTargetRegion]   = useState('');
+  const [newService,          setNewService]          = useState('');
+  const [workTypes,           setWorkTypes]           = useState<string[]>([]);
+  const [targetIndustry,      setTargetIndustry]      = useState('');
+  const [targetRegion,        setTargetRegion]        = useState('');
+  const [selectedRoles,       setSelectedRoles]       = useState<string[]>([]);
+  const [customRoleInput,     setCustomRoleInput]     = useState('');
+
+  function toggleRole(role: string) {
+    setSelectedRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
+  }
+  function addCustomRole() {
+    const r = customRoleInput.trim();
+    if (!r || selectedRoles.includes(r)) return;
+    setSelectedRoles(prev => [...prev, r]);
+    setCustomRoleInput('');
+  }
+
+  // Service mode — extended fields
+  const [companySize,    setCompanySize]    = useState('');
+  const [companyType,    setCompanyType]    = useState('');
+  const [revenueRanges,  setRevenueRanges]  = useState<string[]>([]);
+  const [serviceName,    setServiceName]    = useState('');
+  const [pricingModel,   setPricingModel]   = useState('');
+  const [valueProp,      setValueProp]      = useState('');
+  const [keywords,       setKeywords]       = useState('');
+  const [contactChannel, setContactChannel] = useState('');
+  const [seniorityLevel, setSeniorityLevel] = useState('');
+  const [leadCount,      setLeadCount]      = useState(50);
+  const [scoreThreshold, setScoreThreshold] = useState('');
+  const [excludeList,    setExcludeList]    = useState('');
+
+  function toggleRevenueRange(r: string) {
+    setRevenueRanges(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r]);
+  }
 
   // Product mode inputs
   const [productUrl,          setProductUrl]          = useState('');
@@ -209,7 +239,12 @@ export default function LeadDiscoveryPage() {
 
   // ── Service scan ──────────────────────────────────────────────────────────
   const scanMutation = useMutation({
-    mutationFn: () => discoveryApi.startScan({ targetIndustry, targetRegion, workTypes }),
+    mutationFn: () => discoveryApi.startScan({
+      targetIndustry, targetRegion, workTypes, decisionMakerRoles: selectedRoles,
+      companySize, companyType, revenueRanges,
+      serviceName, pricingModel, valueProp, keywords,
+      contactChannel, seniorityLevel, leadCount, scoreThreshold, excludeList,
+    }),
     onSuccess: res => {
       const id = res.data.data.id ?? res.data.data.jobId;
       setActiveScanId(id);
@@ -258,6 +293,27 @@ export default function LeadDiscoveryPage() {
   const canStartProductScan = promptGenerated && promptText.trim().length > 20;
   const totalLeadsEver = (scansData?.items ?? []).reduce((s: number, j: any) => s + (j.leadsFound ?? 0), 0);
 
+  // AI smart search
+  const [smartPrompt, setSmartPrompt] = useState('');
+
+  const smartScanMutation = useMutation({
+    mutationFn: () => {
+      if (!smartPrompt.trim()) throw new Error('Enter a description first');
+      return discoveryApi.smartScan(smartPrompt.trim());
+    },
+    onSuccess: (res) => {
+      const id = res.data.data.id ?? res.data.data.jobId;
+      setActiveScanId(id);
+      qc.invalidateQueries({ queryKey: ['scans'] });
+      startOptimisticProgress();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to start smart scan');
+    },
+  });
+
+  const smartScanning = smartScanMutation.isPending || (!!activeScanId && (activeScan == null || ['running','pending'].includes(activeScan?.status)));
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
@@ -289,22 +345,75 @@ export default function LeadDiscoveryPage() {
         </div> */}
       </div>
 
-      {/* Mode tabs */}
-      <div className="flex gap-2">
-        {([
-          { mode: 'service' as const, icon: <Briefcase size={14} />, label: 'Service / Position' },
-          { mode: 'product' as const, icon: <Package   size={14} />, label: 'Product Discovery'  },
-        ] as const).map(({ mode, icon, label }) => (
-          <button key={mode} onClick={() => setScanMode(mode)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all',
-              scanMode === mode
-                ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
-                : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
-            )}>
-            {icon}{label}
-          </button>
-        ))}
+      {/* AI Smart Search */}
+      <div className="card overflow-hidden">
+        <div className="px-5 pt-5 pb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
+              <Sparkles size={13} className="text-violet-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">AI Smart Search</p>
+              <p className="text-xs text-slate-500">Describe your ideal lead in plain English — AI generates leads directly</p>
+            </div>
+          </div>
+
+          {smartScanning ? (
+            <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="violet"
+              steps={['AI parses your prompt', 'Generating job title variants', 'Scanning Google Jobs', 'Filtering results', 'Saving leads']} />
+          ) : scanComplete && activeScan ? (
+            <ScanComplete activeScan={activeScan} />
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <textarea
+                  className="input text-sm resize-none flex-1 leading-relaxed"
+                  rows={2}
+                  placeholder='e.g. "Find 50 CTOs at mid-size SaaS companies in the USA that need DevOps consulting"'
+                  value={smartPrompt}
+                  onChange={e => setSmartPrompt(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) smartScanMutation.mutate(); }}
+                />
+                <button
+                  className="btn-primary flex-shrink-0 px-5 self-stretch text-sm"
+                  onClick={() => smartScanMutation.mutate()}
+                  disabled={!smartPrompt.trim()}
+                >
+                  <Zap size={14} /> Generate Leads
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 mt-2">
+                Press <kbd className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-mono">Ctrl+Enter</kbd> to search · or use the structured form below for more control
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Mode dropdown */}
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <select
+            value={scanMode ?? ''}
+            onChange={e => setScanMode((e.target.value as 'service' | 'product') || null)}
+            className="input text-sm pr-8 appearance-none cursor-pointer min-w-[220px] font-medium"
+          >
+            <option value="">Select discovery mode…</option>
+            <option value="service">Service / Position</option>
+            <option value="product">Product Discovery</option>
+          </select>
+          <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        </div>
+        {/* {scanMode && (
+          <span className={cn(
+            'text-xs font-medium px-2.5 py-1 rounded-lg border',
+            scanMode === 'service'
+              ? 'bg-blue-500/10 border-blue-500/25 text-blue-400'
+              : 'bg-violet-500/10 border-violet-500/25 text-violet-400'
+          )}>
+            {scanMode === 'service' ? '🎯 Google Jobs engine' : '🤖 AI product matching'}
+          </span>
+        )} */}
       </div>
 
       {/* ════════════════════ SERVICE MODE ════════════════════ */}
@@ -365,17 +474,223 @@ export default function LeadDiscoveryPage() {
               </div>
             </SectionCard> */}
 
-            <SectionCard title="Target Filters" subtitle="Leave blank for worldwide">
-              <div className="pt-4 grid grid-cols-2 gap-3">
-                <div>
-                  <p className="label mb-1.5">Industry</p>
-                  <input className="input text-sm" placeholder="e.g. SaaS, Fintech"
-                    value={targetIndustry} onChange={e => setTargetIndustry(e.target.value)} />
+            <SectionCard title="What You're Offering"
+              subtitle="Help AI understand your service to find better-matched leads">
+              <div className="pt-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="label mb-1.5">Service name / category</p>
+                    <input className="input text-sm" placeholder='e.g. "Digital Marketing", "HR Consulting"'
+                      value={serviceName} onChange={e => setServiceName(e.target.value)} />
+                  </div>
+                  <div>
+                    <p className="label mb-1.5">Pricing model</p>
+                    <select className="input text-sm" value={pricingModel} onChange={e => setPricingModel(e.target.value)}>
+                      <option value="">Select…</option>
+                      <option>Monthly retainer</option>
+                      <option>Project-based</option>
+                      <option>Per hour</option>
+                      <option>Revenue share</option>
+                      <option>Custom / negotiable</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
-                  <p className="label mb-1.5">Region</p>
-                  <input className="input text-sm" placeholder="e.g. USA, India"
-                    value={targetRegion} onChange={e => setTargetRegion(e.target.value)} />
+                  <p className="label mb-1.5">Value proposition / key benefit</p>
+                  <textarea className="input text-sm resize-none w-full" rows={3}
+                    placeholder="What problem do you solve? What outcome does the client get?"
+                    value={valueProp} onChange={e => setValueProp(e.target.value)} />
+                </div>
+                <div>
+                  <p className="label mb-1.5">Keywords / pain points to target</p>
+                  <input className="input text-sm" placeholder="e.g. cost reduction, compliance, scalability…"
+                    value={keywords} onChange={e => setKeywords(e.target.value)} />
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Decision Maker Targeting"
+              subtitle="Contacts for these roles will be fetched automatically via Apollo">
+              <div className="pt-4 space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    'CEO / Founder', 'CTO / CIO', 'CMO', 'CFO',
+                    'VP Sales', 'Head of HR', 'Procurement', 'Operations',
+                    'Managing Director', 'IT Director', 'Finance Manager',
+                  ] as const).map(role => {
+                    const active = selectedRoles.includes(role);
+                    return (
+                      <button key={role} type="button" onClick={() => toggleRole(role)}
+                        className={cn(
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                          active
+                            ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
+                            : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
+                        )}>
+                        <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', active ? 'bg-violet-400' : 'bg-slate-500')} />
+                        {role}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Custom role input */}
+                <div className="flex gap-2">
+                  <input className="input text-xs h-8 flex-1" placeholder='e.g. "ERP Manager", "Plant Manager"'
+                    value={customRoleInput}
+                    onChange={e => setCustomRoleInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addCustomRole()} />
+                  <button type="button" className="btn-primary flex-shrink-0 px-3 h-8 text-xs" onClick={addCustomRole}
+                    aria-label="Add custom role"><Plus size={12} /></button>
+                </div>
+                {/* Show custom-added roles */}
+                {selectedRoles.filter(r => ![
+                  'CEO / Founder','CTO / CIO','CMO','CFO','VP Sales',
+                  'Head of HR','Procurement','Operations','Managing Director','IT Director','Finance Manager',
+                ].includes(r)).map(r => (
+                  <span key={r} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-violet-500/15 border border-violet-500/25 text-violet-300">
+                    {r}
+                    <button type="button" onClick={() => setSelectedRoles(prev => prev.filter(x => x !== r))}
+                      className="hover:text-white transition-colors ml-0.5"><X size={9} /></button>
+                  </span>
+                ))}
+                {selectedRoles.length === 0 && (
+                  <p className="text-xs text-slate-500">No roles selected — Apollo will search for default decision makers (CEO, CTO, Founder)</p>
+                )}
+                {/* Contact channel + seniority */}
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <p className="label mb-1.5">Contact channel</p>
+                    <select className="input text-sm" value={contactChannel} onChange={e => setContactChannel(e.target.value)}>
+                      <option value="">Any</option>
+                      <option>Email</option>
+                      <option>LinkedIn</option>
+                      <option>Phone</option>
+                      <option>WhatsApp</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="label mb-1.5">Seniority level</p>
+                    <select className="input text-sm" value={seniorityLevel} onChange={e => setSeniorityLevel(e.target.value)}>
+                      <option value="">Any</option>
+                      <option>C-suite</option>
+                      <option>VP / Director</option>
+                      <option>Manager</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Target Company Profile" subtitle="Leave blank for any">
+              <div className="pt-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="label mb-1.5">Industry</p>
+                    <input className="input text-sm" placeholder="e.g. SaaS, Fintech"
+                      value={targetIndustry} onChange={e => setTargetIndustry(e.target.value)} />
+                  </div>
+                  <div>
+                    <p className="label mb-1.5">Region</p>
+                    <input className="input text-sm" placeholder="e.g. USA, India"
+                      value={targetRegion} onChange={e => setTargetRegion(e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="label mb-1.5">Company size</p>
+                    <select className="input text-sm" value={companySize} onChange={e => setCompanySize(e.target.value)}>
+                      <option value="">Any size</option>
+                      <option>1–10 (Micro)</option>
+                      <option>11–50 (Small)</option>
+                      <option>51–200 (Mid-market)</option>
+                      <option>201–500</option>
+                      <option>500–1000</option>
+                      <option>1000+ (Enterprise)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="label mb-1.5">Company type</p>
+                    <select className="input text-sm" value={companyType} onChange={e => setCompanyType(e.target.value)}>
+                      <option value="">Any</option>
+                      <option>B2B</option>
+                      <option>B2C</option>
+                      <option>Government / PSU</option>
+                      <option>Non-profit / NGO</option>
+                      <option>Startup</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <p className="label mb-1.5">
+                    Annual revenue range
+                    <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(['< ₹1 Cr', '₹1–10 Cr', '₹10–100 Cr', '₹100–500 Cr', '₹500 Cr+'] as const).map(r => {
+                      const active = revenueRanges.includes(r);
+                      return (
+                        <button key={r} type="button" onClick={() => toggleRevenueRange(r)}
+                          className={cn(
+                            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                            active
+                              ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
+                              : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
+                          )}>
+                          <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', active ? 'bg-violet-400' : 'bg-slate-500')} />
+                          {r}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Lead Quality Filters" subtitle="Control volume and quality" defaultOpen={false}>
+              <div className="pt-4 space-y-4">
+                <div>
+                  <p className="label mb-2">Number of leads to generate</p>
+                  <div className="flex items-center gap-3">
+                    <input type="range" min={10} max={500} step={10} value={leadCount}
+                      onChange={e => setLeadCount(Number(e.target.value))}
+                      className="flex-1 accent-violet-500" />
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 min-w-[72px] text-right">{leadCount} leads</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="label mb-2">
+                    Min lead score
+                    <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { label: 'All leads', value: '' },
+                      { label: 'Warm (60%+)', value: 'warm' },
+                      { label: 'Hot (80%+)', value: 'hot' },
+                    ] as const).map(({ label, value }) => {
+                      const active = scoreThreshold === value;
+                      return (
+                        <button key={value} type="button" onClick={() => setScoreThreshold(value)}
+                          className={cn(
+                            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                            active
+                              ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
+                              : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
+                          )}>
+                          <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', active ? 'bg-violet-400' : 'bg-slate-500')} />
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <p className="label mb-1.5">
+                    Exclude
+                    <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
+                  </p>
+                  <input className="input text-sm" placeholder="Competitors, existing clients, blacklisted domains…"
+                    value={excludeList} onChange={e => setExcludeList(e.target.value)} />
                 </div>
               </div>
             </SectionCard>

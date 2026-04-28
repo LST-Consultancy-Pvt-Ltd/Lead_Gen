@@ -18,8 +18,8 @@ const prisma  = require('../utils/prisma');
 const { success, error } = require('../utils/response');
 const { runDiscoveryScan }        = require('../services/discoveryService');
 const { runProductDiscoveryScan, generateProductPrompt } = require('../services/productDiscoveryService');
-const { runBackgroundEnrichment } = require('../services/leadEnrichmentPipeline');
-const { analyzeLeadIntent } = require('../services/aiService');
+const { runBackgroundEnrichment, runApolloEnrichmentBackground } = require('../services/leadEnrichmentPipeline');
+const { analyzeLeadIntent, parseUserPrompt } = require('../services/aiService');
 const logger = require('../utils/logger');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,10 +29,24 @@ const logger = require('../utils/logger');
 async function startScan(req, res) {
   try {
     const {
-      targetIndustry = '',
-      targetRegion   = '',
-      workTypes      = [],
-      sources        = [],
+      targetIndustry     = '',
+      targetRegion       = '',
+      workTypes          = [],
+      sources            = [],
+      decisionMakerRoles = [],
+      // Extended targeting fields
+      companySize        = '',
+      companyType        = '',
+      revenueRanges      = [],
+      serviceName        = '',
+      pricingModel       = '',
+      valueProp          = '',
+      keywords           = '',
+      contactChannel     = '',
+      seniorityLevel     = '',
+      leadCount          = 100,
+      scoreThreshold     = '',
+      excludeList        = '',
     } = req.body;
 
     const services = await prisma.service.findMany({
@@ -50,7 +64,12 @@ async function startScan(req, res) {
         services:  services.map(s => s.name),
         targetIndustry,
         targetRegion,
-        sources:   { workTypes, sources, scanType: 'service' },
+        sources:   {
+        workTypes, sources, scanType: 'service', decisionMakerRoles,
+        companySize, companyType, revenueRanges,
+        serviceName, pricingModel, valueProp, keywords,
+        contactChannel, seniorityLevel, leadCount, scoreThreshold, excludeList,
+      },
         startedAt: new Date(),
       },
     });
@@ -60,7 +79,10 @@ async function startScan(req, res) {
       job.id,
       req.user.organizationId,
       services.map(s => s.name),
-      { workTypes, sources, targetIndustry, targetRegion },
+      { workTypes, sources, targetIndustry, targetRegion, companySize, companyType, revenueRanges, serviceName, pricingModel, valueProp, keywords, contactChannel, seniorityLevel, excludeList },
+      Array.isArray(decisionMakerRoles) ? decisionMakerRoles : [],
+      Number(leadCount) || 100,
+      scoreThreshold,
     ).catch(err =>
       logger.error('Service scan failed', { jobId: job.id, err: err.message })
     );
@@ -261,9 +283,10 @@ async function saveDiscoveredLead(organizationId, dl, services) {
   return lead.id;
 }
 
-async function processScan(jobId, orgId, services, filters = {}) {
+async function processScan(jobId, orgId, services, filters = {}, decisionMakerRoles = [], maxLeads = 100, scoreThreshold = '') {
   try {
     const savedIds = [];
+    const minScore = scoreThreshold === 'hot' ? 80 : scoreThreshold === 'warm' ? 60 : 0;
 
     const discovered = await runDiscoveryScan(
       { id: jobId },
@@ -279,8 +302,27 @@ async function processScan(jobId, orgId, services, filters = {}) {
 
     for (const dl of discovered) {
       try {
+        if (savedIds.length >= maxLeads) break;
         const id = await saveDiscoveredLead(orgId, dl, services);
-        if (id) savedIds.push(id);
+        if (id) {
+          // Apply score threshold filter if set
+          if (minScore > 0) {
+            const saved = await prisma.lead.findUnique({ where: { id }, select: { leadScore: true } }).catch(() => null);
+            if (saved && (saved.leadScore || 0) < minScore) {
+              await prisma.lead.delete({ where: { id } }).catch(() => {});
+              continue;
+            }
+          }
+          savedIds.push(id);
+          // Auto-enrich contacts via Apollo using the decision-maker roles selected on the discovery page
+          const savedLead = await prisma.lead.findUnique({ where: { id } }).catch(() => null);
+          if (savedLead) {
+            runApolloEnrichmentBackground(savedLead, prisma, {
+              organizationId: orgId,
+              roles: decisionMakerRoles,
+            }).catch(() => {});
+          }
+        }
       } catch (err) {
         logger.error('Failed to save lead', { err: err.message, company: dl.companyName });
       }
@@ -495,6 +537,8 @@ module.exports = {
   startScan,
   startProductScan,
   generateProductScanPrompt,
+  parsePrompt,
+  smartScan,
   getScanStatus,
   getScanHistory,
   getActiveScan,
@@ -502,3 +546,104 @@ module.exports = {
   getServices,
   upsertServices,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /discovery/scan/smart
+// Parse a free-form prompt, upsert the service, and immediately start a scan
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function smartScan(req, res) {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 5) {
+      return error(res, 'prompt is required', 422);
+    }
+
+    // Step 1 — parse the prompt into structured params
+    let parsed;
+    try {
+      parsed = await parseUserPrompt(prompt.trim());
+    } catch (parseErr) {
+      logger.error('smartScan: parseUserPrompt failed', { err: parseErr.message });
+      return error(res, 'Failed to understand your prompt — please try rephrasing', 422);
+    }
+
+    const {
+      service            = '',
+      targetIndustry     = '',
+      targetRegion       = '',
+      companySize        = '',
+      companyType        = '',
+      valueProp          = '',
+      keywords           = '',
+      seniorityLevel     = '',
+      leadCount          = 50,
+      decisionMakerRoles = [],
+    } = parsed;
+
+    if (!service) {
+      return error(res, 'Could not identify a service or position from your prompt', 422);
+    }
+
+    // Step 2 — upsert the service so the scan engine can find it
+    const orgId = req.user.organizationId;
+    const existing = await prisma.service.findMany({ where: { organizationId: orgId, isActive: true } });
+    const alreadyExists = existing.some(s => s.name.toLowerCase() === service.toLowerCase());
+    if (!alreadyExists) {
+      await prisma.service.create({ data: { organizationId: orgId, name: service, isActive: true } });
+    }
+    const serviceNames = alreadyExists ? existing.map(s => s.name) : [...existing.map(s => s.name), service];
+
+    // Step 3 — create scan job
+    const job = await prisma.scanJob.create({
+      data: {
+        organizationId: orgId,
+        status:    'running',
+        services:  serviceNames,
+        targetIndustry,
+        targetRegion,
+        sources:   {
+          scanType: 'service', decisionMakerRoles,
+          companySize, companyType, valueProp, keywords, seniorityLevel, leadCount,
+          smartPrompt: prompt.trim(),
+        },
+        startedAt: new Date(),
+      },
+    });
+
+    // Step 4 — fire and forget
+    processScan(
+      job.id,
+      orgId,
+      serviceNames,
+      { targetIndustry, targetRegion, companySize, companyType, valueProp, keywords, seniorityLevel },
+      Array.isArray(decisionMakerRoles) ? decisionMakerRoles : [],
+      Number(leadCount) || 50,
+      '',
+    ).catch(err => logger.error('smartScan processScan failed', { jobId: job.id, err: err.message }));
+
+    return success(res, { id: job.id, jobId: job.id, status: 'running', parsedParams: parsed }, 'Smart scan started', 202);
+  } catch (err) {
+    logger.error('smartScan error', { err: err.message });
+    return error(res, 'Failed to start smart scan', 500);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /discovery/parse-prompt
+// Parse free-form user description into structured scan params
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function parsePrompt(req, res) {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 5) {
+      return error(res, 'prompt is required', 422);
+    }
+    const parsed = await parseUserPrompt(prompt.trim());
+    return success(res, parsed, 'Parsed successfully');
+  } catch (err) {
+    logger.error('parsePrompt error', { err: err.message });
+    return error(res, 'Failed to parse prompt', 500);
+  }
+}

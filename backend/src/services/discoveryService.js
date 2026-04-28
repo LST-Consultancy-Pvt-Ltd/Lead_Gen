@@ -64,6 +64,12 @@ async function buildServiceProfile(service, filters = {}) {
     filters.targetIndustry ? `Target industry: ${filters.targetIndustry}` : '',
     filters.targetRegion   ? `Target region: ${filters.targetRegion}`     : '',
     filters.workTypes?.length ? `Work type preference: ${filters.workTypes.join(', ')}` : '',
+    filters.companySize    ? `Target company size: ${filters.companySize}` : '',
+    filters.companyType    ? `Target company type: ${filters.companyType}` : '',
+    filters.revenueRanges?.length ? `Target revenue range: ${filters.revenueRanges.join(', ')}` : '',
+    filters.valueProp      ? `Value proposition: ${filters.valueProp}` : '',
+    filters.keywords       ? `Keywords / pain points: ${filters.keywords}` : '',
+    filters.seniorityLevel ? `Target seniority: ${filters.seniorityLevel}` : '',
   ].filter(Boolean).join('\n');
 
   const systemPrompt = `You are a B2B lead generation expert.
@@ -190,7 +196,7 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
     try {
       const { data } = await axios.get('https://serpapi.com/search', {
         params,
-        timeout: 15000,
+        timeout: 30000,
       });
 
       // SerpAPI returns 200 with error field when Google has no results or rate limits
@@ -201,8 +207,8 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
         });
 
         if (attempt < MAX_RETRIES) {
-          const delay = 2000 * attempt;
-          logger.info('Retrying SerpAPI after delay', { query, attempt, delayMs: delay });
+          const delay = 4000 * attempt + Math.random() * 1000;
+          logger.info('Retrying SerpAPI after delay', { query, attempt, delayMs: Math.round(delay) });
           await sleep(delay);
 
           // On 2nd retry, drop location filter — it may be too restrictive
@@ -226,7 +232,7 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
           responseKeys: Object.keys(data),
         });
 
-        const delay = 1500 * attempt;
+        const delay = 3000 * attempt + Math.random() * 1000;
         await sleep(delay);
 
         if (params.location && attempt === 1) {
@@ -245,14 +251,18 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
         nextToken: data.serpapi_pagination?.next_page_token || null,
       };
     } catch (err) {
+      const status = err.response?.status;
       logger.error('Google Jobs fetch failed', {
         query, attempt,
-        status: err.response?.status,
-        err:    err.response?.data?.error || err.message,
+        status,
+        err: err.response?.data?.error || err.message,
       });
 
       if (attempt < MAX_RETRIES) {
-        const delay = 2000 * attempt;
+        // 503 = SerpAPI overloaded — wait longer
+        const base = status === 503 ? 8000 : 4000;
+        const delay = base * attempt + Math.random() * 2000;
+        logger.info('Retrying after error', { query, attempt, delayMs: Math.round(delay), status });
         await sleep(delay);
 
         // Drop location on retry — network errors sometimes caused by bad location param
@@ -385,7 +395,7 @@ async function searchCommunityLeads(service, filters = {}) {
           num:     10,
           tbs:     'qdr:m',   // last month only
         },
-        timeout: 12000,
+        timeout: 20000,
       });
 
       const results = data.organic_results || [];
@@ -401,7 +411,7 @@ async function searchCommunityLeads(service, filters = {}) {
         });
       }
 
-      await sleep(800);
+      await sleep(1500 + Math.random() * 500);
     } catch (err) {
       logger.warn('Community search failed', { query, err: err.message });
     }
