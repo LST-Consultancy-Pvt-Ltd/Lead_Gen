@@ -368,6 +368,7 @@ export const dropdownsApi = {
   add: (data: any) => api.post('/dropdowns', data),
   update: (id: string, data: any) => api.patch(`/dropdowns/${id}`, data),
   delete: (id: string) => api.delete(`/dropdowns/${id}`),
+  seed: () => api.post('/dropdowns/seed'),
 };
 
 export const settingsApi = {

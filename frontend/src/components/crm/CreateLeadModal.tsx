@@ -755,7 +755,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             <label className="label">Source <span className="text-red-400">*</span></label>
             <select {...register("source")} title="Lead Source" className="input">
               <option value="">Select source...</option>
-              {leadSources.map((source) => (
+              {dynamicSourceOptions.map((source) => (
                 <option key={source} value={source}>{source}</option>
               ))}
             </select>

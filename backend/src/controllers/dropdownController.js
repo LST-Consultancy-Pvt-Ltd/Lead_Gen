@@ -5,34 +5,46 @@
 
 const prisma = require("../utils/prisma");
 const { success, error } = require("../utils/response");
+const logger = require("../utils/logger");
 
 const VALID_CATEGORIES = [
-  "lead_source",
   "industry",
-  "location",
-  "budget_range",
-  "pipeline_stage",
-  "business_line",
-  "loss_reason",
-  // Settings-managed dynamic field categories
-  "requirement_type",
-  "pipeline",
-  "timeline",
-  "lead_status",
-  "status",
-  "source",
-  // Discovery scan fields
   "company_size",
   "company_type",
   "decision_maker",
   "preferred_contact_channel",
   "seniority_level",
   "annual_revenue_range",
+  "lead_source",
+  "lead_status",
+  "pipeline_stage",
+  "loss_reason",
+  "job_title",
 ];
 
 // Default values seeded for every new organisation
 const DEFAULT_DROPDOWN_SEEDS = [
-  // ── Industry ──────────────────────────────────────────────────────────────
+  { category: 'lead_status', values: [
+    'New', 'Contacted', 'Qualified', 'Warm', 'Hot',
+    'Proposal Sent', 'Negotiation', 'Won', 'Lost', 'On Hold', 'Unqualified',
+  ]},
+  { category: 'lead_source', values: [
+    'Manual Entry', 'Website Form', 'LinkedIn', 'Cold Email', 'Referral',
+    'Lead Generation Tool', 'Advertisement', 'Event / Conference',
+    'Inbound Call', 'WhatsApp', 'Partner / Channel', 'Imported / CSV Upload',
+  ]},
+  { category: 'job_title', values: [
+    'CEO / Founder', 'CTO / CIO', 'CFO', 'CMO', 'COO', 'MD / Director',
+    'VP Sales', 'VP Operations', 'Head of HR', 'Talent Acquisition Manager',
+    'Procurement Head', 'Operations Manager', 'Department Head', 'Board Member',
+  ]},
+  { category: 'pipeline_stage', values: [
+    'Lead', 'Qualified', 'Demo', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost',
+  ]},
+  { category: 'loss_reason', values: [
+    'Price too high', 'Chose competitor', 'No budget', 'No decision made',
+    'Wrong fit', 'Timing not right', 'No response',
+  ]},
   { category: 'industry', values: [
     'Any Industry', 'Information Technology (IT)', 'Software / SaaS',
     'Banking & Financial Services (BFSI)', 'Healthcare & Pharmaceuticals',
@@ -43,34 +55,28 @@ const DEFAULT_DROPDOWN_SEEDS = [
     'Agriculture & Food Processing', 'Legal & Compliance',
     'Consulting & Professional Services',
   ]},
-  // ── Company size ─────────────────────────────────────────────────────────
   { category: 'company_size', values: [
     'Any Size', '1-10 (Micro)', '11-50 (Small)', '51-200 (Mid-size)',
     '201-500 (Growing)', '501-1000 (Large)', '1000-5000 (Enterprise)',
     '5000+ (Global Enterprise)',
   ]},
-  // ── Company type ─────────────────────────────────────────────────────────
   { category: 'company_type', values: [
     'Any', 'Private Limited', 'Public Listed', 'Startup', 'MNC', 'SME',
     'Government / PSU', 'NGO / Non-profit', 'Partnership Firm', 'LLP',
     'Sole Proprietorship', 'Family Business',
   ]},
-  // ── Decision maker ───────────────────────────────────────────────────────
   { category: 'decision_maker', values: [
     'CEO / Founder', 'CTO / CIO', 'CFO', 'CMO', 'COO', 'MD / Director',
     'VP Sales', 'VP Operations', 'Head of HR', 'Talent Acquisition Manager',
     'Procurement Head', 'Operations Manager', 'Department Head', 'Board Member',
   ]},
-  // ── Contact channel ──────────────────────────────────────────────────────
   { category: 'preferred_contact_channel', values: [
     'Any', 'Email', 'LinkedIn', 'Phone / Call', 'WhatsApp', 'In-person / Visit',
   ]},
-  // ── Seniority level ──────────────────────────────────────────────────────
   { category: 'seniority_level', values: [
     'Any', 'C-suite', 'VP / SVP Level', 'Director Level', 'Manager Level',
     'Team Lead', 'Individual Contributor', 'Board / Advisor Level',
   ]},
-  // ── Annual revenue range ─────────────────────────────────────────────────
   { category: 'annual_revenue_range', values: [
     'Any', 'Under $1M', '$1M – $5M', '$5M – $10M', '$10M – $25M',
     '$25M – $50M', '$50M – $100M', '$100M – $250M', '$250M – $500M',
@@ -181,23 +187,27 @@ async function listDiscoveryDropdowns(req, res) {
   }
 }
 
-// GET /api/dropdowns/all — org_admin only, all categories grouped
+// GET /api/dropdowns/all — org_admin only
+// Returns a flat array of every DropdownConfig row for the org (including disabled).
+// Every item has a real UUID in its `id` field so the settings UI can call
+// PATCH /api/dropdowns/:id and DELETE /api/dropdowns/:id directly.
 async function listAllCategories(req, res) {
   try {
     const items = await prisma.dropdownConfig.findMany({
       where: { organizationId: req.user.organizationId },
-      orderBy: [{ category: "asc" }, { displayOrder: "asc" }],
+      orderBy: [{ category: 'asc' }, { displayOrder: 'asc' }],
+      select: {
+        id: true,
+        category: true,
+        value: true,
+        displayOrder: true,
+        isActive: true,
+        createdAt: true,
+      },
     });
-
-    const grouped = items.reduce((acc, item) => {
-      if (!acc[item.category]) acc[item.category] = [];
-      acc[item.category].push(item);
-      return acc;
-    }, {});
-
-    return success(res, grouped);
+    return success(res, items);
   } catch (err) {
-    return error(res, "Failed to fetch dropdown categories", 500);
+    return error(res, 'Failed to fetch dropdown categories', 500);
   }
 }
 
@@ -229,107 +239,74 @@ async function addValue(req, res) {
   }
 }
 
-// PATCH /api/dropdowns/:id — all authenticated roles
+// PATCH /api/dropdowns/:id — org_admin only
 async function updateValue(req, res) {
   try {
     const { value, displayOrder, isActive } = req.body;
 
+    logger.info('updateValue', {
+      id: req.params.id,
+      orgId: req.user.organizationId,
+      body: req.body,
+      receivedIsActive: isActive,
+      isActiveType: typeof isActive,
+    });
+
     const existing = await prisma.dropdownConfig.findFirst({
       where: { id: req.params.id, organizationId: req.user.organizationId },
     });
-    if (!existing) return error(res, "Dropdown value not found", 404);
-
-    // If disabling, check if any lead record references this value
-    if (isActive === false) {
-      const categoryFieldMap = {
-        lead_source: "source",
-        industry: "industry",
-        location: "location",
-        budget_range: "budgetRange",
-        pipeline_stage: "pipeline",
-        business_line: "businessLine",
-        pipeline: "pipeline",
-        budget_range: "budgetRange",
-        timeline: "timeline",
-        lead_status: "status",
-        status: "status",
-      };
-      const leadField = categoryFieldMap[existing.category];
-      if (leadField) {
-        const refCount = await prisma.lead.count({
-          where: {
-            organizationId: req.user.organizationId,
-            [leadField]: existing.value,
-          },
-        });
-        if (refCount > 0) {
-          return error(
-            res,
-            `This value cannot be disabled because ${refCount} lead(s) reference it. Update those leads first.`,
-            400,
-          );
-        }
-      }
+    if (!existing) {
+      logger.warn('updateValue: not found', { id: req.params.id, orgId: req.user.organizationId });
+      return error(res, 'Dropdown value not found', 404);
     }
+
+    // Coerce isActive to boolean in case the frontend sends a string
+    const isActiveValue = isActive != null
+      ? isActive === 'false' ? false : isActive === 'true' ? true : Boolean(isActive)
+      : undefined;
+
+    const updateData = {
+      ...(value != null && { value: value.trim() }),
+      ...(displayOrder != null && { displayOrder }),
+      ...(isActiveValue !== undefined && { isActive: isActiveValue }),
+    };
+
+    logger.info('updateValue: applying', { id: req.params.id, updateData });
 
     const updated = await prisma.dropdownConfig.update({
       where: { id: req.params.id },
-      data: {
-        ...(value != null && { value: value.trim() }),
-        ...(displayOrder != null && { displayOrder }),
-        ...(isActive != null && { isActive }),
-      },
+      data: updateData,
     });
-    return success(res, updated, "Dropdown value updated");
+    return success(res, updated, 'Dropdown value updated');
   } catch (err) {
-    return error(res, "Failed to update dropdown value", 500);
+    logger.error('updateValue failed', { id: req.params.id, error: err.message, code: err.code });
+    if (err.code === 'P2002') {
+      return error(res, 'This value already exists in this category', 409);
+    }
+    return error(res, 'Failed to update dropdown value', 500);
   }
 }
 
-// DELETE /api/dropdowns/:id — all authenticated roles
+// DELETE /api/dropdowns/:id — org_admin only
 async function deleteValue(req, res) {
   try {
+    logger.info('deleteValue', { id: req.params.id, orgId: req.user.organizationId });
+
     const existing = await prisma.dropdownConfig.findFirst({
       where: { id: req.params.id, organizationId: req.user.organizationId },
     });
-    if (!existing) return error(res, "Dropdown value not found", 404);
-
-    // Check if any lead record references this value before deleting
-    const categoryFieldMap = {
-      lead_source: "source",
-      industry: "industry",
-      location: "location",
-      budget_range: "budgetRange",
-      pipeline_stage: "pipeline",
-      business_line: "businessLine",
-      pipeline: "pipeline",
-      timeline: "timeline",
-      lead_status: "status",
-      status: "status",
-    };
-    const leadField = categoryFieldMap[existing.category];
-    if (leadField) {
-      const refCount = await prisma.lead.count({
-        where: {
-          organizationId: req.user.organizationId,
-          [leadField]: existing.value,
-        },
-      });
-      if (refCount > 0) {
-        return error(
-          res,
-          `This value cannot be deleted because ${refCount} lead(s) reference it. Update those leads first.`,
-          400,
-        );
-      }
+    if (!existing) {
+      logger.warn('deleteValue: not found', { id: req.params.id, orgId: req.user.organizationId });
+      return error(res, 'Dropdown value not found', 404);
     }
 
-    await prisma.dropdownConfig.delete({
-      where: { id: req.params.id },
-    });
-    return success(res, null, "Dropdown value deleted");
+    await prisma.dropdownConfig.delete({ where: { id: req.params.id } });
+
+    logger.info('deleteValue: deleted', { id: req.params.id, value: existing.value, category: existing.category });
+    return success(res, { id: req.params.id }, 'Dropdown value deleted');
   } catch (err) {
-    return error(res, "Failed to delete dropdown value", 500);
+    logger.error('deleteValue failed', { id: req.params.id, error: err.message, code: err.code });
+    return error(res, 'Failed to delete dropdown value', 500);
   }
 }
 

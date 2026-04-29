@@ -3,52 +3,23 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { dropdownsApi, settingsApi, usersApi } from '../../../lib/api';
 import { usePermissions } from '../../../lib/rbac';
-import { ChevronDown, ChevronUp, Loader2, Pencil, Trash2, Plus, X, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Loader2, Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-const LEAD_FIELD_CATEGORIES = [
-  { key: 'requirement_type', label: 'Requirement Type' },
-  { key: 'pipeline', label: 'Pipeline' },
-  { key: 'budget_range', label: 'Budget Range' },
-  { key: 'timeline', label: 'Timeline' },
-  { key: 'lead_status', label: 'Lead Status' },
-  { key: 'status', label: 'Status' },
-  { key: 'lead_source', label: 'Source' },
-];
 
 export default function SettingsPage() {
   const permissions = usePermissions();
   const qc = useQueryClient();
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState({ fromUserId: '', toUserId: '' });
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    lead_source: true,
-    industry: false,
-    budget_range: false,
-    pipeline_stage: false,
-    business_line: false,
-    loss_reason: false,
-    company_size: false,
-    company_type: false,
-    decision_maker: false,
-    preferred_contact_channel: false,
-    seniority_level: false,
-    annual_revenue_range: false,
-  });
   const [newValues, setNewValues] = useState<Record<string, string>>({});
   const [thresholds, setThresholds] = useState({
     followUpAlertThresholdDays: 3,
     stuckDealThresholdDays: 7,
   });
-
-  const [selectedLeadField, setSelectedLeadField] = useState('');
-  const [newLeadFieldValue, setNewLeadFieldValue] = useState('');
-  const [editingLeadField, setEditingLeadField] = useState<{ id: string; value: string } | null>(null);
-  const [editLeadFieldInput, setEditLeadFieldInput] = useState('');
-  const [budgetMin, setBudgetMin] = useState('');
-  const [budgetMax, setBudgetMax] = useState('');
-  const [editBudgetMin, setEditBudgetMin] = useState('');
-  const [editBudgetMax, setEditBudgetMax] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
 
   const { data: usersData } = useQuery({
     queryKey: ['settings-users'],
@@ -72,48 +43,42 @@ export default function SettingsPage() {
 
   const { data: dropdownsData } = useQuery({
     queryKey: ['settings-dropdowns'],
-    queryFn: () => dropdownsApi.listAll().then((r) => r.data?.data ?? r.data ?? {}),
+    queryFn: () => dropdownsApi.listAll().then((r) => {
+      const raw = r.data?.data ?? r.data ?? {};
+      if (Array.isArray(raw)) return raw;
+      // API returns grouped object { category: [...items] } — flatten to a single array
+      return (Object.values(raw) as any[]).flat();
+    }),
     enabled: permissions.canAccessSettings && permissions.isAdmin,
   });
-
-  const { data: leadFieldValuesRaw, refetch: refetchLeadFieldValues, isLoading: isLoadingLeadFieldValues } = useQuery({
-    queryKey: ['settings-lead-field-values', selectedLeadField],
-    queryFn: () => dropdownsApi.listByCategory(selectedLeadField).then((r) => r.data?.data || r.data || []),
-    enabled: !!selectedLeadField && permissions.isAdmin,
-  });
-
-  const leadFieldValues: any[] = Array.isArray(leadFieldValuesRaw)
-    ? leadFieldValuesRaw
-    : (leadFieldValuesRaw as any)?.items || [];
 
   const users = Array.isArray(usersData) ? usersData : [];
 
   const categories = [
-    // CRM dropdowns
-    { key: 'lead_source',  label: 'Lead Source',  group: 'CRM' },
-    { key: 'industry',     label: 'Industry',     group: 'CRM' },
-    { key: 'budget_range', label: 'Budget Range', group: 'CRM' },
-    { key: 'pipeline_stage', label: 'Pipeline Stages', group: 'CRM' },
-    { key: 'business_line',  label: 'Business Lines',  group: 'CRM' },
-    { key: 'loss_reason',    label: 'Loss Reasons',    group: 'CRM' },
-    // Discovery scan dropdowns
-    { key: 'company_size',               label: 'Company Size',          group: 'Discovery' },
-    { key: 'company_type',               label: 'Company Type',          group: 'Discovery' },
-    { key: 'decision_maker',             label: 'Decision Makers',       group: 'Discovery' },
-    { key: 'preferred_contact_channel',  label: 'Contact Channels',      group: 'Discovery' },
-    { key: 'seniority_level',            label: 'Seniority Levels',      group: 'Discovery' },
-    { key: 'annual_revenue_range',       label: 'Annual Revenue Range',  group: 'Discovery' },
+    { key: 'lead_status',               label: 'Lead Status' },
+    { key: 'lead_source',               label: 'Lead Source' },
+    { key: 'job_title',                 label: 'Job Title' },
+    { key: 'pipeline_stage',            label: 'Pipeline Stage' },
+    { key: 'loss_reason',               label: 'Loss Reason' },
+    { key: 'industry',                  label: 'Industry / Vertical' },
+    { key: 'company_size',              label: 'Company Size' },
+    { key: 'company_type',              label: 'Company Type' },
+    { key: 'decision_maker',            label: 'Decision Maker' },
+    { key: 'preferred_contact_channel', label: 'Preferred Contact Channel' },
+    { key: 'seniority_level',           label: 'Seniority Level' },
+    { key: 'annual_revenue_range',      label: 'Annual Revenue Range' },
   ];
 
-  const categoryValues = (category: string) => {
-    if (!dropdownsData) return [];
-    if (Array.isArray(dropdownsData)) {
-      return dropdownsData.filter((item: any) => item.category === category);
-    }
-    const fromKey = dropdownsData[category];
-    if (Array.isArray(fromKey)) return fromKey;
-    return [];
-  };
+  function getCategoryValues(data: any, categoryKey: string) {
+    const arr = Array.isArray(data) ? data : [];
+    return arr
+      .filter((item: any) => item.category === categoryKey)
+      .sort((a: any, b: any) => {
+        // Active items first, disabled items last — both groups sorted by displayOrder
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+        return (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
+      });
+  }
 
   const updateUserMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => usersApi.update(id, data),
@@ -143,34 +108,67 @@ export default function SettingsPage() {
     onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to reassign leads'),
   });
 
-  // Helper: invalidate both the settings cache AND the lead-discovery cache together
   const invalidateDropdowns = () => {
     qc.invalidateQueries({ queryKey: ['settings-dropdowns'] });
-    qc.invalidateQueries({ queryKey: ['dropdowns', 'active'] });
+    qc.invalidateQueries({ queryKey: ['dropdowns'] });
   };
 
-  const addDropdownMutation = useMutation({
-    mutationFn: ({ category, value }: { category: string; value: string }) => dropdownsApi.add({ category, value }),
-    onSuccess: () => { invalidateDropdowns(); toast.success('Value added'); },
-    onError: () => toast.error('Failed to add value'),
+  const addMutation = useMutation({
+    mutationFn: ({ category, value, displayOrder }: { category: string; value: string; displayOrder: number }) =>
+      dropdownsApi.add({ category, value, displayOrder }),
+    onSuccess: (_data: any, variables: { category: string; value: string; displayOrder: number }) => {
+      invalidateDropdowns();
+      setNewValues((prev) => ({ ...prev, [variables.category]: '' }));
+      toast.success('Value added');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to add value'),
   });
 
-  const disableDropdownMutation = useMutation({
-    mutationFn: (id: string) => dropdownsApi.update(id, { isActive: false }),
-    onSuccess: () => { invalidateDropdowns(); toast.success('Value disabled'); },
-    onError: () => toast.error('Failed to disable value'),
+  const editMutation = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: string }) => dropdownsApi.update(id, { value }),
+    onSuccess: () => {
+      invalidateDropdowns();
+      setEditingId(null);
+      setEditingValue('');
+      toast.success('Value updated');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Failed to update value');
+      setEditingId(null);
+      setEditingValue('');
+    },
   });
 
-  const enableDropdownMutation = useMutation({
-    mutationFn: (id: string) => dropdownsApi.update(id, { isActive: true }),
-    onSuccess: () => { invalidateDropdowns(); toast.success('Value enabled'); },
-    onError: () => toast.error('Failed to enable value'),
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      dropdownsApi.update(id, { isActive: !isActive }),
+    onSuccess: (_data: any, variables: { id: string; isActive: boolean }) => {
+      invalidateDropdowns();
+      toast.success(variables.isActive ? 'Value disabled' : 'Value enabled');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to update value'),
   });
 
-  const deleteDropdownMutation = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: (id: string) => dropdownsApi.delete(id),
-    onSuccess: () => { invalidateDropdowns(); toast.success('Value deleted'); },
-    onError: (err: any) => toast.error(err.response?.data?.message || 'Failed to delete value'),
+    onSuccess: () => {
+      invalidateDropdowns();
+      setDeletingId(null);
+      toast.success('Value deleted');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Failed to delete value');
+      setDeletingId(null);
+    },
+  });
+
+  const seedMutation = useMutation({
+    mutationFn: () => dropdownsApi.seed(),
+    onSuccess: () => {
+      invalidateDropdowns();
+      toast.success('Default values seeded successfully');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to seed defaults'),
   });
 
   const saveThresholdMutation = useMutation({
@@ -180,40 +178,6 @@ export default function SettingsPage() {
       toast.success('Thresholds saved');
     },
     onError: () => toast.error('Failed to save thresholds'),
-  });
-
-  const addLeadFieldMutation = useMutation({
-    mutationFn: ({ category, value }: { category: string; value: string }) => dropdownsApi.add({ category, value }),
-    onSuccess: () => {
-      refetchLeadFieldValues();
-      setNewLeadFieldValue('');
-      setBudgetMin('');
-      setBudgetMax('');
-      toast.success('Value added');
-    },
-    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to add value'),
-  });
-
-  const updateLeadFieldMutation = useMutation({
-    mutationFn: ({ id, value }: { id: string; value: string }) => dropdownsApi.update(id, { value }),
-    onSuccess: () => {
-      refetchLeadFieldValues();
-      setEditingLeadField(null);
-      setEditLeadFieldInput('');
-      setEditBudgetMin('');
-      setEditBudgetMax('');
-      toast.success('Value updated');
-    },
-    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to update value'),
-  });
-
-  const deleteLeadFieldMutation = useMutation({
-    mutationFn: (id: string) => dropdownsApi.delete(id),
-    onSuccess: () => {
-      refetchLeadFieldValues();
-      toast.success('Value deleted');
-    },
-    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to delete value'),
   });
 
   if (!permissions.canAccessSettings) {
@@ -301,355 +265,222 @@ export default function SettingsPage() {
       </div>
 
       {permissions.isAdmin && (
-        <div className="card p-5 space-y-4">
-          <div>
-            <h2 className="section-title">Dropdown Configuration</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Manage selectable values for CRM and Lead Discovery. Changes apply to all users in your workspace.</p>
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center justify-between">
+            <div>
+              <h2 className="section-title">Dropdown Configuration</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Click a category to manage its values. Changes apply to all users in your workspace.</p>
+            </div>
+            <button
+              className="btn-ghost text-xs flex items-center gap-1.5 flex-shrink-0"
+              onClick={() => seedMutation.mutate()}
+              disabled={seedMutation.isPending}
+              title="Populate all categories with factory default values (safe to run multiple times)"
+            >
+              {seedMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
+              Seed Defaults
+            </button>
           </div>
 
-          {['CRM', 'Discovery'].map(group => (
-            <div key={group}>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">{group} Dropdowns</p>
-              <div className="space-y-2">
-                {categories.filter(c => c.group === group).map((cat) => {
-                  const allValues = categoryValues(cat.key);
-                  const activeValues = allValues.filter((i: any) => i.isActive !== false);
-                  const inactiveValues = allValues.filter((i: any) => i.isActive === false);
-                  return (
-                    <div key={cat.key} className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden">
-                      <button
-                        className="w-full px-4 py-2.5 flex items-center justify-between bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                        onClick={() => setExpanded((prev) => ({ ...prev, [cat.key]: !prev[cat.key] }))}
-                      >
-                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                          {cat.label}
-                          <span className="ml-2 text-xs text-slate-400 font-normal">{activeValues.length} active</span>
+          <div className="divide-y divide-slate-200 dark:divide-white/[0.06]">
+            {categories.map((cat) => {
+              const items = getCategoryValues(dropdownsData, cat.key);
+              const isOpen = openCategory === cat.key;
+              const activeCount = items.filter((i: any) => i.isActive).length;
+              const disabledCount = items.filter((i: any) => !i.isActive).length;
+              return (
+                <div key={cat.key}>
+                  {/* Accordion header */}
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors text-left"
+                    onClick={() => setOpenCategory(isOpen ? null : cat.key)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {isOpen
+                        ? <ChevronDown size={14} className="text-slate-400 flex-shrink-0" />
+                        : <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />}
+                      <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{cat.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      {activeCount > 0 && (
+                        <span className="bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">
+                          {activeCount} active
                         </span>
-                        {expanded[cat.key] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
-                      {expanded[cat.key] && (
-                        <div className="p-3 space-y-2">
-                          {activeValues.map((item: any) => (
-                            <div key={item.id || item.value} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2">
-                              <span className="text-sm text-slate-700 dark:text-slate-300">{item.value}</span>
-                              <div className="flex gap-1.5">
-                                <button
-                                  className="text-xs px-2 py-1 rounded-md text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
-                                  onClick={() => disableDropdownMutation.mutate(item.id)}
-                                >
-                                  Disable
-                                </button>
-                                <button
-                                  className="text-xs px-2 py-1 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                                  onClick={() => {
-                                    if (window.confirm(`Delete "${item.value}"?`)) deleteDropdownMutation.mutate(item.id);
-                                  }}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                          {inactiveValues.length > 0 && (
-                            <details className="mt-1">
-                              <summary className="text-xs text-slate-400 cursor-pointer select-none">{inactiveValues.length} disabled</summary>
-                              <div className="mt-1.5 space-y-1">
-                                {inactiveValues.map((item: any) => (
-                                  <div key={item.id} className="flex items-center justify-between bg-slate-100 dark:bg-slate-800/40 rounded-lg px-3 py-1.5 opacity-60">
-                                    <span className="text-sm text-slate-500 line-through">{item.value}</span>
-                                    <button
-                                      className="text-xs px-2 py-1 rounded-md text-green-600 hover:bg-green-50 dark:hover:bg-green-500/10 transition-colors"
-                                      onClick={() => enableDropdownMutation.mutate(item.id)}
-                                    >
-                                      Enable
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                          {allValues.length === 0 && (
-                            <p className="text-xs text-slate-500 py-1">No values configured. Add one below.</p>
-                          )}
-                          <div className="flex gap-2 pt-1">
-                            <input
-                              className="input flex-1 h-9 text-sm"
-                              value={newValues[cat.key] || ''}
-                              onChange={(e) => setNewValues((prev) => ({ ...prev, [cat.key]: e.target.value }))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const val = (newValues[cat.key] || '').trim();
-                                  if (!val) return;
-                                  addDropdownMutation.mutate({ category: cat.key, value: val });
-                                  setNewValues((prev) => ({ ...prev, [cat.key]: '' }));
-                                }
-                              }}
-                              placeholder="Add new value…"
-                            />
-                            <button
-                              className="btn-primary text-sm px-4"
-                              disabled={addDropdownMutation.isPending}
-                              onClick={() => {
-                                const val = (newValues[cat.key] || '').trim();
-                                if (!val) return;
-                                addDropdownMutation.mutate({ category: cat.key, value: val });
-                                setNewValues((prev) => ({ ...prev, [cat.key]: '' }));
-                              }}
-                            >
-                              Add
-                            </button>
-                          </div>
-                        </div>
+                      )}
+                      {disabledCount > 0 && (
+                        <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full">
+                          {disabledCount} disabled
+                        </span>
+                      )}
+                      {activeCount === 0 && disabledCount === 0 && (
+                        <span className="text-slate-400">No values</span>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                  </button>
 
-      {permissions.isAdmin && (
-        <div className="card p-5 space-y-4">
-          <div>
-            <h2 className="section-title">Lead Field Options</h2>
-            <p className="text-xs text-slate-500 mt-1">Manage dynamic dropdown values used in the Create Lead form.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="label mb-1.5 block">Select Field</label>
-              <select
-                className="input"
-                title="Select field category"
-                value={selectedLeadField}
-                onChange={(e) => {
-                  setSelectedLeadField(e.target.value);
-                  setEditingLeadField(null);
-                  setNewLeadFieldValue('');
-                  setBudgetMin('');
-                  setBudgetMax('');
-                }}
-              >
-                <option value="">-- Select a field --</option>
-                {LEAD_FIELD_CATEGORIES.map((cat) => (
-                  <option key={cat.key} value={cat.key}>{cat.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {selectedLeadField && (
-            <div className="md:w-1/2 border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden">
-              {/* Add new value */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-white/10">
-                {selectedLeadField === 'budget_range' ? (
-                  <div className="space-y-2">
-                    <p className="text-[11px] text-slate-500 font-medium">Add Budget Range ($min — $max)</p>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/40 h-9">
-                        <span className="px-2.5 text-sm font-semibold text-slate-500 dark:text-slate-400 select-none">$</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={budgetMin}
-                          onChange={(e) => setBudgetMin(e.target.value)}
-                          className="flex-1 bg-transparent py-2 pr-2 text-sm text-slate-900 dark:text-slate-100 outline-none min-w-0"
-                          placeholder="Min"
-                        />
+                  {/* Accordion body */}
+                  {isOpen && (
+                  <div className="px-5 pb-4 pt-1 border-t border-slate-100 dark:border-white/[0.04] bg-slate-50/50 dark:bg-slate-900/30">
+                  <div className="space-y-1.5">
+                    {items.map((item: any) => (
+                      <div key={item.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2 group/row">
+                        {editingId === item.id ? (
+                          <>
+                            <input
+                              className="input flex-1 h-8 text-sm mr-2"
+                              value={editingValue}
+                              placeholder="Edit value..."
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const v = editingValue.trim();
+                                  if (!v) return;
+                                  if (!editingId) { toast.error('This value has no database ID — please run the seed script'); return; }
+                                  editMutation.mutate({ id: editingId, value: v });
+                                }
+                                if (e.key === 'Escape') { setEditingId(null); setEditingValue(''); }
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              className="text-xs text-green-600 hover:text-green-500 px-2 font-medium"
+                              onClick={() => {
+                                const v = editingValue.trim();
+                                if (!v) return;
+                                if (!editingId) { toast.error('This value has no database ID — please run the seed script'); return; }
+                                editMutation.mutate({ id: editingId, value: v });
+                              }}
+                              disabled={editMutation.isPending}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="text-xs text-slate-400 hover:text-slate-300 px-2"
+                              onClick={() => { setEditingId(null); setEditingValue(''); }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : deletingId === item.id ? (
+                          <>
+                            <span className="text-sm text-slate-600 dark:text-slate-300 flex-1">Are you sure?</span>
+                            <button
+                              className="text-xs text-red-500 hover:text-red-400 px-2 font-semibold"
+                              onClick={() => {
+                                if (!item.id) { toast.error('This value has no database ID — please run the seed script'); return; }
+                                deleteMutation.mutate(item.id);
+                              }}
+                              disabled={deleteMutation.isPending}
+                            >
+                              Yes, Delete
+                            </button>
+                            <button
+                              className="text-xs text-slate-400 hover:text-slate-300 px-2"
+                              onClick={() => setDeletingId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className={`text-sm flex-1 min-w-0 truncate pr-2 ${
+                              !item.isActive
+                                ? 'opacity-50 line-through text-gray-400'
+                                : 'text-slate-700 dark:text-slate-300'
+                            }`}>
+                              {item.value}
+                            </span>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                              {/* Edit */}
+                              <div className="relative group/tip">
+                                <button
+                                  aria-label="Edit"
+                                  className="p-1.5 rounded-md text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
+                                  onClick={() => { setEditingId(item.id); setEditingValue(item.value); }}
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-slate-800 dark:bg-slate-700 px-2 py-1 text-[10px] text-white opacity-0 group-hover/tip:opacity-100 transition-opacity z-10">
+                                  Edit
+                                </span>
+                              </div>
+                              {/* Disable / Enable */}
+                              <div className="relative group/tip">
+                                <button
+                                  className={`p-1.5 rounded-md transition-colors ${
+                                    item.isActive
+                                      ? 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10'
+                                      : 'text-green-500 hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-500/10'
+                                  }`}
+                                  onClick={() => {
+                                    if (!item.id) { toast.error('This value has no database ID — please run the seed script'); return; }
+                                    toggleMutation.mutate({ id: item.id, isActive: item.isActive });
+                                  }}
+                                >
+                                  {item.isActive ? <EyeOff size={13} /> : <Eye size={13} />}
+                                </button>
+                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-slate-800 dark:bg-slate-700 px-2 py-1 text-[10px] text-white opacity-0 group-hover/tip:opacity-100 transition-opacity z-10">
+                                  {item.isActive ? 'Disable' : 'Enable'}
+                                </span>
+                              </div>
+                              {/* Delete */}
+                              <div className="relative group/tip">
+                                <button
+                                  aria-label="Delete"
+                                  className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                                  onClick={() => setDeletingId(item.id)}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-slate-800 dark:bg-slate-700 px-2 py-1 text-[10px] text-white opacity-0 group-hover/tip:opacity-100 transition-opacity z-10">
+                                  Delete
+                                </span>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <span className="text-slate-400 text-sm shrink-0">—</span>
-                      <div className="flex items-center flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/40 h-9">
-                        <span className="px-2.5 text-sm font-semibold text-slate-500 dark:text-slate-400 select-none">$</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={budgetMax}
-                          onChange={(e) => setBudgetMax(e.target.value)}
-                          className="flex-1 bg-transparent py-2 pr-2 text-sm text-slate-900 dark:text-slate-100 outline-none min-w-0"
-                          placeholder="Max"
-                        />
-                      </div>
+                    ))}
+                    {items.length === 0 && (
+                      <p className="text-xs text-slate-500 py-1">No values configured. Add one below.</p>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      <input
+                        className="input flex-1 h-9 text-sm"
+                        value={newValues[cat.key] || ''}
+                        onChange={(e) => setNewValues((prev) => ({ ...prev, [cat.key]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const val = (newValues[cat.key] || '').trim();
+                            if (!val) return;
+                            addMutation.mutate({ category: cat.key, value: val, displayOrder: items.length });
+                          }
+                        }}
+                        placeholder="Add new value..."
+                      />
                       <button
-                        className="btn-primary flex items-center gap-1.5 px-3 h-9"
-                        disabled={!budgetMin.trim() || !budgetMax.trim() || addLeadFieldMutation.isPending}
+                        className="btn-primary text-sm px-4"
+                        disabled={addMutation.isPending}
                         onClick={() => {
-                          const min = budgetMin.trim();
-                          const max = budgetMax.trim();
-                          if (!min || !max) return;
-                          addLeadFieldMutation.mutate({ category: 'budget_range', value: `$${min} - $${max}` });
+                          const val = (newValues[cat.key] || '').trim();
+                          if (!val) return;
+                          addMutation.mutate({ category: cat.key, value: val, displayOrder: items.length });
                         }}
                       >
-                        {addLeadFieldMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                         Add
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      className="input flex-1 h-9 text-sm"
-                      value={newLeadFieldValue}
-                      onChange={(e) => setNewLeadFieldValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const val = newLeadFieldValue.trim();
-                          if (!val) return;
-                          addLeadFieldMutation.mutate({ category: selectedLeadField, value: val });
-                        }
-                      }}
-                      placeholder="Type to add new option..."
-                    />
-                    <button
-                      className="btn-primary flex items-center gap-1.5 px-3"
-                      disabled={!newLeadFieldValue.trim() || addLeadFieldMutation.isPending}
-                      onClick={() => {
-                        const val = newLeadFieldValue.trim();
-                        if (!val) return;
-                        addLeadFieldMutation.mutate({ category: selectedLeadField, value: val });
-                      }}
-                    >
-                      {addLeadFieldMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                      Add
-                    </button>
                   </div>
-                )}
-              </div>
-
-              {/* Values list */}
-              <div className="p-3 space-y-2">
-                {isLoadingLeadFieldValues ? (
-                  <div className="flex justify-center py-4">
-                    <Loader2 size={18} className="animate-spin text-slate-400" />
-                  </div>
-                ) : leadFieldValues.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-3">No values yet. Add one above.</p>
-                ) : (
-                  leadFieldValues.map((item: any) => (
-                    <div key={item.id} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2">
-                      {editingLeadField?.id === item.id ? (
-                        <>
-                          {selectedLeadField === 'budget_range' ? (
-                            <>
-                              <div className="flex items-center flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/40 h-8">
-                                <span className="px-2 text-sm font-semibold text-slate-500 dark:text-slate-400 select-none">$</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={editBudgetMin}
-                                  onChange={(e) => setEditBudgetMin(e.target.value)}
-                                  className="flex-1 bg-transparent py-1.5 pr-2 text-sm text-slate-900 dark:text-slate-100 outline-none min-w-0"
-                                  placeholder="Min"
-                                  autoFocus
-                                />
-                              </div>
-                              <span className="text-slate-400 text-xs shrink-0">—</span>
-                              <div className="flex items-center flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/40 h-8">
-                                <span className="px-2 text-sm font-semibold text-slate-500 dark:text-slate-400 select-none">$</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={editBudgetMax}
-                                  onChange={(e) => setEditBudgetMax(e.target.value)}
-                                  className="flex-1 bg-transparent py-1.5 pr-2 text-sm text-slate-900 dark:text-slate-100 outline-none min-w-0"
-                                  placeholder="Max"
-                                />
-                              </div>
-                            </>
-                          ) : (
-                            <input
-                              className="input flex-1 h-8 text-sm"
-                              title="Edit value"
-                              placeholder="Enter value"
-                              value={editLeadFieldInput}
-                              onChange={(e) => setEditLeadFieldInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const val = editLeadFieldInput.trim();
-                                  if (val) updateLeadFieldMutation.mutate({ id: item.id, value: val });
-                                }
-                                if (e.key === 'Escape') {
-                                  setEditingLeadField(null);
-                                  setEditLeadFieldInput('');
-                                }
-                              }}
-                              autoFocus
-                            />
-                          )}
-                          <button
-                            className="text-green-500 hover:text-green-400 p-1"
-                            title="Save"
-                            onClick={() => {
-                              if (selectedLeadField === 'budget_range') {
-                                const min = editBudgetMin.trim();
-                                const max = editBudgetMax.trim();
-                                if (min && max) updateLeadFieldMutation.mutate({ id: item.id, value: `$${min} - $${max}` });
-                              } else {
-                                const val = editLeadFieldInput.trim();
-                                if (val) updateLeadFieldMutation.mutate({ id: item.id, value: val });
-                              }
-                            }}
-                            disabled={updateLeadFieldMutation.isPending}
-                          >
-                            <Check size={14} />
-                          </button>
-                          <button
-                            className="text-slate-400 hover:text-slate-300 p-1"
-                            title="Cancel"
-                            onClick={() => {
-                              setEditingLeadField(null);
-                              setEditLeadFieldInput('');
-                              setEditBudgetMin('');
-                              setEditBudgetMax('');
-                            }}
-                          >
-                            <X size={14} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-sm text-slate-600 dark:text-slate-300 flex-1">{item.value || item.label}</span>
-                          <button
-                            className="text-blue-400 hover:text-blue-300 p-1"
-                            title="Edit"
-                            onClick={() => {
-                              setEditingLeadField({ id: item.id, value: item.value });
-                              if (selectedLeadField === 'budget_range') {
-                                // Parse "$500 - $2000" → min="500", max="2000"
-                                const match = (item.value || '').match(/\$([0-9.]+)\s*-\s*\$([0-9.]+)/);
-                                setEditBudgetMin(match ? match[1] : '');
-                                setEditBudgetMax(match ? match[2] : '');
-                              } else {
-                                setEditLeadFieldInput(item.value || item.label || '');
-                              }
-                            }}
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            className="text-red-400 hover:text-red-300 p-1"
-                            title="Delete"
-                            onClick={() => {
-                              if (window.confirm(`Delete "${item.value}"?`)) {
-                                deleteLeadFieldMutation.mutate(item.id);
-                              }
-                            }}
-                            disabled={deleteLeadFieldMutation.isPending}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
+
 
       <div className="card p-5">
         <h2 className="section-title mb-4">System Thresholds</h2>

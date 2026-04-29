@@ -192,12 +192,12 @@ export default function LeadDiscoveryPage() {
 
   function getDropdownOptions(category: string, defaults: string[]): string[] {
     if (!allDropdowns || !Array.isArray(allDropdowns)) return defaults;
-    const items = allDropdowns.filter((d: any) => d.category === category && d.isActive !== false);
+    // listActive already returns only isActive=true rows
+    const items = allDropdowns.filter((d: any) => d.category === category);
+    // If DB has no rows for this category yet, fall back to hardcoded defaults
     if (items.length === 0) return defaults;
-    // Merge: DB values first, then any default values not already present in DB
-    const dbValues = items.map((d: any) => d.value);
-    const extra = defaults.filter(d => !dbValues.includes(d));
-    return [...dbValues, ...extra];
+    // DB has data — show only what's active in the DB (disabled values are excluded)
+    return items.map((d: any) => d.value);
   }
 
   const industryOptions       = getDropdownOptions('industry', DEFAULT_INDUSTRIES);
@@ -405,7 +405,7 @@ export default function LeadDiscoveryPage() {
         <div>
           <h1 className="page-title">Lead Discovery Engine</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Finds companies that <span className="text-emerald-400 font-medium">need</span> your service or product
+            What would you like to generate leads for?
           </p>
         </div>
       </div>
