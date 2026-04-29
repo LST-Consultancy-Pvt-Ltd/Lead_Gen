@@ -1,0 +1,9 @@
+-- Add extended lead status values to LeadStatus enum
+ALTER TYPE "LeadStatus" ADD VALUE IF NOT EXISTS 'warm';
+ALTER TYPE "LeadStatus" ADD VALUE IF NOT EXISTS 'hot';
+ALTER TYPE "LeadStatus" ADD VALUE IF NOT EXISTS 'proposal_sent';
+ALTER TYPE "LeadStatus" ADD VALUE IF NOT EXISTS 'negotiation';
+ALTER TYPE "LeadStatus" ADD VALUE IF NOT EXISTS 'won';
+ALTER TYPE "LeadStatus" ADD VALUE IF NOT EXISTS 'lost';
+ALTER TYPE "LeadStatus" ADD VALUE IF NOT EXISTS 'on_hold';
+ALTER TYPE "LeadStatus" ADD VALUE IF NOT EXISTS 'unqualified';

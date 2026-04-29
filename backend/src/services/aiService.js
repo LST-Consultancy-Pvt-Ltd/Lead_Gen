@@ -42,6 +42,7 @@ Analyze this lead and respond with ONLY valid JSON (no markdown):
   "leadScore": <0-100>,
   "intentScore": <0-100>,
   "intentLevel": <"hot"|"warm"|"cold">,
+  "matchScore": <0-100, how well this company matches our services/position requirements>,
   "opportunity": "<concise opportunity description>",
   "aiSummary": "<2-3 sentence company analysis>",
   "aiPitch": "<personalized 2-sentence sales pitch>",
@@ -268,6 +269,7 @@ function fallbackScoring(lead) {
     leadScore:    score,
     intentScore:  Math.max(score - 5, 10),
     intentLevel:  score >= 75 ? 'hot' : score >= 50 ? 'warm' : 'cold',
+    matchScore:   score,
     opportunity:  `Potential need for ${lead.techStack?.[0] || 'ERP'} consulting services`,
     aiSummary:    `${lead.companyName} is a ${lead.industry || 'technology'} company showing signals of needing consulting services.`,
     aiPitch:      `We specialize in helping ${lead.industry || 'technology'} companies optimize their operations. I'd love to explore how we can help ${lead.companyName}.`,
@@ -308,4 +310,42 @@ module.exports = {
   generateOutreachEmail,
   extractLeadFromSearchResult,
   callOpenAI,
+  parseUserPrompt,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parse free-form user prompt into structured scan parameters
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function parseUserPrompt(promptText) {
+  const client = getOpenAI();
+  if (!client) throw new Error('OpenAI not configured');
+
+  const system = `You are a B2B lead generation assistant. The user will describe their ideal lead in plain English.
+Extract structured parameters from their description and return ONLY valid JSON — no markdown, no explanation:
+{
+  "service": "<the main service, role, or position being targeted — e.g. 'NetSuite Consultant', 'Digital Marketing'>",
+  "serviceName": "<same as service, or a more descriptive name if given>",
+  "targetIndustry": "<industry to target, or empty string>",
+  "targetRegion": "<country/region to target, or empty string>",
+  "companySize": "<one of: '1–10 (Micro)', '11–50 (Small)', '51–200 (Mid-market)', '201–500', '500–1000', '1000+ (Enterprise)', or empty string>",
+  "companyType": "<one of: 'B2B', 'B2C', 'Government / PSU', 'Non-profit / NGO', 'Startup', or empty string>",
+  "decisionMakerRoles": ["<role 1>", "<role 2>"],
+  "valueProp": "<key value proposition or pain point mentioned, or empty string>",
+  "keywords": "<comma-separated keywords or pain points, or empty string>",
+  "leadCount": <number between 10 and 500, default 50>,
+  "seniorityLevel": "<one of: 'C-suite', 'VP / Director', 'Manager', or empty string>"
+}
+
+Rules:
+- If the user says "Find 50 CTOs at mid-size SaaS companies in the USA that need DevOps consulting":
+  service = "DevOps Consulting", targetIndustry = "SaaS", targetRegion = "USA",
+  companySize = "51–200 (Mid-market)", decisionMakerRoles = ["CTO"], leadCount = 50
+- Always populate "service" — it's required for the scan engine
+- If roles are mentioned (CEO, CTO, VP, etc.) include them in decisionMakerRoles
+- Keep values concise`;
+
+  const raw = await callOpenAI(system, `Parse this lead generation request:\n\n"${promptText}"`, 500);
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  return JSON.parse(cleaned);
+}

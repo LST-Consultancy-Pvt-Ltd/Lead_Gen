@@ -14,6 +14,7 @@ import {
   MapPin, Users2, FileText, Phone, ExternalLink, Copy,
   ChevronRight, Trash2, UserCog, Calendar, DollarSign,
   Clock, TrendingUp, Edit2, Save, X, UserPlus, Plus,
+  ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -76,7 +77,7 @@ function InfoRow({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EnrichPanel
+// EnrichPanel — Apollo auto-enriches on scan; this button is a manual retry
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EnrichPanel({
@@ -87,13 +88,15 @@ function EnrichPanel({
   const { status } = enrichState;
   const isApolloLoading = status === 'searching_apollo';
 
-  if (hasContact && status === 'idle') {
+  if (hasContact && (status === 'idle' || status === 'apollo_found' || status === 'apollo_failed')) {
     return (
-      <div className="flex gap-2 pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3">
-        <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
-          onClick={onApollo} disabled={isApolloLoading}>
-          {isApolloLoading ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
-          Re-search Apollo
+      <div className="pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3">
+        <button
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
+          onClick={() => onApollo()} disabled={isApolloLoading}>
+          {isApolloLoading
+            ? <><Loader2 size={11} className="animate-spin" /> Searching…</>
+            : <><Search size={11} /> Search Apollo for More Contacts</>}
         </button>
       </div>
     );
@@ -101,7 +104,6 @@ function EnrichPanel({
 
   return (
     <div className="space-y-3 pt-3">
-      {/* Apollo button */}
       <div className={cn(
         'rounded-xl border p-3.5 transition-all',
         isApolloLoading ? 'bg-violet-500/[0.08] border-violet-500/30'
@@ -119,22 +121,24 @@ function EnrichPanel({
               <p className="text-[10px] text-slate-500">200M+ contacts database</p>
             </div>
           </div>
-          {status === 'apollo_found' && <CheckCircle2 size={14} className="text-violet-400" />}
-          {status === 'apollo_failed' && <XCircle size={14} className="text-red-500" />}
+          <div className="flex items-center gap-2">
+            {status === 'apollo_found' && <CheckCircle2 size={14} className="text-violet-400" />}
+            {status === 'apollo_failed' && <XCircle size={14} className="text-red-500" />}
+          </div>
         </div>
-        <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
-          onClick={onApollo} disabled={isApolloLoading || status === 'apollo_found'}>
+        <button
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
+          onClick={() => onApollo()} disabled={isApolloLoading}>
           {isApolloLoading ? <><Loader2 size={12} className="animate-spin" /> Searching Apollo…</>
-            : status === 'apollo_found' ? '✓ Contact found'
-            : status === 'apollo_failed' ? '✕ Not found — try again'
+            : status === 'apollo_found' ? <><Search size={12} /> Search Again</>
+            : status === 'apollo_failed' ? <><Search size={12} /> Retry Apollo Search</>
             : <><Search size={12} /> Search Apollo</>}
         </button>
       </div>
-
       {status === 'apollo_failed' && (
         <div className="p-3 bg-amber-500/[0.06] border border-amber-500/20 rounded-xl">
           <p className="text-xs text-amber-400 text-center">
-            No contact found. Try adding a LinkedIn URL to improve search accuracy.
+            No contact found. Check that the company website is correct and retry.
           </p>
         </div>
       )}
@@ -229,7 +233,9 @@ export default function LeadDetailPage() {
       if (d.found) {
         setEnrichState({ status: 'apollo_found', source: 'apollo' });
         qc.invalidateQueries({ queryKey: ['lead', id] });
-        toast.success('Contact found via Apollo!');
+        qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+        const count = d.contactsFound || 1;
+        toast.success(`${count} contact${count > 1 ? 's' : ''} found via Apollo!`);
       } else {
         setEnrichState({ status: 'apollo_failed' });
         toast.error('No contact found in Apollo.');
@@ -622,6 +628,8 @@ export default function LeadDetailPage() {
                 label="LinkedIn" value={lead.linkedinUrl}
                 href={lead.linkedinUrl?.startsWith('http') ? lead.linkedinUrl : lead.linkedinUrl ? `https://${lead.linkedinUrl}` : undefined}
                 copyable />
+              <InfoRow icon={<Phone size={12} className="text-amber-400" />}
+                label="Company Phone" value={lead.companyPhone} copyable />
             </div>
 
             {/* Description */}
@@ -697,14 +705,22 @@ export default function LeadDetailPage() {
                 )}
                 <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] overflow-hidden">
                   {/* Column headers */}
-                  <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] bg-slate-100 dark:bg-slate-900">
+                  <div className="grid grid-cols-4 divide-x divide-slate-200 dark:divide-white/[0.06] bg-slate-100 dark:bg-slate-900">
                     <div className="px-3 py-2 flex items-center gap-1.5">
-                      <Phone size={10} className="text-amber-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Phone Numbers</span>
+                      <User size={10} className="text-slate-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Name</span>
+                    </div>
+                    <div className="px-3 py-2 flex items-center gap-1.5">
+                      <ChevronRight size={10} className="text-slate-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Title</span>
                     </div>
                     <div className="px-3 py-2 flex items-center gap-1.5">
                       <Mail size={10} className="text-emerald-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Email Addresses</span>
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Email</span>
+                    </div>
+                    <div className="px-3 py-2 flex items-center gap-1.5">
+                      <Linkedin size={10} className="text-blue-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">LinkedIn</span>
                     </div>
                   </div>
 
@@ -718,16 +734,22 @@ export default function LeadDetailPage() {
                           <div className="p-3 bg-blue-500/[0.04] space-y-2">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="label mb-1 block">Phone</label>
-                                <div className="flex items-center gap-1.5">
-                                  <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                                  <input
-                                    className="input text-xs flex-1 h-8"
-                                    placeholder="+91 XXXXX XXXXX"
-                                    value={editContactData.phone}
-                                    onChange={e => setEditContactData(d => ({ ...d, phone: e.target.value }))}
-                                  />
-                                </div>
+                                <label className="label mb-1 block">Name</label>
+                                <input
+                                  className="input text-xs flex-1 h-8"
+                                  placeholder="Full name"
+                                  value={editContactData.name || ''}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, name: e.target.value }))}
+                                />
+                              </div>
+                              <div>
+                                <label className="label mb-1 block">Title</label>
+                                <input
+                                  className="input text-xs flex-1 h-8"
+                                  placeholder="Job title"
+                                  value={editContactData.title || ''}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, title: e.target.value }))}
+                                />
                               </div>
                               <div>
                                 <label className="label mb-1 block">Email</label>
@@ -738,7 +760,19 @@ export default function LeadDetailPage() {
                                     type="email"
                                     placeholder="name@company.com"
                                     value={editContactData.email}
-                                    onChange={e => setEditContactData(d => ({ ...d, email: e.target.value }))}
+                                    onChange={e => setEditContactData((d: any) => ({ ...d, email: e.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="label mb-1 block">Phone</label>
+                                <div className="flex items-center gap-1.5">
+                                  <Phone size={11} className="text-amber-400 flex-shrink-0" />
+                                  <input
+                                    className="input text-xs flex-1 h-8"
+                                    placeholder="+91 XXXXX XXXXX"
+                                    value={editContactData.phone}
+                                    onChange={e => setEditContactData((d: any) => ({ ...d, phone: e.target.value }))}
                                   />
                                 </div>
                               </div>
@@ -763,27 +797,21 @@ export default function LeadDetailPage() {
                           </div>
                         ) : (
                           /* ── Read-only row ── */
-                          <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                            {/* LEFT — phone */}
-                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
-                              <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                              {(c.phone || c.contactPhone) ? (
-                                <>
-                                  <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
-                                    {c.phone || c.contactPhone}
-                                  </span>
-                                  <button
-                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity ml-auto flex-shrink-0"
-                                    onClick={() => { navigator.clipboard.writeText(c.phone || c.contactPhone); toast.success('Copied!'); }}
-                                    title="Copy phone">
-                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )}
+                          <div className="grid grid-cols-4 divide-x divide-slate-200 dark:divide-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                            {/* Name */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
+                              <User size={11} className="text-slate-400 flex-shrink-0" />
+                              <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
+                                {c.name || '—'}
+                              </span>
                             </div>
-                            {/* RIGHT — email + actions */}
+                            {/* Title */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
+                              <span className="text-xs text-slate-500 truncate">
+                                {c.title || c.designation || '—'}
+                              </span>
+                            </div>
+                            {/* Email */}
                             <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
                               <Mail size={11} className="text-emerald-400 flex-shrink-0" />
                               {(c.email || c.contactEmail) ? (
@@ -796,6 +824,27 @@ export default function LeadDetailPage() {
                                     className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
                                     onClick={() => { navigator.clipboard.writeText(c.email || c.contactEmail); toast.success('Copied!'); }}
                                     title="Copy email">
+                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </div>
+                            {/* LinkedIn + actions */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
+                              {c.linkedin ? (
+                                <>
+                                  <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
+                                  <a href={c.linkedin.startsWith('http') ? c.linkedin : `https://${c.linkedin}`}
+                                    target="_blank" rel="noopener noreferrer"
+                                    className="text-xs text-blue-400 hover:text-blue-300 truncate">
+                                    Profile
+                                  </a>
+                                  <button
+                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
+                                    onClick={() => { navigator.clipboard.writeText(c.linkedin); toast.success('Copied!'); }}
+                                    title="Copy LinkedIn URL">
                                     <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
                                   </button>
                                 </>
@@ -986,6 +1035,12 @@ export default function LeadDetailPage() {
             <Badge color={statusColors[lead.status] ?? 'gray'}>{lead.status?.replace('_', ' ')}</Badge>
             {lead.source && (
               <p className="text-xs text-slate-600 mt-2">Source: {lead.source}</p>
+            )}
+            {lead.sourceUrl && (
+              <a href={lead.sourceUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-400 hover:underline mt-1">
+                View source <ExternalLink size={10} />
+              </a>
             )}
             <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/[0.06]">
               <div className="flex items-center gap-2 text-xs">

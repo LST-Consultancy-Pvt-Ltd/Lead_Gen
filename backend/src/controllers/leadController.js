@@ -181,7 +181,94 @@ async function enrichLeadViaApollo(req, res) {
   try {
     const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!lead) return error(res, 'Lead not found', 404);
-    logger.info('Enriching via Apollo', { leadId: lead.id, company: lead.companyName, website: lead.website });
+
+    const personTitles = Array.isArray(req.body?.personTitles) ? req.body.personTitles : null;
+    const returnAll = !!(personTitles && personTitles.length > 0);
+
+    logger.info('Enriching via Apollo', {
+      leadId: lead.id, company: lead.companyName, website: lead.website,
+      personTitles: personTitles || 'default', returnAll,
+    });
+
+    if (returnAll) {
+      // Multi-contact mode: return all matching contacts
+      const contacts = await enrichViaApollo(lead, { personTitles, returnAll: true });
+      if (!contacts || contacts.length === 0) {
+        return success(res, { found: false, enrichedVia: 'apollo', contacts: [] }, 'Apollo: no contacts found');
+      }
+
+      // Save org phone to companyPhone (company-level, not personal contact)
+      const orgPhone = contacts._orgPhone || null;
+      if (orgPhone && !lead.companyPhone) {
+        try {
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: { companyPhone: orgPhone },
+          });
+          lead.companyPhone = orgPhone;
+        } catch (phoneErr) {
+          logger.warn('Failed to save companyPhone (non-fatal)', { err: phoneErr.message });
+        }
+      }
+
+      // Save first contact as primary if lead has no primary contact yet
+      let updated = lead;
+      if (!lead.contactEmail && !lead.contactName) {
+        updated = await _saveContact(lead, contacts[0], req.user.id, req.user.organizationId);
+      }
+
+      // Save remaining contacts as additional contacts
+      const savedAdditional = [];
+      const startIdx = (!lead.contactEmail && !lead.contactName) ? 1 : 0;
+      for (let i = startIdx; i < contacts.length; i++) {
+        const c = contacts[i];
+        try {
+          // Deduplicate: check by email if available, otherwise by name+title
+          let existing = null;
+          if (c.email) {
+            existing = await prisma.contact.findFirst({
+              where: { leadId: lead.id, email: c.email },
+            });
+          } else if (c.name) {
+            existing = await prisma.contact.findFirst({
+              where: { leadId: lead.id, name: c.name, title: c.title || undefined },
+            });
+          }
+          if (!existing) {
+            const saved = await prisma.contact.create({
+              data: {
+                leadId:         lead.id,
+                organizationId: req.user.organizationId,
+                name:           c.name || 'Unknown',
+                title:          c.title || null,
+                email:          c.email || null,
+                phone:          c.phone || null,
+                linkedin:       c.linkedinUrl || null,
+                designation:    c.title || null,
+              },
+            });
+            savedAdditional.push(saved);
+          }
+        } catch (err) {
+          logger.warn('Failed to save additional Apollo contact', { err: err.message });
+        }
+      }
+
+      await prisma.activityLog.create({ data: {
+        organizationId: req.user.organizationId, userId: req.user.id, leadId: lead.id,
+        action: 'contact_enriched',
+        description: `Found ${contacts.length} contacts via Apollo (titles: ${personTitles.join(', ')})`,
+      }}).catch(()=>{});
+
+      return success(res, {
+        found: true, enrichedVia: 'apollo',
+        contactsFound: contacts.length,
+        contacts,
+        lead: updated,
+      }, `Found ${contacts.length} contacts via Apollo`);
+    }
+
+    // Single contact mode (original behavior)
     const contact = await enrichViaApollo(lead);
     if (!hasContact(contact)) return success(res, { found: false, enrichedVia: 'apollo' }, 'Apollo: no contact found');
     const updated = await _saveContact(lead, contact, req.user.id, req.user.organizationId);
@@ -253,33 +340,33 @@ async function exportLeads(req, res) {
       }
     }
     
-    const leads = await prisma.lead.findMany({ where, orderBy: { createdAt: 'desc' } });
-    const rows  = leads.map(l => {
-      // Format date as YYYY-MM-DD HH:mm:ss
-      const formatDate = (date) => {
-        if (!date) return '';
-        const d = new Date(date);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const hours = String(d.getHours()).padStart(2, '0');
-        const minutes = String(d.getMinutes()).padStart(2, '0');
-        const seconds = String(d.getSeconds()).padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-      };
-      
-      return {
+    const leads = await prisma.lead.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { leadContacts: true },
+    });
+    const rows = [];
+    const formatDate = (date) => {
+      if (!date) return '';
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const seconds = String(d.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    };
+
+    for (const l of leads) {
+      const base = {
         companyName:  l.companyName,
         domainName:   l.website ? l.website.replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0] : '',
         website:      l.website || '',
         industry:     l.industry || '',
         location:     l.location || '',
         companySize:  l.companySize || '',
-        contactName:  l.contactName || '',
-        contactTitle: l.contactTitle || '',
-        contactEmail: l.contactEmail || '',
-        contactPhone: l.contactPhone || '',
-        contactLinkedin: l.contactLinkedin || '',
+        companyPhone: l.companyPhone || '',
         linkedinUrl:  l.linkedinUrl || '',
         leadScore:    l.leadScore,
         intentLevel:  l.intentLevel,
@@ -288,10 +375,37 @@ async function exportLeads(req, res) {
         source:       l.source || '',
         createdAt:    formatDate(l.createdAt),
       };
-    });
+
+      // Primary contact row
+      rows.push({
+        ...base,
+        contactType:    'Primary',
+        contactName:    l.contactName || '',
+        contactTitle:   l.contactTitle || '',
+        contactEmail:   l.contactEmail || '',
+        contactPhone:   l.contactPhone || '',
+        contactLinkedin: l.contactLinkedin || '',
+      });
+
+      // Additional contact rows
+      if (l.leadContacts && l.leadContacts.length > 0) {
+        for (const c of l.leadContacts) {
+          rows.push({
+            ...base,
+            contactType:    'Additional',
+            contactName:    c.name || '',
+            contactTitle:   c.title || c.designation || '',
+            contactEmail:   c.email || '',
+            contactPhone:   c.phone || '',
+            contactLinkedin: c.linkedin || '',
+          });
+        }
+      }
+    }
+
     const parser = new Parser({ fields: [
-      'companyName','domainName','website','industry','location','companySize',
-      'contactName','contactTitle','contactEmail','contactPhone','contactLinkedin',
+      'companyName','domainName','website','industry','location','companySize','companyPhone',
+      'contactType','contactName','contactTitle','contactEmail','contactPhone','contactLinkedin',
       'linkedinUrl','leadScore','intentLevel','status','intentSignals','source','createdAt',
     ]});
     const csv = parser.parse(rows);

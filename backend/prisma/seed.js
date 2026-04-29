@@ -87,6 +87,122 @@ async function main() {
     },
   });
 
+  // ─── Seed new discovery dropdown categories ───────────────────────────────
+  const discoveryDropdowns = [
+    // industry / vertical
+    { category: 'industry', value: 'Any Industry',                               displayOrder: 0 },
+    { category: 'industry', value: 'Information Technology (IT)',                 displayOrder: 1 },
+    { category: 'industry', value: 'Software / SaaS',                            displayOrder: 2 },
+    { category: 'industry', value: 'Banking & Financial Services (BFSI)',         displayOrder: 3 },
+    { category: 'industry', value: 'Healthcare & Pharmaceuticals',               displayOrder: 4 },
+    { category: 'industry', value: 'Manufacturing & Industrial',                 displayOrder: 5 },
+    { category: 'industry', value: 'Retail & E-commerce',                        displayOrder: 6 },
+    { category: 'industry', value: 'Education & EdTech',                         displayOrder: 7 },
+    { category: 'industry', value: 'Logistics & Supply Chain',                   displayOrder: 8 },
+    { category: 'industry', value: 'Real Estate & Construction',                 displayOrder: 9 },
+    { category: 'industry', value: 'Media & Advertising',                        displayOrder: 10 },
+    { category: 'industry', value: 'Telecommunications',                         displayOrder: 11 },
+    { category: 'industry', value: 'Energy & Utilities',                         displayOrder: 12 },
+    { category: 'industry', value: 'Automotive',                                 displayOrder: 13 },
+    { category: 'industry', value: 'Government & Public Sector',                 displayOrder: 14 },
+    { category: 'industry', value: 'NGO / Non-profit',                           displayOrder: 15 },
+    { category: 'industry', value: 'Hospitality & Travel',                       displayOrder: 16 },
+    { category: 'industry', value: 'Agriculture & Food Processing',              displayOrder: 17 },
+    { category: 'industry', value: 'Legal & Compliance',                         displayOrder: 18 },
+    { category: 'industry', value: 'Consulting & Professional Services',         displayOrder: 19 },
+
+    // company_size
+    { category: 'company_size', value: 'Any Size',                  displayOrder: 0 },
+    { category: 'company_size', value: '1–10 (Micro)',               displayOrder: 1 },
+    { category: 'company_size', value: '11–50 (Small)',              displayOrder: 2 },
+    { category: 'company_size', value: '51–200 (Mid-size)',          displayOrder: 3 },
+    { category: 'company_size', value: '201–500 (Growing)',          displayOrder: 4 },
+    { category: 'company_size', value: '501–1000 (Large)',           displayOrder: 5 },
+    { category: 'company_size', value: '1000–5000 (Enterprise)',     displayOrder: 6 },
+    { category: 'company_size', value: '5000+ (Global Enterprise)',  displayOrder: 7 },
+
+    // company_type
+    { category: 'company_type', value: 'Any',                   displayOrder: 0 },
+    { category: 'company_type', value: 'Private Limited',        displayOrder: 1 },
+    { category: 'company_type', value: 'Public Listed',          displayOrder: 2 },
+    { category: 'company_type', value: 'Startup',                displayOrder: 3 },
+    { category: 'company_type', value: 'MNC',                    displayOrder: 4 },
+    { category: 'company_type', value: 'SME',                    displayOrder: 5 },
+    { category: 'company_type', value: 'Government / PSU',       displayOrder: 6 },
+    { category: 'company_type', value: 'NGO / Non-profit',       displayOrder: 7 },
+    { category: 'company_type', value: 'Partnership Firm',       displayOrder: 8 },
+    { category: 'company_type', value: 'LLP',                    displayOrder: 9 },
+    { category: 'company_type', value: 'Sole Proprietorship',    displayOrder: 10 },
+    { category: 'company_type', value: 'Family Business',        displayOrder: 11 },
+
+    // decision_maker (chip select — multi)
+    { category: 'decision_maker', value: 'CEO / Founder',                displayOrder: 0 },
+    { category: 'decision_maker', value: 'CTO / CIO',                    displayOrder: 1 },
+    { category: 'decision_maker', value: 'CFO',                          displayOrder: 2 },
+    { category: 'decision_maker', value: 'CMO',                          displayOrder: 3 },
+    { category: 'decision_maker', value: 'COO',                          displayOrder: 4 },
+    { category: 'decision_maker', value: 'MD / Director',                displayOrder: 5 },
+    { category: 'decision_maker', value: 'VP Sales',                     displayOrder: 6 },
+    { category: 'decision_maker', value: 'VP Operations',                displayOrder: 7 },
+    { category: 'decision_maker', value: 'Head of HR',                   displayOrder: 8 },
+    { category: 'decision_maker', value: 'Talent Acquisition Manager',   displayOrder: 9 },
+    { category: 'decision_maker', value: 'Procurement Head',             displayOrder: 10 },
+    { category: 'decision_maker', value: 'Operations Manager',           displayOrder: 11 },
+    { category: 'decision_maker', value: 'Department Head',              displayOrder: 12 },
+    { category: 'decision_maker', value: 'Board Member',                 displayOrder: 13 },
+
+    // preferred_contact_channel
+    { category: 'preferred_contact_channel', value: 'Any',               displayOrder: 0 },
+    { category: 'preferred_contact_channel', value: 'Email',             displayOrder: 1 },
+    { category: 'preferred_contact_channel', value: 'LinkedIn',          displayOrder: 2 },
+    { category: 'preferred_contact_channel', value: 'Phone / Call',      displayOrder: 3 },
+    { category: 'preferred_contact_channel', value: 'WhatsApp',          displayOrder: 4 },
+    { category: 'preferred_contact_channel', value: 'In-person / Visit', displayOrder: 5 },
+
+    // seniority_level
+    { category: 'seniority_level', value: 'Any',                    displayOrder: 0 },
+    { category: 'seniority_level', value: 'C-suite',                displayOrder: 1 },
+    { category: 'seniority_level', value: 'VP / SVP Level',         displayOrder: 2 },
+    { category: 'seniority_level', value: 'Director Level',         displayOrder: 3 },
+    { category: 'seniority_level', value: 'Manager Level',          displayOrder: 4 },
+    { category: 'seniority_level', value: 'Team Lead',              displayOrder: 5 },
+    { category: 'seniority_level', value: 'Individual Contributor', displayOrder: 6 },
+    { category: 'seniority_level', value: 'Board / Advisor Level',  displayOrder: 7 },
+
+    // annual_revenue_range (single dropdown)
+    { category: 'annual_revenue_range', value: 'Any',           displayOrder: 0 },
+    { category: 'annual_revenue_range', value: 'Under $1M',     displayOrder: 1 },
+    { category: 'annual_revenue_range', value: '$1M – $5M',     displayOrder: 2 },
+    { category: 'annual_revenue_range', value: '$5M – $10M',    displayOrder: 3 },
+    { category: 'annual_revenue_range', value: '$10M – $25M',   displayOrder: 4 },
+    { category: 'annual_revenue_range', value: '$25M – $50M',   displayOrder: 5 },
+    { category: 'annual_revenue_range', value: '$50M – $100M',  displayOrder: 6 },
+    { category: 'annual_revenue_range', value: '$100M – $250M', displayOrder: 7 },
+    { category: 'annual_revenue_range', value: '$250M – $500M', displayOrder: 8 },
+    { category: 'annual_revenue_range', value: '$500M – $1B',   displayOrder: 9 },
+    { category: 'annual_revenue_range', value: 'Above $1B',     displayOrder: 10 },
+  ];
+
+  for (const item of discoveryDropdowns) {
+    await prisma.dropdownConfig.upsert({
+      where: {
+        organizationId_category_value: {
+          organizationId: org.id,
+          category: item.category,
+          value: item.value,
+        },
+      },
+      update: { displayOrder: item.displayOrder },
+      create: {
+        organizationId: org.id,
+        category: item.category,
+        value: item.value,
+        displayOrder: item.displayOrder,
+        isActive: true,
+      },
+    });
+  }
+
   console.log('✅ Seed complete!');
   console.log(`📧 Login: admin@demo.com / password123`);
 }

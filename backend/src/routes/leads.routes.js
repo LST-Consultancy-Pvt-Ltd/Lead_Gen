@@ -61,9 +61,9 @@ const createLeadValidation = [
 
   body('status')
     .optional({ checkFalsy: true })
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Status must be 100 characters or less'),
+    .customSanitizer((val) => (val ? val.toLowerCase() : val))
+    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
+    .withMessage('Invalid status'),
 
   body('followUpDate')
     .optional({ checkFalsy: true })
@@ -107,9 +107,9 @@ const createLeadValidation = [
 
   body('temperature')
     .optional({ checkFalsy: true })
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Temperature must be 100 characters or less'),
+    .customSanitizer((val) => (val ? val.toLowerCase() : val))
+    .isIn(['hot', 'warm', 'cold', 'prospect', 'lost', 'won'])
+    .withMessage('Invalid temperature'),
 
   body('assignedToId')
     .optional({ checkFalsy: true })
@@ -175,9 +175,8 @@ const updateLeadValidation = [
   
   body('status')
     .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Status must be 100 characters or less'),
+    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
+    .withMessage('Invalid status'),
 
   // Spec: disqualificationReason required when setting status to disqualified
   body('disqualificationReason')
@@ -193,9 +192,8 @@ const updateLeadValidation = [
 
   body('temperature')
     .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Temperature must be 100 characters or less'),
+    .isIn(['hot', 'warm', 'cold', 'prospect', 'lost', 'won'])
+    .withMessage('Invalid temperature'),
   
   body('assignedToId')
     .optional()
@@ -233,8 +231,7 @@ const getLeadsValidation = [
   
   query('status')
     .optional()
-    .trim()
-    .isLength({ max: 100 })
+    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
     .withMessage('Invalid status'),
   
   query('intent')

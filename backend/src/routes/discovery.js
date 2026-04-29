@@ -7,6 +7,9 @@ router.use(authenticate);
 // Service-based scan
 router.post('/scan', authorize('org_admin', 'manager'), ctrl.startScan);
 
+// Smart scan — parse a plain English prompt and immediately start scanning
+router.post('/scan/smart', authorize('org_admin', 'manager'), ctrl.smartScan);
+
 // Generate prompt preview before product scan (Step 1)
 router.post('/product/generate-prompt', authorize('org_admin', 'manager'), ctrl.generateProductScanPrompt);
 

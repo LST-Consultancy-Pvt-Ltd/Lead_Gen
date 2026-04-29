@@ -141,10 +141,12 @@ async function kgLookup(lead) {
     if (!kg) return null;
 
     let companySize = null;
+    let rawEmployeeCount = undefined;
     const empRaw = kg.employees || kg.number_of_employees || '';
     if (empRaw) {
       const num = parseInt(empRaw.toString().replace(/[^0-9]/g, ''));
       if (!isNaN(num)) {
+        rawEmployeeCount = num;
         if (num > 10000) companySize = '10000+';
         else if (num > 1000) companySize = '1000-10000';
         else if (num > 200)  companySize = '200-1000';
@@ -172,6 +174,7 @@ async function kgLookup(lead) {
 
     return {
       companySize,
+      rawEmployeeCount,
       industry,
       location:      headquarters,
       description,
@@ -343,14 +346,105 @@ async function apolloEnrichOrganization(domain, headers) {
   }
 }
 
-async function apolloSearchPeopleByOrgId(orgId, headers, jobTitle = null, perPage = 10) {
+// ── Title synonym groups ──
+// Each array contains equivalent title variations. When a user searches for
+// any variant, all variants in the group are sent to Apollo, and the post-filter
+// treats all variants as matches.
+const TITLE_SYNONYM_GROUPS = [
+  ['ceo', 'chief executive officer'],
+  ['cto', 'chief technology officer'],
+  ['cfo', 'chief financial officer'],
+  ['coo', 'chief operating officer'],
+  ['cmo', 'chief marketing officer'],
+  ['cio', 'chief information officer'],
+  ['ciso', 'chief information security officer'],
+  ['cpo', 'chief product officer'],
+  ['cro', 'chief revenue officer'],
+  ['cdo', 'chief data officer', 'chief digital officer'],
+  ['clo', 'chief legal officer'],
+  ['chro', 'chief human resources officer'],
+  ['it director', 'director of it', 'director of information technology'],
+  ['hr director', 'director of hr', 'director of human resources'],
+  ['finance director', 'director of finance'],
+  ['sales director', 'director of sales'],
+  ['marketing director', 'director of marketing'],
+  ['operations director', 'director of operations'],
+  ['engineering director', 'director of engineering'],
+  ['vp engineering', 'vice president of engineering', 'vice president engineering'],
+  ['vp sales', 'vice president of sales', 'vice president sales'],
+  ['vp marketing', 'vice president of marketing', 'vice president marketing'],
+  ['vp operations', 'vice president of operations', 'vice president operations'],
+  ['vp product', 'vice president of product', 'vice president product'],
+  ['vp finance', 'vice president of finance', 'vice president finance'],
+  ['vp hr', 'vice president of hr', 'vice president hr'],
+  ['vp it', 'vice president of it', 'vice president it'],
+  ['vp technology', 'vice president of technology', 'vice president technology'],
+  ['vp business development', 'vice president of business development'],
+  ['erp manager', 'enterprise resource planning manager'],
+  ['it manager', 'information technology manager'],
+  ['hr manager', 'human resources manager'],
+  ['c suite', 'c-suite', 'csuite'],
+];
+
+/**
+ * Expand an array of titles by adding known synonyms.
+ * E.g. ['CEO', 'IT Director'] → ['CEO', 'Chief Executive Officer', 'IT Director', 'Director of IT', ...]
+ */
+function expandTitlesWithSynonyms(titles) {
+  const expanded = new Set(titles.map(t => t.toLowerCase().trim()));
+  for (const title of titles) {
+    const lower = title.toLowerCase().trim();
+    for (const group of TITLE_SYNONYM_GROUPS) {
+      if (group.includes(lower)) {
+        group.forEach(syn => expanded.add(syn));
+      }
+    }
+  }
+  return [...expanded];
+}
+
+/**
+ * Check if a person's title matches any of the user-selected titles,
+ * accounting for synonyms and word-boundary-aware matching.
+ */
+function titleMatchesAny(personTitle, searchTitles) {
+  if (!personTitle) return false;
+  const pTitle = personTitle.toLowerCase().trim();
+
+  // Build expanded set of all acceptable titles (with synonyms)
+  const expandedTitles = expandTitlesWithSynonyms(searchTitles);
+
+  // 1) Exact match against expanded synonyms
+  if (expandedTitles.some(t => pTitle === t)) return true;
+
+  // 2) Word-boundary match: search term appears as whole words inside the person's title
+  //    E.g. "Finance Manager" matches "Senior Finance Manager"
+  //    But "CEO" does NOT match "Process Coordinator"
+  //    Uses word boundary regex (\b) for precise matching
+  for (const t of expandedTitles) {
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b${escaped}\\b`, 'i');
+    if (re.test(pTitle)) return true;
+  }
+
+  return false;
+}
+
+async function apolloSearchPeopleByOrgId(orgId, headers, jobTitle = null, perPage = 10, personTitles = null) {
   const payload = {
     organization_ids: [orgId],
     per_page: perPage,
     page: 1,
   };
-  if (jobTitle) {
-    payload.person_titles = [jobTitle];
+  if (personTitles && personTitles.length > 0) {
+    // Expand with synonyms so Apollo can find both "CEO" and "Chief Executive Officer"
+    const expandedTitles = expandTitlesWithSynonyms(personTitles);
+    payload.person_titles = expandedTitles;
+    payload.include_similar_titles = true;
+  } else if (jobTitle) {
+    // Expand single title too
+    const expandedTitles = expandTitlesWithSynonyms([jobTitle]);
+    payload.person_titles = expandedTitles;
     payload.include_similar_titles = true;
   }
 
@@ -360,8 +454,17 @@ async function apolloSearchPeopleByOrgId(orgId, headers, jobTitle = null, perPag
       payload,
       { headers, timeout: 15000 }
     );
-    const people = data?.people || [];
+    let people = data?.people || [];
     logger.info('Apollo: people search by org_id', { orgId, found: people.length });
+
+    // Post-filter: keep only people whose title matches the user's selected titles
+    // Uses synonym-aware + contains matching instead of exact match
+    if (personTitles && personTitles.length > 0 && people.length > 0) {
+      const filtered = people.filter(p => titleMatchesAny(p.title, personTitles));
+      logger.info('Apollo: title filter (synonym-aware)', { before: people.length, after: filtered.length, titles: personTitles });
+      people = filtered;
+    }
+
     return people;
   } catch (err) {
     logger.warn('Apollo: people search by org_id failed', { orgId, err: err.message });
@@ -390,7 +493,7 @@ async function apolloEnrichPersonById(apolloId, headers) {
       email:       person.email ?? null,
       phone:       person.sanitized_phone ?? person.phone_numbers?.[0]?.raw_number ?? null,
       linkedinUrl: person.linkedin_url ?? null,
-      name:        [person.first_name, person.last_name].filter(Boolean).join(' ') || null,
+      name:        [person.first_name, person.last_name || person.last_name_obfuscated].filter(Boolean).join(' ') || null,
       title:       person.title ?? null,
       source:      'apollo',
       company:     org.name ?? null,
@@ -401,11 +504,14 @@ async function apolloEnrichPersonById(apolloId, headers) {
   }
 }
 
-async function enrichViaApollo(lead) {
+async function enrichViaApollo(lead, options = {}) {
   if (!config.apollo?.apiKey) {
     logger.warn('Apollo: APOLLO_API_KEY not set — skipping');
     return null;
   }
+
+  const { personTitles, returnAll = false } = options;
+  const userTitles = Array.isArray(personTitles) && personTitles.length > 0 ? personTitles : null;
 
   const domain = lead.website ? normDomain(lead.website) : null;
   if (!domain && !lead.companyName) return null;
@@ -419,67 +525,100 @@ async function enrichViaApollo(lead) {
 
   // ── Step 1: Enrich organization by domain → get org ID (FREE) ──
   let orgId = null;
+  let orgPhone = null;
   if (domain) {
     const org = await apolloEnrichOrganization(domain, apolloHeaders);
     orgId = org?.id || null;
+    orgPhone = org?.sanitized_phone || org?.phone || null;
+    if (orgPhone) {
+      logger.info('Apollo: org phone found', { domain, orgPhone });
+    }
   }
 
   // ── Step 2: Search people by org ID (FREE, more reliable) ──
   let people = [];
+  const titlesToSearch = userTitles || ['CEO', 'CTO', 'Founder', 'Managing Director', 'Director'];
+
   if (orgId) {
-    // Try with decision-maker titles first
-    for (const title of ['CEO', 'CTO', 'Founder', 'Managing Director', 'Director']) {
-      people = await apolloSearchPeopleByOrgId(orgId, apolloHeaders, title, 5);
-      if (people.length > 0) break;
+    if (userTitles) {
+      // User selected specific titles — search all at once with higher limit
+      people = await apolloSearchPeopleByOrgId(orgId, apolloHeaders, null, 25, userTitles);
+    } else {
+      // Default behavior: try each title until we find someone
+      for (const title of titlesToSearch) {
+        people = await apolloSearchPeopleByOrgId(orgId, apolloHeaders, title, 5);
+        if (people.length > 0) break;
+      }
     }
     // If no title match, search without title filter
-    if (people.length === 0) {
+    if (people.length === 0 && !userTitles) {
       people = await apolloSearchPeopleByOrgId(orgId, apolloHeaders, null, 10);
-    }
-  }
-
-  // Fallback: if org enrich failed or found no people, try search by domain/name directly
-  if (people.length === 0) {
-    logger.info('Apollo: org_id route found no people, falling back to domain/name search', { leadId: lead.id });
-    const searchBody = {
-      page: 1,
-      per_page: 5,
-      person_titles: [
-        'CEO', 'CTO', 'Founder', 'Co-Founder', 'Managing Director',
-        'VP Engineering', 'Head of IT', 'Director',
-      ],
-    };
-    if (domain) {
-      searchBody.organization_domains = [domain];
-    } else if (lead.companyName) {
-      searchBody.q_organization_name = lead.companyName;
-    }
-
-    try {
-      const searchRes = await axios.post(
-        'https://api.apollo.io/api/v1/mixed_people/api_search',
-        searchBody,
-        { headers: apolloHeaders, timeout: 15000 }
-      );
-      people = searchRes.data?.people || [];
-    } catch (err) {
-      logger.error('Apollo: fallback search failed', { err: err.message, leadId: lead.id });
     }
   }
 
   if (!people.length) {
     logger.info('Apollo: no people found at all', { leadId: lead.id });
-    return null;
+    return returnAll ? [] : null;
   }
 
-  // ── Step 3: Enrich person by Apollo ID (1 CREDIT per person) ──
-  // Try people who have confirmed email first
+  // ── Step 3: Enrich people by Apollo ID (1 CREDIT per person) ──
   const sorted = [...people].sort((a, b) => {
     if (a.has_email && !b.has_email) return -1;
     if (!a.has_email && b.has_email) return 1;
     return 0;
   });
 
+  if (returnAll) {
+    // Multi-contact mode: enrich each person by Apollo ID to get full name/email/linkedin/phone
+    // Each enrich costs 1 credit, but reveals the real (unmasked) data
+    const allContacts = [];
+    const seenKeys = new Set();   // dedup by email or name
+
+    for (const person of sorted) {
+      const apolloId = person.id;
+      if (!apolloId) continue;
+
+      // Try enrich-by-ID to get full data (1 CREDIT per person)
+      const enriched = await apolloEnrichPersonById(apolloId, apolloHeaders);
+
+      let contact;
+      if (enriched && (enriched.name || enriched.email)) {
+        contact = enriched;
+      } else {
+        // Fallback: use raw search data (masked last name)
+        const lastName = person.last_name || person.last_name_obfuscated || null;
+        contact = {
+          name:        [person.first_name, lastName].filter(Boolean).join(' ') || null,
+          email:       person.email ?? null,
+          phone:       person.phone_numbers?.[0]?.raw_number ?? null,
+          linkedinUrl: person.linkedin_url ?? null,
+          title:       person.title ?? null,
+          source:      'apollo',
+        };
+      }
+
+      if (!contact.name && !contact.email) continue;
+
+      // Dedup by email if available, otherwise by name+title
+      const dedupKey = contact.email
+        ? `email:${contact.email.toLowerCase()}`
+        : `name:${(contact.name || '').toLowerCase()}|${(contact.title || '').toLowerCase()}`;
+      if (seenKeys.has(dedupKey)) continue;
+      seenKeys.add(dedupKey);
+
+      allContacts.push(contact);
+    }
+
+    // Attach org phone to the result metadata
+    if (orgPhone) {
+      allContacts._orgPhone = orgPhone;
+    }
+
+    logger.info('Apollo: multi-contact search done', { leadId: lead.id, total: allContacts.length, orgPhone });
+    return allContacts;
+  }
+
+  // Single contact mode (original behavior)
   for (const person of sorted) {
     const apolloId = person.id;
     if (!apolloId) continue;
@@ -582,6 +721,20 @@ async function runBackgroundEnrichment(lead, prisma) {
         logger.info('Background enrichment saved', { leadId: cur.id, fields: Object.keys(safePatch) });
       }
     }
+
+    // ── Auto-archive tiny companies (0-1 employees) ──────────────────────
+    const finalSize = patch.companySize || cur.companySize || '';
+    if (finalSize === '1-10') {
+      // Check if KG gave us the raw employee count — if ≤ 1, archive
+      const rawEmpCount = kg?.rawEmployeeCount;
+      if (rawEmpCount !== undefined && rawEmpCount <= 1) {
+        await prisma.lead.update({
+          where: { id: cur.id },
+          data: { status: 'disqualified', notes: (cur.notes || '') + '\n[Auto] Disqualified: company has 0-1 employees.' },
+        });
+        logger.info('Auto-disqualified tiny company', { leadId: cur.id, employees: rawEmpCount });
+      }
+    }
   } catch (err) {
     logger.warn('Background enrichment failed (non-fatal)', { leadId: lead.id, err: err.message });
   }
@@ -613,10 +766,105 @@ async function aggregateCompanyProfile(lead) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Auto Apollo enrichment — called in background after a lead is saved during a scan.
+// Finds contacts for the decision-maker roles chosen by the user on the discovery page.
+// Safe to fire-and-forget; never throws.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function runApolloEnrichmentBackground(lead, prisma, { organizationId, createdById = null, roles = [] } = {}) {
+  try {
+    if (!config.apollo?.apiKey) {
+      logger.info('Apollo auto-enrich: skipped (no API key)', { leadId: lead.id });
+      return;
+    }
+
+    const personTitles = Array.isArray(roles) && roles.length > 0 ? roles : null;
+
+    logger.info('Apollo auto-enrich: starting', {
+      leadId: lead.id,
+      company: lead.companyName,
+      roles: personTitles || 'defaults',
+    });
+
+    const contacts = await enrichViaApollo(lead, {
+      personTitles,
+      returnAll: !!(personTitles && personTitles.length > 0),
+    });
+
+    if (!contacts || (Array.isArray(contacts) ? contacts.length === 0 : !contacts.email && !contacts.name)) {
+      logger.info('Apollo auto-enrich: no contacts found', { leadId: lead.id });
+      return;
+    }
+
+    const contactList = Array.isArray(contacts) ? contacts : [contacts];
+    const orgPhone = contacts._orgPhone || null;
+
+    // Save org phone on lead if missing
+    if (orgPhone) {
+      await prisma.lead.update({ where: { id: lead.id }, data: { companyPhone: orgPhone } }).catch(() => {});
+    }
+
+    // Save first contact as primary if lead has none
+    const freshLead = await prisma.lead.findUnique({ where: { id: lead.id } }).catch(() => lead);
+    let primarySaved = !!(freshLead?.contactEmail || freshLead?.contactName);
+
+    for (const c of contactList) {
+      if (!c.name && !c.email) continue;
+
+      if (!primarySaved) {
+        // Set as primary contact on the lead record
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: {
+            contactName:     c.name  || null,
+            contactTitle:    c.title || null,
+            contactEmail:    c.email || null,
+            contactPhone:    c.phone || null,
+            contactLinkedin: c.linkedinUrl || null,
+          },
+        }).catch(err => logger.warn('Apollo auto-enrich: failed to set primary contact', { err: err.message }));
+        primarySaved = true;
+      }
+
+      // Save as a Contact record (dedup by email or name+title)
+      try {
+        let existing = null;
+        if (c.email) {
+          existing = await prisma.contact.findFirst({ where: { leadId: lead.id, email: c.email } });
+        } else if (c.name) {
+          existing = await prisma.contact.findFirst({ where: { leadId: lead.id, name: c.name, title: c.title || undefined } });
+        }
+        if (!existing) {
+          await prisma.contact.create({
+            data: {
+              leadId:         lead.id,
+              organizationId: organizationId || lead.organizationId,
+              name:           c.name  || 'Unknown',
+              title:          c.title || null,
+              email:          c.email || null,
+              phone:          c.phone || null,
+              linkedin:       c.linkedinUrl || null,
+              designation:    c.title || null,
+            },
+          });
+        }
+      } catch (err) {
+        logger.warn('Apollo auto-enrich: failed to save contact record', { err: err.message });
+      }
+    }
+
+    logger.info('Apollo auto-enrich: done', { leadId: lead.id, saved: contactList.length });
+  } catch (err) {
+    logger.warn('Apollo auto-enrich: failed (non-fatal)', { leadId: lead.id, err: err.message });
+  }
+}
+
 module.exports = {
   enrichViaSignalHire,
   enrichViaApollo,
   runBackgroundEnrichment,
+  runApolloEnrichmentBackground,
   aggregateCompanyProfile,
   resolveDomain,
   findLinkedinUrl,

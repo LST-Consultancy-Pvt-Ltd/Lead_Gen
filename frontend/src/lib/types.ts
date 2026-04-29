@@ -24,7 +24,7 @@ export interface Lead {
   contactPhone?: string;
   contactTitle?: string;
   source?: string;
-  status: 'new' | 'contacted' | 'replied' | 'meeting_booked' | 'qualified' | 'disqualified';
+  status: 'new' | 'contacted' | 'replied' | 'meeting_booked' | 'qualified' | 'disqualified' | 'closed_won' | 'closed_lost' | 'warm' | 'hot' | 'proposal_sent' | 'negotiation' | 'won' | 'lost' | 'on_hold' | 'unqualified';
   leadScore: number;
   intentScore: number;
   techStack?: string[];
@@ -143,6 +143,7 @@ export interface CreateLeadInput {
   industry?: string;
   location?: string;
   contactName?: string;
+  contactTitle?: string;
   contactEmail?: string;
   contactPhone?: string;
   source?: string;

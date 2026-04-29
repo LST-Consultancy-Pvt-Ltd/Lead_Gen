@@ -245,7 +245,7 @@ export const leadsApi = {
   analyze: (id: string) => api.post(`/leads/${id}/analyze`),
   enrich: (id: string) => api.post(`/leads/${id}/enrich`),
   enrichSignalHire: (id: string) => api.post(`/leads/${id}/enrich/signalhire`),
-  enrichApollo: (id: string) => api.post(`/leads/${id}/enrich/apollo`),
+  enrichApollo: (id: string, personTitles?: string[]) => api.post(`/leads/${id}/enrich/apollo`, personTitles?.length ? { personTitles } : {}),
   generateEmail: (id: string) => api.post(`/leads/${id}/generate-email`),
   sendOutreach: (id: string, data: any) => api.post(`/leads/${id}/send-outreach`, data),
   export: (params?: any) => api.get('/leads/export', { params, responseType: 'blob' }),
@@ -305,6 +305,8 @@ export const campaignsApi = {
 
 export const discoveryApi = {
   startScan: (data?: any) => api.post('/discovery/scan', data || {}),
+  smartScan: (prompt: string) => api.post('/discovery/scan/smart', { prompt }),
+  parsePrompt: (prompt: string) => api.post('/discovery/parse-prompt', { prompt }),
   startProductScan: (data?: any) => api.post('/discovery/scan/product', data || {}),
   generateProductPrompt: (data: any) => api.post('/discovery/product/generate-prompt', data),
   getActiveScan: () => api.get('/discovery/scan/active'),
@@ -361,6 +363,7 @@ export const notificationsApi = {
 
 export const dropdownsApi = {
   listAll: () => api.get('/dropdowns/all'),
+  listActive: () => api.get('/dropdowns/active'),
   listByCategory: (category: string) => api.get('/dropdowns', { params: { category } }),
   add: (data: any) => api.post('/dropdowns', data),
   update: (id: string, data: any) => api.patch(`/dropdowns/${id}`, data),

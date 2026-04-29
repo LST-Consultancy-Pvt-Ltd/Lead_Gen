@@ -28,6 +28,12 @@ export default function SettingsPage() {
     pipeline_stage: false,
     business_line: false,
     loss_reason: false,
+    company_size: false,
+    company_type: false,
+    decision_maker: false,
+    preferred_contact_channel: false,
+    seniority_level: false,
+    annual_revenue_range: false,
   });
   const [newValues, setNewValues] = useState<Record<string, string>>({});
   const [thresholds, setThresholds] = useState({
@@ -83,12 +89,20 @@ export default function SettingsPage() {
   const users = Array.isArray(usersData) ? usersData : [];
 
   const categories = [
-    { key: 'lead_source', label: 'Lead Source Values' },
-    { key: 'industry', label: 'Industry Values' },
-    { key: 'budget_range', label: 'Budget Range Values' },
-    { key: 'pipeline_stage', label: 'Pipeline Stages' },
-    { key: 'business_line', label: 'Business Lines' },
-    { key: 'loss_reason', label: 'Loss Reason Values' },
+    // CRM dropdowns
+    { key: 'lead_source',  label: 'Lead Source',  group: 'CRM' },
+    { key: 'industry',     label: 'Industry',     group: 'CRM' },
+    { key: 'budget_range', label: 'Budget Range', group: 'CRM' },
+    { key: 'pipeline_stage', label: 'Pipeline Stages', group: 'CRM' },
+    { key: 'business_line',  label: 'Business Lines',  group: 'CRM' },
+    { key: 'loss_reason',    label: 'Loss Reasons',    group: 'CRM' },
+    // Discovery scan dropdowns
+    { key: 'company_size',               label: 'Company Size',          group: 'Discovery' },
+    { key: 'company_type',               label: 'Company Type',          group: 'Discovery' },
+    { key: 'decision_maker',             label: 'Decision Makers',       group: 'Discovery' },
+    { key: 'preferred_contact_channel',  label: 'Contact Channels',      group: 'Discovery' },
+    { key: 'seniority_level',            label: 'Seniority Levels',      group: 'Discovery' },
+    { key: 'annual_revenue_range',       label: 'Annual Revenue Range',  group: 'Discovery' },
   ];
 
   const categoryValues = (category: string) => {
@@ -129,22 +143,34 @@ export default function SettingsPage() {
     onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to reassign leads'),
   });
 
+  // Helper: invalidate both the settings cache AND the lead-discovery cache together
+  const invalidateDropdowns = () => {
+    qc.invalidateQueries({ queryKey: ['settings-dropdowns'] });
+    qc.invalidateQueries({ queryKey: ['dropdowns', 'active'] });
+  };
+
   const addDropdownMutation = useMutation({
     mutationFn: ({ category, value }: { category: string; value: string }) => dropdownsApi.add({ category, value }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings-dropdowns'] });
-      toast.success('Value added');
-    },
+    onSuccess: () => { invalidateDropdowns(); toast.success('Value added'); },
     onError: () => toast.error('Failed to add value'),
   });
 
   const disableDropdownMutation = useMutation({
     mutationFn: (id: string) => dropdownsApi.update(id, { isActive: false }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings-dropdowns'] });
-      toast.success('Value disabled');
-    },
+    onSuccess: () => { invalidateDropdowns(); toast.success('Value disabled'); },
     onError: () => toast.error('Failed to disable value'),
+  });
+
+  const enableDropdownMutation = useMutation({
+    mutationFn: (id: string) => dropdownsApi.update(id, { isActive: true }),
+    onSuccess: () => { invalidateDropdowns(); toast.success('Value enabled'); },
+    onError: () => toast.error('Failed to enable value'),
+  });
+
+  const deleteDropdownMutation = useMutation({
+    mutationFn: (id: string) => dropdownsApi.delete(id),
+    onSuccess: () => { invalidateDropdowns(); toast.success('Value deleted'); },
+    onError: (err: any) => toast.error(err.response?.data?.message || 'Failed to delete value'),
   });
 
   const saveThresholdMutation = useMutation({
@@ -274,55 +300,115 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* {permissions.isAdmin && (
-        <div className="card p-5 space-y-3">
-          <h2 className="section-title">Dropdown Configuration</h2>
-          {categories.map((cat) => {
-            const values = categoryValues(cat.key);
-            return (
-              <div key={cat.key} className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden">
-                <button
-                  className="w-full px-3 py-2 flex items-center justify-between bg-slate-100 dark:bg-slate-950"
-                  onClick={() => setExpanded((prev) => ({ ...prev, [cat.key]: !prev[cat.key] }))}
-                >
-                  <span className="text-sm text-slate-800 dark:text-slate-200">{cat.label}</span>
-                  {expanded[cat.key] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-                {expanded[cat.key] && (
-                  <div className="p-3 space-y-2">
-                    {values.map((item: any) => (
-                      <div key={item.id || item.value} className="flex items-center justify-between bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2">
-                        <span className="text-sm text-slate-600 dark:text-slate-300">{item.value || item.label}</span>
-                        <button className="btn-ghost text-xs" onClick={() => disableDropdownMutation.mutate(item.id)}>Disable</button>
-                      </div>
-                    ))}
-                    {values.length === 0 && <p className="text-xs text-slate-500">No values configured.</p>}
-                    <div className="flex gap-2 pt-1">
-                      <input
-                        className="input flex-1 h-9 text-sm"
-                        value={newValues[cat.key] || ''}
-                        onChange={(e) => setNewValues((prev) => ({ ...prev, [cat.key]: e.target.value }))}
-                        placeholder="Add value"
-                      />
+      {permissions.isAdmin && (
+        <div className="card p-5 space-y-4">
+          <div>
+            <h2 className="section-title">Dropdown Configuration</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Manage selectable values for CRM and Lead Discovery. Changes apply to all users in your workspace.</p>
+          </div>
+
+          {['CRM', 'Discovery'].map(group => (
+            <div key={group}>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">{group} Dropdowns</p>
+              <div className="space-y-2">
+                {categories.filter(c => c.group === group).map((cat) => {
+                  const allValues = categoryValues(cat.key);
+                  const activeValues = allValues.filter((i: any) => i.isActive !== false);
+                  const inactiveValues = allValues.filter((i: any) => i.isActive === false);
+                  return (
+                    <div key={cat.key} className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden">
                       <button
-                        className="btn-primary"
-                        onClick={() => {
-                          const val = (newValues[cat.key] || '').trim();
-                          if (!val) return;
-                          addDropdownMutation.mutate({ category: cat.key, value: val });
-                          setNewValues((prev) => ({ ...prev, [cat.key]: '' }));
-                        }}
+                        className="w-full px-4 py-2.5 flex items-center justify-between bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        onClick={() => setExpanded((prev) => ({ ...prev, [cat.key]: !prev[cat.key] }))}
                       >
-                        Add Value
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                          {cat.label}
+                          <span className="ml-2 text-xs text-slate-400 font-normal">{activeValues.length} active</span>
+                        </span>
+                        {expanded[cat.key] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                       </button>
+                      {expanded[cat.key] && (
+                        <div className="p-3 space-y-2">
+                          {activeValues.map((item: any) => (
+                            <div key={item.id || item.value} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 rounded-lg px-3 py-2">
+                              <span className="text-sm text-slate-700 dark:text-slate-300">{item.value}</span>
+                              <div className="flex gap-1.5">
+                                <button
+                                  className="text-xs px-2 py-1 rounded-md text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
+                                  onClick={() => disableDropdownMutation.mutate(item.id)}
+                                >
+                                  Disable
+                                </button>
+                                <button
+                                  className="text-xs px-2 py-1 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                                  onClick={() => {
+                                    if (window.confirm(`Delete "${item.value}"?`)) deleteDropdownMutation.mutate(item.id);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {inactiveValues.length > 0 && (
+                            <details className="mt-1">
+                              <summary className="text-xs text-slate-400 cursor-pointer select-none">{inactiveValues.length} disabled</summary>
+                              <div className="mt-1.5 space-y-1">
+                                {inactiveValues.map((item: any) => (
+                                  <div key={item.id} className="flex items-center justify-between bg-slate-100 dark:bg-slate-800/40 rounded-lg px-3 py-1.5 opacity-60">
+                                    <span className="text-sm text-slate-500 line-through">{item.value}</span>
+                                    <button
+                                      className="text-xs px-2 py-1 rounded-md text-green-600 hover:bg-green-50 dark:hover:bg-green-500/10 transition-colors"
+                                      onClick={() => enableDropdownMutation.mutate(item.id)}
+                                    >
+                                      Enable
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                          {allValues.length === 0 && (
+                            <p className="text-xs text-slate-500 py-1">No values configured. Add one below.</p>
+                          )}
+                          <div className="flex gap-2 pt-1">
+                            <input
+                              className="input flex-1 h-9 text-sm"
+                              value={newValues[cat.key] || ''}
+                              onChange={(e) => setNewValues((prev) => ({ ...prev, [cat.key]: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const val = (newValues[cat.key] || '').trim();
+                                  if (!val) return;
+                                  addDropdownMutation.mutate({ category: cat.key, value: val });
+                                  setNewValues((prev) => ({ ...prev, [cat.key]: '' }));
+                                }
+                              }}
+                              placeholder="Add new value…"
+                            />
+                            <button
+                              className="btn-primary text-sm px-4"
+                              disabled={addDropdownMutation.isPending}
+                              onClick={() => {
+                                const val = (newValues[cat.key] || '').trim();
+                                if (!val) return;
+                                addDropdownMutation.mutate({ category: cat.key, value: val });
+                                setNewValues((prev) => ({ ...prev, [cat.key]: '' }));
+                              }}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
-      )} */}
+      )}
 
       {permissions.isAdmin && (
         <div className="card p-5 space-y-4">

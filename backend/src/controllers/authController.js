@@ -7,6 +7,7 @@ const prisma = require('../utils/prisma');
 const config = require('../config');
 const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
+const { seedDefaultDropdowns } = require('./dropdownController');
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
@@ -149,6 +150,11 @@ async function verifyOtp(req, res) {
 
     await prisma.otpVerification.delete({ where: { email } });
 
+    // Seed default dropdown values for the new org (non-blocking)
+    seedDefaultDropdowns(org.id).catch(e =>
+      logger.error('Failed to seed default dropdowns for new org', { orgId: org.id, err: e.message })
+    );
+
     logger.info('User registered via OTP', { userId: user.id, orgId: org.id });
     return success(res, null, 'Email verified! You can now sign in.', 201);
   } catch (err) {
@@ -237,6 +243,10 @@ async function googleAuth(req, res) {
         },
         include: { organization: true },
       });
+      // Seed default dropdown values for the new org (non-blocking)
+      seedDefaultDropdowns(org.id).catch(e =>
+        logger.error('Failed to seed default dropdowns for Google org', { orgId: org.id, err: e.message })
+      );
     }
 
     if (!user.isActive) return error(res, 'Account disabled', 403);
