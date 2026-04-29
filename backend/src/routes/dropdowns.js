@@ -9,13 +9,13 @@ router.get('/', authenticate, ctrl.listByCategory);
 // GET /api/dropdowns/all — org_admin only
 router.get('/all', authenticate, requireAdmin, ctrl.listAllCategories);
 
-// POST /api/dropdowns — all authenticated roles
-router.post('/', authenticate, ctrl.addValue);
+// POST /api/dropdowns — org_admin only
+router.post('/', authenticate, requireAdmin, ctrl.addValue);
 
-// PATCH /api/dropdowns/:id — all authenticated roles
-router.patch('/:id', authenticate, ctrl.updateValue);
+// PATCH /api/dropdowns/:id — org_admin only
+router.patch('/:id', authenticate, requireAdmin, ctrl.updateValue);
 
-// DELETE /api/dropdowns/:id — all authenticated roles
-router.delete('/:id', authenticate, ctrl.deleteValue);
+// DELETE /api/dropdowns/:id — org_admin only
+router.delete('/:id', authenticate, requireAdmin, ctrl.deleteValue);
 
 module.exports = router;

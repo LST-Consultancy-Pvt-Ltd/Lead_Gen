@@ -61,9 +61,9 @@ const createLeadValidation = [
 
   body('status')
     .optional({ checkFalsy: true })
-    .customSanitizer((val) => (val ? val.toLowerCase() : val))
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost'])
-    .withMessage('Invalid status'),
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Status must be 100 characters or less'),
 
   body('followUpDate')
     .optional({ checkFalsy: true })
@@ -107,9 +107,9 @@ const createLeadValidation = [
 
   body('temperature')
     .optional({ checkFalsy: true })
-    .customSanitizer((val) => (val ? val.toLowerCase() : val))
-    .isIn(['hot', 'warm', 'cold'])
-    .withMessage('Invalid temperature'),
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Temperature must be 100 characters or less'),
 
   body('assignedToId')
     .optional({ checkFalsy: true })
@@ -175,8 +175,9 @@ const updateLeadValidation = [
   
   body('status')
     .optional()
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost'])
-    .withMessage('Invalid status'),
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Status must be 100 characters or less'),
 
   // Spec: disqualificationReason required when setting status to disqualified
   body('disqualificationReason')
@@ -192,8 +193,9 @@ const updateLeadValidation = [
 
   body('temperature')
     .optional()
-    .isIn(['hot', 'warm', 'cold'])
-    .withMessage('Invalid temperature'),
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Temperature must be 100 characters or less'),
   
   body('assignedToId')
     .optional()
@@ -231,7 +233,8 @@ const getLeadsValidation = [
   
   query('status')
     .optional()
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost'])
+    .trim()
+    .isLength({ max: 100 })
     .withMessage('Invalid status'),
   
   query('intent')

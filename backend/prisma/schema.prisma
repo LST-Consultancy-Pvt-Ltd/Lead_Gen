@@ -14,17 +14,6 @@ enum Role {
   sales_user
 }
 
-enum LeadStatus {
-  new
-  contacted
-  replied
-  meeting_booked
-  qualified
-  disqualified
-  closed_won
-  closed_lost
-}
-
 enum LeadIntent {
   hot
   warm
@@ -54,15 +43,6 @@ enum ScanStatus {
   running
   completed
   failed
-}
-
-enum LeadTemperature {
-  hot
-  warm
-  cold
-  prospect
-  lost
-  won
 }
 
 enum OpportunityStage {
@@ -179,7 +159,7 @@ model Lead {
   leadScore   Int        @default(0)
   intentScore Int        @default(0)
   intentLevel LeadIntent @default(cold)
-  status      LeadStatus @default(new)
+  status      String     @default("new")
   opportunity String?
   aiSummary   String?
   aiPitch     String?
@@ -203,7 +183,7 @@ model Lead {
   requirementDescription String?
   budgetRange         String?
   timeline            String?
-  temperature         LeadTemperature @default(cold)
+  temperature         String          @default("cold")
   disqualificationReason String?
   lastContactedDate   DateTime?
   createdAt       DateTime  @default(now())

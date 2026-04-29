@@ -16,8 +16,8 @@ interface CreateLeadModalProps {
   onClose: () => void;
 }
 
-const leadSources = LEAD_SOURCES;
-const requirementTypeOptions = [
+const STATIC_SOURCE_OPTIONS = [...LEAD_SOURCES];
+const STATIC_REQUIREMENT_TYPE_OPTIONS = [
   "NetSuite Services",
   "Salesforce Services",
   "Custom Development",
@@ -25,7 +25,7 @@ const requirementTypeOptions = [
   "Training",
 ];
 
-const budgetRangeOptions = [
+const STATIC_BUDGET_RANGE_OPTIONS = [
   "Less than $5,000",
   "$5,000 - $20,000",
   "$20,000 - $50,000",
@@ -34,13 +34,17 @@ const budgetRangeOptions = [
   "Not Disclosed",
 ];
 
-const timelineOptions = [
+const STATIC_TIMELINE_OPTIONS = [
   "Immediate (within 1 month)",
   "Short-term (1-3 months)",
   "Mid-term (3-6 months)",
   "Long-term (6+ months)",
   "Exploring / No Timeline",
 ];
+
+const STATIC_LEAD_STATUS_OPTIONS = ['hot', 'warm', 'cold', 'prospect', 'lost', 'won'];
+const STATIC_STATUS_OPTIONS = ['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified'];
+
 
 type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
   leadCost?: string;
@@ -53,7 +57,7 @@ type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
   requirementDescription?: string;
   budgetRange: string;
   timeline?: string;
-  temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won";
+  temperature: string;
   disqualificationReason?: string;
 };
 
@@ -88,9 +92,9 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
   const { canReassignLead, canManageDropdowns } = usePermissions();
   const [utmOpen, setUtmOpen] = useState(false);
-  const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
+  const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: string }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
-    payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" };
+    payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: string };
     companyName: string;
     existingId?: string;
   } | null>(null);
@@ -135,7 +139,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     requirementDescription: yup.string().max(2000, "Requirement description must be 2000 characters or less").optional(),
     budgetRange: yup.string().required("Budget range is required"),
     timeline: yup.string().optional(),
-    temperature: yup.mixed<"hot" | "warm" | "cold" | "prospect" | "lost" | "won">().oneOf(["hot", "warm", "cold", "prospect", "lost", "won"]).required(),
+    temperature: yup.string().required(),
     disqualificationReason: yup.string().when("status", {
       is: "disqualified",
       then: (rule) => rule.trim().min(10, "Disqualification reason must be at least 10 characters.").required("Disqualification reason is required"),
@@ -207,6 +211,88 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       id: item.id || item._id || item.value,
       value: item.value || item,
     }));
+
+  // ── Dynamic field queries for Create Lead form ──────────────────────────
+  const extractDropdownValues = (data: any): string[] => {
+    const items = Array.isArray(data) ? data : [];
+    return items.map((item: any) => (typeof item === 'string' ? item : item.value)).filter(Boolean);
+  };
+
+  const { data: requirementTypeRaw } = useQuery({
+    queryKey: ['dropdowns', 'requirement_type'],
+    queryFn: () => dropdownsApi.listByCategory('requirement_type').then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+  const { data: pipelineRaw } = useQuery({
+    queryKey: ['dropdowns', 'pipeline'],
+    queryFn: () => dropdownsApi.listByCategory('pipeline').then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+  const { data: budgetRangeRaw } = useQuery({
+    queryKey: ['dropdowns', 'budget_range'],
+    queryFn: () => dropdownsApi.listByCategory('budget_range').then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+  const { data: timelineRaw } = useQuery({
+    queryKey: ['dropdowns', 'timeline'],
+    queryFn: () => dropdownsApi.listByCategory('timeline').then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+  const { data: leadStatusRaw } = useQuery({
+    queryKey: ['dropdowns', 'lead_status'],
+    queryFn: () => dropdownsApi.listByCategory('lead_status').then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+  const { data: statusRaw } = useQuery({
+    queryKey: ['dropdowns', 'status'],
+    queryFn: () => dropdownsApi.listByCategory('status').then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+  const { data: sourceRaw } = useQuery({
+    queryKey: ['dropdowns', 'lead_source'],
+    queryFn: () => dropdownsApi.listByCategory('lead_source').then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+
+  const dynamicRequirementTypeOptions = useMemo(() => {
+    const vals = extractDropdownValues(requirementTypeRaw);
+    return vals.length > 0 ? vals : STATIC_REQUIREMENT_TYPE_OPTIONS;
+  }, [requirementTypeRaw]);
+
+  const dynamicPipelineOptions = useMemo(() => {
+    const vals = extractDropdownValues(pipelineRaw);
+    return vals.length > 0
+      ? vals.map((v) => ({ value: v, label: v }))
+      : PIPELINE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+  }, [pipelineRaw]);
+
+  const dynamicBudgetRangeOptions = useMemo(() => {
+    const vals = extractDropdownValues(budgetRangeRaw);
+    return vals.length > 0 ? vals : STATIC_BUDGET_RANGE_OPTIONS;
+  }, [budgetRangeRaw]);
+
+  const dynamicTimelineOptions = useMemo(() => {
+    const vals = extractDropdownValues(timelineRaw);
+    return vals.length > 0 ? vals : STATIC_TIMELINE_OPTIONS;
+  }, [timelineRaw]);
+
+  const dynamicLeadStatusOptions = useMemo(() => {
+    const vals = extractDropdownValues(leadStatusRaw);
+    return vals.length > 0 ? vals : STATIC_LEAD_STATUS_OPTIONS;
+  }, [leadStatusRaw]);
+
+  const dynamicStatusOptions = useMemo(() => {
+    const vals = extractDropdownValues(statusRaw);
+    return vals.length > 0 ? vals : STATIC_STATUS_OPTIONS;
+  }, [statusRaw]);
+
+  const dynamicSourceOptions = useMemo(() => {
+    const vals = extractDropdownValues(sourceRaw);
+    return vals.length > 0 ? vals : STATIC_SOURCE_OPTIONS;
+  }, [sourceRaw]);
+
+  const formatOptionLabel = (value: string) =>
+    value.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
   // Create new industry option
   const createIndustryMutation = useMutation({
@@ -350,7 +436,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
         if (k === "disqualificationReason" && formData.status !== "disqualified") return false;
         return v !== "" && v !== undefined;
       }),
-    ) as unknown as CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" };
+    ) as unknown as CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: string };
     // Convert leadCost to number if present
     if ((cleanedData as any).leadCost) {
       (cleanedData as any).leadCost = parseFloat((cleanedData as any).leadCost);
@@ -469,7 +555,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
           </h3>
 
           <div>
-            <label className="label">Contact Name</label>
+            <label className="label">Contact Name <span className="text-red-400">*</span></label>
             <input
               type="text"
               {...register("contactName")}
@@ -480,7 +566,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Email</label>
+              <label className="label">Email <span className="text-red-400">*</span></label>
               <input
                 type="email"
                 {...register("contactEmail")}
@@ -490,7 +576,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               {errors.contactEmail && <p className="text-xs text-red-400 mt-1">{errors.contactEmail.message}</p>}
             </div>
             <div>
-              <label className="label">Phone</label>
+              <label className="label">Phone <span className="text-red-400">*</span></label>
               <input
                 type="tel"
                 {...register("contactPhone")}
@@ -504,7 +590,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               Requirement Type <span className="text-red-400">*</span>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {requirementTypeOptions.map((item) => (
+              {dynamicRequirementTypeOptions.map((item) => (
                 <label
                   key={item}
                   className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-white/10 px-2.5 py-2 text-xs text-slate-600 dark:text-slate-300"
@@ -545,7 +631,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               <label className="label">Pipeline <span className="text-red-400">*</span></label>
               <select {...register("pipeline")} title="Pipeline" className="input">
                 <option value="">Select pipeline...</option>
-                {PIPELINE_OPTIONS.map(opt => (
+                {dynamicPipelineOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
@@ -577,7 +663,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               <label className="label">Budget Range <span className="text-red-400">*</span></label>
               <select {...register("budgetRange")} title="Budget Range" className="input">
                 <option value="">Select budget range...</option>
-                {budgetRangeOptions.map((opt) => (
+                {dynamicBudgetRangeOptions.map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
@@ -587,7 +673,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               <label className="label">Timeline</label>
               <select {...register("timeline")} title="Timeline" className="input">
                 <option value="">Select timeline...</option>
-                {timelineOptions.map((opt) => (
+                {dynamicTimelineOptions.map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
@@ -596,14 +682,11 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Intent Signal</label>
+              <label className="label">Lead Status</label>
               <select {...register("temperature")} title="Temperature" className="input">
-                <option value="hot">Hot</option>
-                <option value="warm">Warm</option>
-                <option value="cold">Cold</option>
-                <option value="prospect">Prospect</option>
-                <option value="lost">Lost</option>
-                <option value="won">Won</option>
+                {dynamicLeadStatusOptions.map((opt) => (
+                  <option key={opt} value={opt}>{formatOptionLabel(opt)}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -613,12 +696,9 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
                 title="Status"
                 className="input"
               >
-                <option value="new">New</option>
-                <option value="contacted">Contacted</option>
-                <option value="replied">Replied</option>
-                <option value="meeting_booked">Meeting Booked</option>
-                <option value="qualified">Qualified</option>
-                <option value="disqualified">Disqualified</option>
+                {dynamicStatusOptions.map((opt) => (
+                  <option key={opt} value={opt}>{formatOptionLabel(opt)}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -642,22 +722,11 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               <label className="label">Source <span className="text-red-400">*</span></label>
               <select {...register("source")} title="Lead Source" className="input">
                 <option value="">Select source...</option>
-                {leadSources.map((source) => (
+                {dynamicSourceOptions.map((source) => (
                   <option key={source} value={source}>{source}</option>
                 ))}
               </select>
               {errors.source && <p className="text-xs text-red-400 mt-1">{errors.source.message}</p>}
-            </div>
-            <div>
-              <label className="label">Sub-source / Ad Name</label>
-              <input type="text" {...register("subSource")} className="input" placeholder="Campaign or ad name" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Lead Cost (optional)</label>
-              <input type="number" {...register("leadCost")} className="input" placeholder="0.00" min="0" step="0.01" />
             </div>
             {canReassignLead && (
               <div>

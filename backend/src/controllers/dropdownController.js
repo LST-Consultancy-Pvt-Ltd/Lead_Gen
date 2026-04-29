@@ -14,6 +14,13 @@ const VALID_CATEGORIES = [
   "pipeline_stage",
   "business_line",
   "loss_reason",
+  // Settings-managed dynamic field categories
+  "requirement_type",
+  "pipeline",
+  "timeline",
+  "lead_status",
+  "status",
+  "source",
 ];
 
 // GET /api/dropdowns?category=lead_source — all authenticated roles
@@ -64,12 +71,15 @@ async function listAllCategories(req, res) {
   }
 }
 
-// POST /api/dropdowns — all authenticated roles
+// POST /api/dropdowns — org_admin only
 async function addValue(req, res) {
   try {
     const { category, value, displayOrder } = req.body;
     if (!category || !value?.trim()) {
       return error(res, "category and value are required", 400);
+    }
+    if (!VALID_CATEGORIES.includes(category)) {
+      return error(res, `Invalid category. Must be one of: ${VALID_CATEGORIES.join(", ")}`, 400);
     }
 
     const item = await prisma.dropdownConfig.create({
@@ -104,8 +114,15 @@ async function updateValue(req, res) {
       const categoryFieldMap = {
         lead_source: "source",
         industry: "industry",
+        location: "location",
         budget_range: "budgetRange",
+        pipeline_stage: "pipeline",
         business_line: "businessLine",
+        pipeline: "pipeline",
+        budget_range: "budgetRange",
+        timeline: "timeline",
+        lead_status: "status",
+        status: "status",
       };
       const leadField = categoryFieldMap[existing.category];
       if (leadField) {
@@ -153,7 +170,12 @@ async function deleteValue(req, res) {
       industry: "industry",
       location: "location",
       budget_range: "budgetRange",
+      pipeline_stage: "pipeline",
       business_line: "businessLine",
+      pipeline: "pipeline",
+      timeline: "timeline",
+      lead_status: "status",
+      status: "status",
     };
     const leadField = categoryFieldMap[existing.category];
     if (leadField) {

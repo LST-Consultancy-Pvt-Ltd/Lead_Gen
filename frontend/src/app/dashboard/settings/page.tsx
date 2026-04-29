@@ -3,8 +3,18 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { dropdownsApi, settingsApi, usersApi } from '../../../lib/api';
 import { usePermissions } from '../../../lib/rbac';
-import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Pencil, Trash2, Plus, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+const LEAD_FIELD_CATEGORIES = [
+  { key: 'requirement_type', label: 'Requirement Type' },
+  { key: 'pipeline', label: 'Pipeline' },
+  { key: 'budget_range', label: 'Budget Range' },
+  { key: 'timeline', label: 'Timeline' },
+  { key: 'lead_status', label: 'Lead Status' },
+  { key: 'status', label: 'Status' },
+  { key: 'lead_source', label: 'Source' },
+];
 
 export default function SettingsPage() {
   const permissions = usePermissions();
@@ -24,6 +34,15 @@ export default function SettingsPage() {
     followUpAlertThresholdDays: 3,
     stuckDealThresholdDays: 7,
   });
+
+  const [selectedLeadField, setSelectedLeadField] = useState('');
+  const [newLeadFieldValue, setNewLeadFieldValue] = useState('');
+  const [editingLeadField, setEditingLeadField] = useState<{ id: string; value: string } | null>(null);
+  const [editLeadFieldInput, setEditLeadFieldInput] = useState('');
+  const [budgetMin, setBudgetMin] = useState('');
+  const [budgetMax, setBudgetMax] = useState('');
+  const [editBudgetMin, setEditBudgetMin] = useState('');
+  const [editBudgetMax, setEditBudgetMax] = useState('');
 
   const { data: usersData } = useQuery({
     queryKey: ['settings-users'],
@@ -50,6 +69,16 @@ export default function SettingsPage() {
     queryFn: () => dropdownsApi.listAll().then((r) => r.data?.data ?? r.data ?? {}),
     enabled: permissions.canAccessSettings && permissions.isAdmin,
   });
+
+  const { data: leadFieldValuesRaw, refetch: refetchLeadFieldValues, isLoading: isLoadingLeadFieldValues } = useQuery({
+    queryKey: ['settings-lead-field-values', selectedLeadField],
+    queryFn: () => dropdownsApi.listByCategory(selectedLeadField).then((r) => r.data?.data || r.data || []),
+    enabled: !!selectedLeadField && permissions.isAdmin,
+  });
+
+  const leadFieldValues: any[] = Array.isArray(leadFieldValuesRaw)
+    ? leadFieldValuesRaw
+    : (leadFieldValuesRaw as any)?.items || [];
 
   const users = Array.isArray(usersData) ? usersData : [];
 
@@ -125,6 +154,40 @@ export default function SettingsPage() {
       toast.success('Thresholds saved');
     },
     onError: () => toast.error('Failed to save thresholds'),
+  });
+
+  const addLeadFieldMutation = useMutation({
+    mutationFn: ({ category, value }: { category: string; value: string }) => dropdownsApi.add({ category, value }),
+    onSuccess: () => {
+      refetchLeadFieldValues();
+      setNewLeadFieldValue('');
+      setBudgetMin('');
+      setBudgetMax('');
+      toast.success('Value added');
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to add value'),
+  });
+
+  const updateLeadFieldMutation = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: string }) => dropdownsApi.update(id, { value }),
+    onSuccess: () => {
+      refetchLeadFieldValues();
+      setEditingLeadField(null);
+      setEditLeadFieldInput('');
+      setEditBudgetMin('');
+      setEditBudgetMax('');
+      toast.success('Value updated');
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to update value'),
+  });
+
+  const deleteLeadFieldMutation = useMutation({
+    mutationFn: (id: string) => dropdownsApi.delete(id),
+    onSuccess: () => {
+      refetchLeadFieldValues();
+      toast.success('Value deleted');
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to delete value'),
   });
 
   if (!permissions.canAccessSettings) {
@@ -260,6 +323,247 @@ export default function SettingsPage() {
           })}
         </div>
       )} */}
+
+      {permissions.isAdmin && (
+        <div className="card p-5 space-y-4">
+          <div>
+            <h2 className="section-title">Lead Field Options</h2>
+            <p className="text-xs text-slate-500 mt-1">Manage dynamic dropdown values used in the Create Lead form.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="label mb-1.5 block">Select Field</label>
+              <select
+                className="input"
+                title="Select field category"
+                value={selectedLeadField}
+                onChange={(e) => {
+                  setSelectedLeadField(e.target.value);
+                  setEditingLeadField(null);
+                  setNewLeadFieldValue('');
+                  setBudgetMin('');
+                  setBudgetMax('');
+                }}
+              >
+                <option value="">-- Select a field --</option>
+                {LEAD_FIELD_CATEGORIES.map((cat) => (
+                  <option key={cat.key} value={cat.key}>{cat.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {selectedLeadField && (
+            <div className="md:w-1/2 border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden">
+              {/* Add new value */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-white/10">
+                {selectedLeadField === 'budget_range' ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-slate-500 font-medium">Add Budget Range ($min — $max)</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/40 h-9">
+                        <span className="px-2.5 text-sm font-semibold text-slate-500 dark:text-slate-400 select-none">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={budgetMin}
+                          onChange={(e) => setBudgetMin(e.target.value)}
+                          className="flex-1 bg-transparent py-2 pr-2 text-sm text-slate-900 dark:text-slate-100 outline-none min-w-0"
+                          placeholder="Min"
+                        />
+                      </div>
+                      <span className="text-slate-400 text-sm shrink-0">—</span>
+                      <div className="flex items-center flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/40 h-9">
+                        <span className="px-2.5 text-sm font-semibold text-slate-500 dark:text-slate-400 select-none">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={budgetMax}
+                          onChange={(e) => setBudgetMax(e.target.value)}
+                          className="flex-1 bg-transparent py-2 pr-2 text-sm text-slate-900 dark:text-slate-100 outline-none min-w-0"
+                          placeholder="Max"
+                        />
+                      </div>
+                      <button
+                        className="btn-primary flex items-center gap-1.5 px-3 h-9"
+                        disabled={!budgetMin.trim() || !budgetMax.trim() || addLeadFieldMutation.isPending}
+                        onClick={() => {
+                          const min = budgetMin.trim();
+                          const max = budgetMax.trim();
+                          if (!min || !max) return;
+                          addLeadFieldMutation.mutate({ category: 'budget_range', value: `$${min} - $${max}` });
+                        }}
+                      >
+                        {addLeadFieldMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      className="input flex-1 h-9 text-sm"
+                      value={newLeadFieldValue}
+                      onChange={(e) => setNewLeadFieldValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = newLeadFieldValue.trim();
+                          if (!val) return;
+                          addLeadFieldMutation.mutate({ category: selectedLeadField, value: val });
+                        }
+                      }}
+                      placeholder="Type to add new option..."
+                    />
+                    <button
+                      className="btn-primary flex items-center gap-1.5 px-3"
+                      disabled={!newLeadFieldValue.trim() || addLeadFieldMutation.isPending}
+                      onClick={() => {
+                        const val = newLeadFieldValue.trim();
+                        if (!val) return;
+                        addLeadFieldMutation.mutate({ category: selectedLeadField, value: val });
+                      }}
+                    >
+                      {addLeadFieldMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                      Add
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Values list */}
+              <div className="p-3 space-y-2">
+                {isLoadingLeadFieldValues ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 size={18} className="animate-spin text-slate-400" />
+                  </div>
+                ) : leadFieldValues.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-3">No values yet. Add one above.</p>
+                ) : (
+                  leadFieldValues.map((item: any) => (
+                    <div key={item.id} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2">
+                      {editingLeadField?.id === item.id ? (
+                        <>
+                          {selectedLeadField === 'budget_range' ? (
+                            <>
+                              <div className="flex items-center flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/40 h-8">
+                                <span className="px-2 text-sm font-semibold text-slate-500 dark:text-slate-400 select-none">$</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={editBudgetMin}
+                                  onChange={(e) => setEditBudgetMin(e.target.value)}
+                                  className="flex-1 bg-transparent py-1.5 pr-2 text-sm text-slate-900 dark:text-slate-100 outline-none min-w-0"
+                                  placeholder="Min"
+                                  autoFocus
+                                />
+                              </div>
+                              <span className="text-slate-400 text-xs shrink-0">—</span>
+                              <div className="flex items-center flex-1 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/40 h-8">
+                                <span className="px-2 text-sm font-semibold text-slate-500 dark:text-slate-400 select-none">$</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={editBudgetMax}
+                                  onChange={(e) => setEditBudgetMax(e.target.value)}
+                                  className="flex-1 bg-transparent py-1.5 pr-2 text-sm text-slate-900 dark:text-slate-100 outline-none min-w-0"
+                                  placeholder="Max"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <input
+                              className="input flex-1 h-8 text-sm"
+                              title="Edit value"
+                              placeholder="Enter value"
+                              value={editLeadFieldInput}
+                              onChange={(e) => setEditLeadFieldInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const val = editLeadFieldInput.trim();
+                                  if (val) updateLeadFieldMutation.mutate({ id: item.id, value: val });
+                                }
+                                if (e.key === 'Escape') {
+                                  setEditingLeadField(null);
+                                  setEditLeadFieldInput('');
+                                }
+                              }}
+                              autoFocus
+                            />
+                          )}
+                          <button
+                            className="text-green-500 hover:text-green-400 p-1"
+                            title="Save"
+                            onClick={() => {
+                              if (selectedLeadField === 'budget_range') {
+                                const min = editBudgetMin.trim();
+                                const max = editBudgetMax.trim();
+                                if (min && max) updateLeadFieldMutation.mutate({ id: item.id, value: `$${min} - $${max}` });
+                              } else {
+                                const val = editLeadFieldInput.trim();
+                                if (val) updateLeadFieldMutation.mutate({ id: item.id, value: val });
+                              }
+                            }}
+                            disabled={updateLeadFieldMutation.isPending}
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            className="text-slate-400 hover:text-slate-300 p-1"
+                            title="Cancel"
+                            onClick={() => {
+                              setEditingLeadField(null);
+                              setEditLeadFieldInput('');
+                              setEditBudgetMin('');
+                              setEditBudgetMax('');
+                            }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-sm text-slate-600 dark:text-slate-300 flex-1">{item.value || item.label}</span>
+                          <button
+                            className="text-blue-400 hover:text-blue-300 p-1"
+                            title="Edit"
+                            onClick={() => {
+                              setEditingLeadField({ id: item.id, value: item.value });
+                              if (selectedLeadField === 'budget_range') {
+                                // Parse "$500 - $2000" → min="500", max="2000"
+                                const match = (item.value || '').match(/\$([0-9.]+)\s*-\s*\$([0-9.]+)/);
+                                setEditBudgetMin(match ? match[1] : '');
+                                setEditBudgetMax(match ? match[2] : '');
+                              } else {
+                                setEditLeadFieldInput(item.value || item.label || '');
+                              }
+                            }}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            className="text-red-400 hover:text-red-300 p-1"
+                            title="Delete"
+                            onClick={() => {
+                              if (window.confirm(`Delete "${item.value}"?`)) {
+                                deleteLeadFieldMutation.mutate(item.id);
+                              }
+                            }}
+                            disabled={deleteLeadFieldMutation.isPending}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card p-5">
         <h2 className="section-title mb-4">System Thresholds</h2>
