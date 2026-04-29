@@ -62,7 +62,7 @@ const createLeadValidation = [
   body('status')
     .optional({ checkFalsy: true })
     .customSanitizer((val) => (val ? val.toLowerCase() : val))
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost'])
+    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
     .withMessage('Invalid status'),
 
   body('followUpDate')
@@ -108,7 +108,7 @@ const createLeadValidation = [
   body('temperature')
     .optional({ checkFalsy: true })
     .customSanitizer((val) => (val ? val.toLowerCase() : val))
-    .isIn(['hot', 'warm', 'cold'])
+    .isIn(['hot', 'warm', 'cold', 'prospect', 'lost', 'won'])
     .withMessage('Invalid temperature'),
 
   body('assignedToId')
@@ -175,7 +175,7 @@ const updateLeadValidation = [
   
   body('status')
     .optional()
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost'])
+    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
     .withMessage('Invalid status'),
 
   // Spec: disqualificationReason required when setting status to disqualified
@@ -192,7 +192,7 @@ const updateLeadValidation = [
 
   body('temperature')
     .optional()
-    .isIn(['hot', 'warm', 'cold'])
+    .isIn(['hot', 'warm', 'cold', 'prospect', 'lost', 'won'])
     .withMessage('Invalid temperature'),
   
   body('assignedToId')
@@ -231,7 +231,7 @@ const getLeadsValidation = [
   
   query('status')
     .optional()
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost'])
+    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
     .withMessage('Invalid status'),
   
   query('intent')

@@ -31,9 +31,14 @@ async function startScan(req, res) {
     const {
       targetIndustry     = '',
       targetRegion       = '',
+      geography          = '',          // alias for targetRegion (new frontend sends this)
       workTypes          = [],
       sources            = [],
       decisionMakerRoles = [],
+      // New mandatory fields (Positions mode)
+      positionTitle      = '',
+      description        = '',
+      skillsRequired     = '',
       // Extended targeting fields
       companySize        = '',
       companyType        = '',
@@ -44,32 +49,66 @@ async function startScan(req, res) {
       keywords           = '',
       contactChannel     = '',
       seniorityLevel     = '',
-      leadCount          = 100,
+      leadCount          = 50,          // default changed to 50 per requirement
+      numberOfLeads      = 0,           // new name, takes priority over leadCount
+      decisionMakers     = [],          // new multi-select chip field
+      preferredContactChannel = '',
       scoreThreshold     = '',
       excludeList        = '',
     } = req.body;
 
-    const services = await prisma.service.findMany({
-      where: { organizationId: req.user.organizationId, isActive: true },
-    });
+    // Resolve final values
+    const effectiveRegion    = geography || targetRegion;
+    const effectiveLeadCount = Number(numberOfLeads) || Number(leadCount) || 50;
+    const effectiveDMRoles   = decisionMakers.length ? decisionMakers : decisionMakerRoles;
+    const effectiveChannel   = preferredContactChannel || contactChannel;
 
-    if (!services.length) {
-      return error(res, 'No services configured. Add at least one service/position first.', 422);
+    // Determine which services/positions to scan
+    let serviceNames;
+    if (positionTitle && positionTitle.trim()) {
+      // New mode: position title sent directly — no DB services needed
+      serviceNames = [positionTitle.trim()];
+    } else {
+      // Backward compat: fetch from DB services table
+      const dbServices = await prisma.service.findMany({
+        where: { organizationId: req.user.organizationId, isActive: true },
+      });
+      if (!dbServices.length) {
+        return error(res, 'No services configured. Add at least one service/position first.', 422);
+      }
+      serviceNames = dbServices.map(s => s.name);
     }
 
     const job = await prisma.scanJob.create({
       data: {
         organizationId: req.user.organizationId,
         status:    'running',
-        services:  services.map(s => s.name),
+        services:  serviceNames,
         targetIndustry,
-        targetRegion,
-        sources:   {
-        workTypes, sources, scanType: 'service', decisionMakerRoles,
-        companySize, companyType, revenueRanges,
-        serviceName, pricingModel, valueProp, keywords,
-        contactChannel, seniorityLevel, leadCount, scoreThreshold, excludeList,
-      },
+        targetRegion:  effectiveRegion,
+        sources: {
+          workTypes,
+          sources,
+          scanType:       'service',
+          decisionMakerRoles: effectiveDMRoles,
+          companySize,
+          companyType,
+          revenueRanges,
+          serviceName,
+          pricingModel,
+          valueProp,
+          keywords,
+          contactChannel:        effectiveChannel,
+          seniorityLevel,
+          leadCount:             effectiveLeadCount,
+          scoreThreshold,
+          excludeList,
+          // New fields stored in sources JSON
+          positionTitle:         positionTitle.trim(),
+          description,
+          skillsRequired,
+          numberOfLeads:         effectiveLeadCount,
+        },
         startedAt: new Date(),
       },
     });
@@ -78,10 +117,19 @@ async function startScan(req, res) {
     processScan(
       job.id,
       req.user.organizationId,
-      services.map(s => s.name),
-      { workTypes, sources, targetIndustry, targetRegion, companySize, companyType, revenueRanges, serviceName, pricingModel, valueProp, keywords, contactChannel, seniorityLevel, excludeList },
-      Array.isArray(decisionMakerRoles) ? decisionMakerRoles : [],
-      Number(leadCount) || 100,
+      serviceNames,
+      {
+        workTypes, sources, targetIndustry,
+        targetRegion:  effectiveRegion,
+        companySize, companyType, revenueRanges, serviceName, pricingModel,
+        valueProp:     valueProp || skillsRequired,   // pass skillsRequired as valueProp context
+        keywords:      keywords  || description,      // pass description as keywords context
+        contactChannel: effectiveChannel,
+        seniorityLevel,
+        excludeList,
+      },
+      Array.isArray(effectiveDMRoles) ? effectiveDMRoles : [],
+      effectiveLeadCount,
       scoreThreshold,
     ).catch(err =>
       logger.error('Service scan failed', { jobId: job.id, err: err.message })
@@ -106,31 +154,49 @@ async function startProductScan(req, res) {
       productUrl,
       productDescription,
       productDocumentText,
-      customPrompt,        // optional — user-edited prompt from the preview step
+      customPrompt,          // optional — user-edited prompt from the preview step
       targetIndustry = '',
       targetRegion   = '',
+      geography      = '',   // alias for targetRegion
       workTypes      = [],
       sources        = [],
+      // New fields (Products mode)
+      productName          = '',
+      valueProposition     = '',  // replaces/supplements productDescription label
+      companySize          = '',
+      companyType          = '',
+      decisionMakers       = [],
+      preferredContactChannel = '',
+      seniorityLevel       = '',
+      numberOfLeads        = 50,  // non-mandatory, default 50
+      annualRevenue        = '',  // single dropdown
     } = req.body;
 
-    const hasUrl  = !!(productUrl         && productUrl.trim().length > 0);
-    const hasDesc = !!(productDescription  && productDescription.trim().length > 5);
-    const hasDoc  = !!(productDocumentText && productDocumentText.trim().length > 5);
+    const effectiveRegion = geography || targetRegion;
+    // valueProposition supplements productDescription — use whichever is provided
+    const effectiveDescription = valueProposition?.trim() || productDescription;
 
-    if (!hasUrl && !hasDesc && !hasDoc) {
-      return error(res, 'Provide at least one: productUrl, productDescription, or productDocumentText', 422);
+    const hasUrl  = !!(productUrl              && productUrl.trim().length > 0);
+    const hasDesc = !!(effectiveDescription    && effectiveDescription.trim().length > 5);
+    const hasDoc  = !!(productDocumentText     && productDocumentText.trim().length > 5);
+    const hasName = !!(productName             && productName.trim().length > 0);
+
+    if (!hasUrl && !hasDesc && !hasDoc && !hasName) {
+      return error(res, 'Provide at least one: productName, productUrl, valueProposition/productDescription, or productDocumentText', 422);
     }
 
     // Build product input — pass ALL provided content to the AI for richest profile
     const productInput = {
       type:         productType || (hasUrl ? 'url' : hasDoc ? 'document' : 'description'),
-      url:          hasUrl  ? productUrl.trim()          : undefined,
-      description:  hasDesc ? productDescription.trim()  : undefined,
-      docText:      hasDoc  ? productDocumentText.trim() : undefined,
-      customPrompt: customPrompt?.trim() || undefined,  // user-edited prompt overrides AI generation
+      url:          hasUrl  ? productUrl.trim()               : undefined,
+      description:  hasDesc ? effectiveDescription.trim()     : undefined,
+      docText:      hasDoc  ? productDocumentText.trim()       : undefined,
+      customPrompt: customPrompt?.trim()                       || undefined,
+      productName:  productName.trim()                         || undefined,
       content: [
-        hasDesc ? productDescription.trim() : '',
-        hasDoc  ? productDocumentText.trim().slice(0, 2000) : '',
+        productName.trim()                                     || '',
+        hasDesc ? effectiveDescription.trim()                  : '',
+        hasDoc  ? productDocumentText.trim().slice(0, 2000)    : '',
       ].filter(Boolean).join('\n\n') || productUrl || '',
     };
 
@@ -140,14 +206,24 @@ async function startProductScan(req, res) {
         status:    'running',
         services:  [],
         targetIndustry,
-        targetRegion,
+        targetRegion:  effectiveRegion,
         sources: {
           workTypes,
           sources,
-          scanType:   'product',
+          scanType:    'product',
           productType: productInput.type,
           productUrl:  productUrl || null,
-          productDescriptionSnippet: (productDescription || productDocumentText || '').slice(0, 200),
+          productDescriptionSnippet: (effectiveDescription || productDocumentText || '').slice(0, 200),
+          // New fields stored in sources JSON
+          productName:             productName.trim() || null,
+          valueProposition:        valueProposition?.trim() || null,
+          companySize,
+          companyType,
+          decisionMakers,
+          preferredContactChannel,
+          seniorityLevel,
+          numberOfLeads:           Number(numberOfLeads) || 50,
+          annualRevenue,
         },
         startedAt: new Date(),
       },
@@ -157,7 +233,14 @@ async function startProductScan(req, res) {
       job.id,
       req.user.organizationId,
       productInput,
-      { workTypes, sources, targetIndustry, targetRegion },
+      {
+        workTypes, sources, targetIndustry,
+        targetRegion:  effectiveRegion,
+        companySize, companyType, seniorityLevel,
+        preferredContactChannel,
+        numberOfLeads: Number(numberOfLeads) || 50,
+      },
+      Number(numberOfLeads) || 50,
     ).catch(err =>
       logger.error('Product scan failed', { jobId: job.id, err: err.message })
     );
@@ -244,6 +327,7 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       leadScore:   analysis.leadScore,
       intentScore: analysis.intentScore,
       intentLevel: analysis.intentLevel,
+      matchScore:  analysis.matchScore ?? null,
       opportunity: analysis.opportunity,
       aiSummary:   analysis.aiSummary,
       aiPitch:     analysis.aiPitch,
@@ -348,7 +432,7 @@ async function processScan(jobId, orgId, services, filters = {}, decisionMakerRo
   }
 }
 
-async function processProductScan(jobId, orgId, productInput, filters = {}) {
+async function processProductScan(jobId, orgId, productInput, filters = {}, maxLeads = 50) {
   try {
     const savedIds = [];
 
@@ -364,10 +448,11 @@ async function processProductScan(jobId, orgId, productInput, filters = {}) {
       },
     );
 
-    const keywords = [profile?.productSummary || profile?.productName || ''].filter(Boolean);
+    const keywords = [profile?.productSummary || profile?.productName || productInput.productName || ''].filter(Boolean);
 
     for (const dl of discovered) {
       try {
+        if (savedIds.length >= maxLeads) break;
         const id = await saveDiscoveredLead(orgId, dl, keywords);
         if (id) savedIds.push(id);
       } catch (err) {
@@ -612,7 +697,7 @@ async function smartScan(req, res) {
     });
 
     // Step 4 — fire and forget
-    processScan(
+      processScan(
       job.id,
       orgId,
       serviceNames,

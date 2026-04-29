@@ -363,6 +363,7 @@ export const notificationsApi = {
 
 export const dropdownsApi = {
   listAll: () => api.get('/dropdowns/all'),
+  listActive: () => api.get('/dropdowns/active'),
   listByCategory: (category: string) => api.get('/dropdowns', { params: { category } }),
   add: (data: any) => api.post('/dropdowns', data),
   update: (id: string, data: any) => api.patch(`/dropdowns/${id}`, data),

@@ -49,6 +49,7 @@ type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
   utmMedium?: string;
   utmCampaign?: string;
   utmContent?: string;
+  contactTitle?: string;
   requirementType: string[];
   requirementDescription?: string;
   budgetRange: string;
@@ -63,6 +64,7 @@ const defaultValues: LeadFormData = {
   industry: "",
   location: "",
   contactName: "",
+  contactTitle: "",
   contactEmail: "",
   contactPhone: "",
   source: "",
@@ -88,6 +90,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
   const { canReassignLead, canManageDropdowns } = usePermissions();
   const [utmOpen, setUtmOpen] = useState(false);
+  const [countryCode, setCountryCode] = useState('+91');
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
     payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" };
@@ -109,17 +112,17 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       .optional(),
     industry: yup.string().optional(),
     location: yup.string().optional(),
-    contactName: yup.string().optional(),
+    contactName: yup.string().trim().required("Contact person name is required"),
+    contactTitle: yup.string().optional(),
     contactEmail: yup
       .string()
-      .transform((value) => (value === '' ? undefined : value))
       .email("Enter a valid email")
-      .optional(),
+      .required("Email is required"),
     contactPhone: yup.string().optional(),
     source: yup.string().required("Source is required"),
     assignedToId: yup.string().optional(),
-    status: yup.string().required(),
-    pipeline: yup.string().required("Pipeline is required"),
+    status: yup.string().required("Status is required"),
+    pipeline: yup.string().optional(),
     followUpDate: yup.string().test(
       "not-past",
       "Follow-up date cannot be in the past",
@@ -131,9 +134,9 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
         return picked >= today;
       },
     ).optional(),
-    requirementType: yup.array().of(yup.string().required()).min(1, "Select at least one requirement type"),
+    requirementType: yup.array().of(yup.string().required()).optional(),
     requirementDescription: yup.string().max(2000, "Requirement description must be 2000 characters or less").optional(),
-    budgetRange: yup.string().required("Budget range is required"),
+    budgetRange: yup.string().optional(),
     timeline: yup.string().optional(),
     temperature: yup.mixed<"hot" | "warm" | "cold" | "prospect" | "lost" | "won">().oneOf(["hot", "warm", "cold", "prospect", "lost", "won"]).required(),
     disqualificationReason: yup.string().when("status", {
@@ -147,11 +150,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     utmMedium: yup.string().optional(),
     utmCampaign: yup.string().optional(),
     utmContent: yup.string().optional(),
-  }).test(
-    "contact-email-or-phone",
-    "Contact email or phone is required",
-    (value) => Boolean(value?.contactEmail?.trim() || value?.contactPhone?.trim()),
-  ), []);
+  }), []);
 
   const {
     register,
@@ -332,6 +331,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
   const resetForm = () => {
     reset(defaultValues);
+    setCountryCode('+91');
     setDuplicateConfirm(null);
     pendingPayloadRef.current = null;
     setUtmOpen(false);
@@ -343,6 +343,10 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   };
 
   const onSubmit = (formData: any) => {
+    // Prepend country code to phone number if phone is provided
+    if (formData.contactPhone?.trim()) {
+      formData.contactPhone = countryCode + formData.contactPhone.trim();
+    }
     // Filter out empty values; exclude assignedToId when cannot reassign
     const cleanedData = Object.fromEntries(
       Object.entries(formData).filter(([k, v]) => {
@@ -368,11 +372,12 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   };
 
   const onInvalid = (formErrors: any) => {
-    // Check named field errors first (priority order)
     const namedFieldMessage =
       formErrors?.companyName?.message ||
+      formErrors?.contactName?.message ||
       formErrors?.contactEmail?.message ||
       formErrors?.contactPhone?.message ||
+      formErrors?.status?.message ||
       formErrors?.requirementType?.message ||
       formErrors?.budgetRange?.message ||
       formErrors?.followUpDate?.message ||
@@ -380,11 +385,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       formErrors?.pipeline?.message ||
       formErrors?.disqualificationReason?.message;
 
-    // Check root-level schema test errors (e.g. cross-field "contact-email-or-phone")
-    // yup root tests surface under the '' (empty string) key in react-hook-form
     const rootMessage = formErrors?.['']?.message;
-
-    // Fall back to first error found anywhere in the errors object
     const anyMessage = Object.values(formErrors).map((e: any) => e?.message).find(Boolean);
 
     toast.error(namedFieldMessage || rootMessage || anyMessage || "Please review the form fields and try again.");
@@ -406,7 +407,8 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Create New Lead">
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4">
-        {/* Company Info */}
+
+        {/* ── Mandatory fields (top 4) ──────────────────────────────── */}
         <div className="space-y-3">
           <div>
             <label className="label">
@@ -420,6 +422,57 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             />
             {errors.companyName && <p className="text-xs text-red-400 mt-1">{errors.companyName.message}</p>}
           </div>
+
+          <div>
+            <label className="label">
+              Contact Person Name <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              {...register("contactName")}
+              className="input"
+              placeholder="John Doe"
+            />
+            {errors.contactName && <p className="text-xs text-red-400 mt-1">{errors.contactName.message}</p>}
+          </div>
+
+          <div>
+            <label className="label">
+              Email <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="email"
+              {...register("contactEmail")}
+              className="input"
+              placeholder="john@example.com"
+            />
+            {errors.contactEmail && <p className="text-xs text-red-400 mt-1">{errors.contactEmail.message}</p>}
+          </div>
+
+          <div>
+            <label className="label">
+              Status <span className="text-red-400">*</span>
+            </label>
+            <select {...register("status")} title="Status" className="input">
+              <option value="new">New</option>
+              <option value="contacted">Contacted</option>
+              <option value="qualified">Qualified</option>
+              <option value="warm">Warm</option>
+              <option value="hot">Hot</option>
+              <option value="proposal_sent">Proposal Sent</option>
+              <option value="negotiation">Negotiation</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+              <option value="on_hold">On Hold</option>
+              <option value="unqualified">Unqualified</option>
+            </select>
+            {errors.status && <p className="text-xs text-red-400 mt-1">{errors.status.message}</p>}
+          </div>
+        </div>
+
+        {/* ── Company Info ──────────────────────────────────────────── */}
+        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
+          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Company Information</h3>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -462,124 +515,119 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
           </div>
         </div>
 
-        {/* Contact Info */}
+        {/* ── Contact Info ──────────────────────────────────────────── */}
         <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
           <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">
             Contact Information
           </h3>
 
           <div>
-            <label className="label">Contact Name</label>
+            <label className="label">Job Title / Designation</label>
             <input
               type="text"
-              {...register("contactName")}
+              {...register("contactTitle")}
               className="input"
-              placeholder="John Doe"
+              placeholder="e.g. VP of Engineering"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Email</label>
-              <input
-                type="email"
-                {...register("contactEmail")}
-                className="input"
-                placeholder="john@example.com"
-              />
-              {errors.contactEmail && <p className="text-xs text-red-400 mt-1">{errors.contactEmail.message}</p>}
-            </div>
-            <div>
-              <label className="label">Phone</label>
+          <div>
+            <label className="label">Phone</label>
+            <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-white/10 focus-within:ring-2 focus-within:ring-blue-500/40">
+              <select
+                value={countryCode}
+                onChange={(e) => setCountryCode(e.target.value)}
+                title="Country code"
+                className="shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm px-2 border-r border-slate-200 dark:border-white/10 focus:outline-none"
+              >
+                <option value="+1">+1 (US)</option>
+                <option value="+44">+44 (UK)</option>
+                <option value="+91">+91 (IN)</option>
+                <option value="+61">+61 (AU)</option>
+                <option value="+971">+971 (UAE)</option>
+                <option value="+65">+65 (SG)</option>
+                <option value="+49">+49 (DE)</option>
+                <option value="+33">+33 (FR)</option>
+                <option value="+81">+81 (JP)</option>
+                <option value="+86">+86 (CN)</option>
+              </select>
               <input
                 type="tel"
                 {...register("contactPhone")}
-                className="input"
-                placeholder="+1 (555) 123-4567"
+                className="flex-1 bg-transparent text-sm px-3 py-2.5 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
+                placeholder="9876543210"
               />
             </div>
           </div>
+        </div>
+
+        {/* ── Requirement Info (hidden) ─────────────────────────────
+        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
+          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Requirement</h3>
           <div>
             <label className="label mb-1.5 block">
               Requirement Type <span className="text-red-400">*</span>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {requirementTypeOptions.map((item) => (
-                <label
-                  key={item}
-                  className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-white/10 px-2.5 py-2 text-xs text-slate-600 dark:text-slate-300"
-                >
-                  <input
-                    type="checkbox"
-                    checked={requirementType.includes(item)}
-                    onChange={() => toggleRequirementType(item)}
-                    className="w-4 h-4 rounded border-white/20 bg-slate-200 dark:bg-slate-800 text-blue-500"
-                  />
+                <label key={item} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-white/10 px-2.5 py-2 text-xs text-slate-600 dark:text-slate-300">
+                  <input type="checkbox" checked={requirementType.includes(item)} onChange={() => toggleRequirementType(item)} className="w-4 h-4 rounded border-white/20 bg-slate-200 dark:bg-slate-800 text-blue-500" />
                   {item}
                 </label>
               ))}
             </div>
             {errors.requirementType && <p className="text-xs text-red-400 mt-1">{errors.requirementType.message as string}</p>}
           </div>
-
           <div>
             <label className="label mb-1.5 block">Requirement Description</label>
-            <textarea
-              {...register("requirementDescription")}
-              className="input min-h-[88px]"
-              maxLength={2000}
-              placeholder="Describe scope, goals, and constraints..."
-            />
-            <p className="text-[10px] text-slate-500 mt-1 text-right">
-              {requirementDescription.length}/2000
-            </p>
+            <textarea {...register("requirementDescription")} className="input min-h-[88px]" maxLength={2000} placeholder="Describe scope, goals, and constraints..." />
+            <p className="text-[10px] text-slate-500 mt-1 text-right">{requirementDescription.length}/2000</p>
           </div>
         </div>
+        ── End Requirement Info ── */}
 
         {/* Lead Details */}
         <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
           <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Lead Details</h3>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Pipeline <span className="text-red-400">*</span></label>
-              <select {...register("pipeline")} title="Pipeline" className="input">
-                <option value="">Select pipeline...</option>
-                {PIPELINE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              {errors.pipeline && <p className="text-xs text-red-400 mt-1">{errors.pipeline.message}</p>}
-            </div>
-            <div>
-              <label className="label">Follow-up Date</label>
-              <input
-                type="date"
-                {...register("followUpDate")}
-                title="Follow-up Date"
-                className="input"
-                min={new Date().toISOString().split('T')[0]}
-                max="2099-12-31"
-                onKeyDown={(e) => {
-                  // Prevent manual typing to avoid year overflow issues
-                  if (!/Tab|Backspace|Delete|Arrow/.test(e.key)) {
-                    // Allow only if it's a digit or slash or hyphen
-                    if (!/[\d\-\/]/.test(e.key)) e.preventDefault();
-                  }
-                }}
-              />
-              {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
-            </div>
+          {/* Pipeline (hidden) ─────────────────────────────────────────
+          <div>
+            <label className="label">Pipeline <span className="text-red-400">*</span></label>
+            <select {...register("pipeline")} title="Pipeline" className="input">
+              <option value="">Select pipeline...</option>
+              {PIPELINE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            {errors.pipeline && <p className="text-xs text-red-400 mt-1">{errors.pipeline.message}</p>}
+          </div>
+          ── End Pipeline ── */}
+
+          <div>
+            <label className="label">Follow-up Date</label>
+            <input
+              type="date"
+              {...register("followUpDate")}
+              title="Follow-up Date"
+              className="input"
+              min={new Date().toISOString().split('T')[0]}
+              max="2099-12-31"
+              onKeyDown={(e) => {
+                if (!/Tab|Backspace|Delete|Arrow/.test(e.key)) {
+                  if (!/[\d\-\/]/.test(e.key)) e.preventDefault();
+                }
+              }}
+            />
+            {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
           </div>
 
+          {/* Budget Range + Timeline (hidden) ──────────────────────────
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Budget Range <span className="text-red-400">*</span></label>
               <select {...register("budgetRange")} title="Budget Range" className="input">
                 <option value="">Select budget range...</option>
-                {budgetRangeOptions.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
+                {budgetRangeOptions.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
               </select>
               {errors.budgetRange && <p className="text-xs text-red-400 mt-1">{errors.budgetRange.message}</p>}
             </div>
@@ -587,73 +635,52 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               <label className="label">Timeline</label>
               <select {...register("timeline")} title="Timeline" className="input">
                 <option value="">Select timeline...</option>
-                {timelineOptions.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
+                {timelineOptions.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
               </select>
             </div>
           </div>
+          ── End Budget Range + Timeline ── */}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Intent Signal</label>
-              <select {...register("temperature")} title="Temperature" className="input">
-                <option value="hot">Hot</option>
-                <option value="warm">Warm</option>
-                <option value="cold">Cold</option>
-                <option value="prospect">Prospect</option>
-                <option value="lost">Lost</option>
-                <option value="won">Won</option>
-              </select>
-            </div>
-            <div>
-              <label className="label">Status</label>
-              <select
-                {...register("status")}
-                title="Status"
-                className="input"
-              >
-                <option value="new">New</option>
-                <option value="contacted">Contacted</option>
-                <option value="replied">Replied</option>
-                <option value="meeting_booked">Meeting Booked</option>
-                <option value="qualified">Qualified</option>
-                <option value="disqualified">Disqualified</option>
-              </select>
-            </div>
+          {/* Intent Signal (hidden) ────────────────────────────────────
+          <div>
+            <label className="label">Intent Signal</label>
+            <select {...register("temperature")} title="Temperature" className="input">
+              <option value="hot">Hot</option>
+              <option value="warm">Warm</option>
+              <option value="cold">Cold</option>
+              <option value="prospect">Prospect</option>
+              <option value="lost">Lost</option>
+              <option value="won">Won</option>
+            </select>
           </div>
+          ── End Intent Signal ── */}
 
+          {/* Disqualification Reason (hidden) ──────────────────────────
           {status === "disqualified" && (
             <div>
               <label className="label">Disqualification Reason <span className="text-red-400">*</span></label>
-              <input
-                type="text"
-                {...register("disqualificationReason")}
-                className="input"
-                placeholder="Reason for disqualification"
-                minLength={10}
-              />
+              <input type="text" {...register("disqualificationReason")} className="input" placeholder="Reason for disqualification" minLength={10} />
               {errors.disqualificationReason && <p className="text-xs text-red-400 mt-1">{errors.disqualificationReason.message}</p>}
             </div>
           )}
+          ── End Disqualification Reason ── */}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Source <span className="text-red-400">*</span></label>
-              <select {...register("source")} title="Lead Source" className="input">
-                <option value="">Select source...</option>
-                {leadSources.map((source) => (
-                  <option key={source} value={source}>{source}</option>
-                ))}
-              </select>
-              {errors.source && <p className="text-xs text-red-400 mt-1">{errors.source.message}</p>}
-            </div>
-            <div>
-              <label className="label">Sub-source / Ad Name</label>
-              <input type="text" {...register("subSource")} className="input" placeholder="Campaign or ad name" />
-            </div>
+          <div>
+            <label className="label">Source <span className="text-red-400">*</span></label>
+            <select {...register("source")} title="Lead Source" className="input">
+              <option value="">Select source...</option>
+              {leadSources.map((source) => (
+                <option key={source} value={source}>{source}</option>
+              ))}
+            </select>
+            {errors.source && <p className="text-xs text-red-400 mt-1">{errors.source.message}</p>}
           </div>
 
+          {/* Sub-source + Lead Cost + Assign To (hidden) ───────────────
+          <div>
+            <label className="label">Sub-source / Ad Name</label>
+            <input type="text" {...register("subSource")} className="input" placeholder="Campaign or ad name" />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Lead Cost (optional)</label>
@@ -671,6 +698,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               </div>
             )}
           </div>
+          ── End Sub-source + Lead Cost + Assign To ── */}
         </div>
 
         {/* Actions */}

@@ -14,7 +14,76 @@ const VALID_CATEGORIES = [
   "pipeline_stage",
   "business_line",
   "loss_reason",
+  // Discovery scan fields
+  "company_size",
+  "company_type",
+  "decision_maker",
+  "preferred_contact_channel",
+  "seniority_level",
+  "annual_revenue_range",
 ];
+
+// Default values seeded for every new organisation
+const DEFAULT_DROPDOWN_SEEDS = [
+  // ── Industry ──────────────────────────────────────────────────────────────
+  { category: 'industry', values: [
+    'Any Industry', 'Information Technology (IT)', 'Software / SaaS',
+    'Banking & Financial Services (BFSI)', 'Healthcare & Pharmaceuticals',
+    'Manufacturing & Industrial', 'Retail & E-commerce', 'Education & EdTech',
+    'Logistics & Supply Chain', 'Real Estate & Construction', 'Media & Advertising',
+    'Telecommunications', 'Energy & Utilities', 'Automotive',
+    'Government & Public Sector', 'NGO / Non-profit', 'Hospitality & Travel',
+    'Agriculture & Food Processing', 'Legal & Compliance',
+    'Consulting & Professional Services',
+  ]},
+  // ── Company size ─────────────────────────────────────────────────────────
+  { category: 'company_size', values: [
+    'Any Size', '1-10 (Micro)', '11-50 (Small)', '51-200 (Mid-size)',
+    '201-500 (Growing)', '501-1000 (Large)', '1000-5000 (Enterprise)',
+    '5000+ (Global Enterprise)',
+  ]},
+  // ── Company type ─────────────────────────────────────────────────────────
+  { category: 'company_type', values: [
+    'Any', 'Private Limited', 'Public Listed', 'Startup', 'MNC', 'SME',
+    'Government / PSU', 'NGO / Non-profit', 'Partnership Firm', 'LLP',
+    'Sole Proprietorship', 'Family Business',
+  ]},
+  // ── Decision maker ───────────────────────────────────────────────────────
+  { category: 'decision_maker', values: [
+    'CEO / Founder', 'CTO / CIO', 'CFO', 'CMO', 'COO', 'MD / Director',
+    'VP Sales', 'VP Operations', 'Head of HR', 'Talent Acquisition Manager',
+    'Procurement Head', 'Operations Manager', 'Department Head', 'Board Member',
+  ]},
+  // ── Contact channel ──────────────────────────────────────────────────────
+  { category: 'preferred_contact_channel', values: [
+    'Any', 'Email', 'LinkedIn', 'Phone / Call', 'WhatsApp', 'In-person / Visit',
+  ]},
+  // ── Seniority level ──────────────────────────────────────────────────────
+  { category: 'seniority_level', values: [
+    'Any', 'C-suite', 'VP / SVP Level', 'Director Level', 'Manager Level',
+    'Team Lead', 'Individual Contributor', 'Board / Advisor Level',
+  ]},
+  // ── Annual revenue range ─────────────────────────────────────────────────
+  { category: 'annual_revenue_range', values: [
+    'Any', 'Under $1M', '$1M – $5M', '$5M – $10M', '$10M – $25M',
+    '$25M – $50M', '$50M – $100M', '$100M – $250M', '$250M – $500M',
+    '$500M – $1B', 'Above $1B',
+  ]},
+];
+
+/**
+ * Seed default dropdown values for a newly created organisation.
+ * Uses createMany with skipDuplicates so it is safe to call multiple times.
+ */
+async function seedDefaultDropdowns(organizationId) {
+  const rows = [];
+  DEFAULT_DROPDOWN_SEEDS.forEach(({ category, values }) => {
+    values.forEach((value, index) => {
+      rows.push({ organizationId, category, value, displayOrder: index, isActive: true });
+    });
+  });
+  await prisma.dropdownConfig.createMany({ data: rows, skipDuplicates: true });
+}
 
 // GET /api/dropdowns?category=lead_source — all authenticated roles
 async function listByCategory(req, res) {
@@ -41,6 +110,67 @@ async function listByCategory(req, res) {
     return success(res, items);
   } catch (err) {
     return error(res, "Failed to fetch dropdown values", 500);
+  }
+}
+
+// GET /api/dropdowns/active — all authenticated roles, flat array of active items for the org
+async function listActive(req, res) {
+  try {
+    const items = await prisma.dropdownConfig.findMany({
+      where: {
+        organizationId: req.user.organizationId,
+        isActive: true,
+      },
+      orderBy: [{ category: 'asc' }, { displayOrder: 'asc' }],
+      select: {
+        id: true,
+        category: true,
+        value: true,
+        displayOrder: true,
+        isActive: true,
+      },
+    });
+    return success(res, items);
+  } catch (err) {
+    return error(res, 'Failed to fetch dropdown values', 500);
+  }
+}
+
+// GET /api/dropdowns/discovery — all authenticated roles
+// Returns all discovery-scan categories grouped in one response.
+// Used by the lead discovery form so it only needs one API call.
+const DISCOVERY_CATEGORIES = [
+  'industry',
+  'company_size',
+  'company_type',
+  'decision_maker',
+  'preferred_contact_channel',
+  'seniority_level',
+  'annual_revenue_range',
+];
+
+async function listDiscoveryDropdowns(req, res) {
+  try {
+    const items = await prisma.dropdownConfig.findMany({
+      where: {
+        organizationId: req.user.organizationId,
+        category: { in: DISCOVERY_CATEGORIES },
+        isActive: true,
+      },
+      orderBy: [{ category: 'asc' }, { displayOrder: 'asc' }],
+      select: { id: true, category: true, value: true, displayOrder: true },
+    });
+
+    // Group by category and preserve displayOrder sort
+    const grouped = {};
+    for (const cat of DISCOVERY_CATEGORIES) grouped[cat] = [];
+    for (const item of items) {
+      if (grouped[item.category]) grouped[item.category].push(item);
+    }
+
+    return success(res, grouped);
+  } catch (err) {
+    return error(res, 'Failed to fetch discovery dropdown values', 500);
   }
 }
 
@@ -181,4 +311,20 @@ async function deleteValue(req, res) {
   }
 }
 
-module.exports = { listByCategory, listAllCategories, addValue, updateValue, deleteValue };
+// POST /api/dropdowns/seed — admin only
+// Seeds (or re-seeds) all default dropdown values for the requesting org.
+// Safe to call multiple times; existing values are never duplicated.
+async function seedOrgDropdowns(req, res) {
+  try {
+    await seedDefaultDropdowns(req.user.organizationId);
+    // Return how many active entries now exist
+    const count = await prisma.dropdownConfig.count({
+      where: { organizationId: req.user.organizationId, isActive: true },
+    });
+    return success(res, { seeded: true, totalActiveValues: count }, 'Default dropdown values seeded successfully');
+  } catch (err) {
+    return error(res, 'Failed to seed dropdown values', 500);
+  }
+}
+
+module.exports = { listByCategory, listActive, listDiscoveryDropdowns, listAllCategories, addValue, updateValue, deleteValue, seedDefaultDropdowns, seedOrgDropdowns };

@@ -6,16 +6,25 @@ const { requireAdmin } = require('../middleware/rbac');
 // GET /api/dropdowns?category=lead_source — all authenticated roles
 router.get('/', authenticate, ctrl.listByCategory);
 
+// GET /api/dropdowns/active — all authenticated roles, flat array of all active items
+router.get('/active', authenticate, ctrl.listActive);
+
+// GET /api/dropdowns/discovery — all authenticated roles, all discovery categories grouped
+router.get('/discovery', authenticate, ctrl.listDiscoveryDropdowns);
+
 // GET /api/dropdowns/all — org_admin only
 router.get('/all', authenticate, requireAdmin, ctrl.listAllCategories);
 
-// POST /api/dropdowns — all authenticated roles
-router.post('/', authenticate, ctrl.addValue);
+// POST /api/dropdowns/seed — admin only; seeds default values for the org
+router.post('/seed', authenticate, requireAdmin, ctrl.seedOrgDropdowns);
 
-// PATCH /api/dropdowns/:id — all authenticated roles
-router.patch('/:id', authenticate, ctrl.updateValue);
+// POST /api/dropdowns — admin only
+router.post('/', authenticate, requireAdmin, ctrl.addValue);
 
-// DELETE /api/dropdowns/:id — all authenticated roles
-router.delete('/:id', authenticate, ctrl.deleteValue);
+// PATCH /api/dropdowns/:id — admin only
+router.patch('/:id', authenticate, requireAdmin, ctrl.updateValue);
+
+// DELETE /api/dropdowns/:id — admin only
+router.delete('/:id', authenticate, requireAdmin, ctrl.deleteValue);
 
 module.exports = router;

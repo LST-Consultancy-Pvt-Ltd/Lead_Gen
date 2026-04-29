@@ -1,33 +1,71 @@
-'use client';
+﻿'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { discoveryApi } from '../../../lib/api';
-import { Badge, ProgressBar, Spinner } from '../../../components/ui';
+import { discoveryApi, dropdownsApi } from '../../../lib/api';
+import { Badge, ProgressBar } from '../../../components/ui';
 import {
-  Plus, X, Zap, Loader2, CheckCircle2,
-  Link2, FileText, AlignLeft,
+  X, Zap, Loader2, CheckCircle2,
+  Link2, FileText,
   ChevronDown, ChevronUp, Upload, ExternalLink,
-  TrendingUp, Target, Users, Edit3,
+  Target, Users, Edit3,
   Sparkles, ArrowRight, RotateCcw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatDate } from '../../../lib/utils';
 
-const WORK_TYPES = [
-  { label: 'On-site', icon: '🏢' },
-  { label: 'Remote',  icon: '🏠' },
-  { label: 'Hybrid',  icon: '🔀' },
-];
-
 const ACTIVE_SCAN_KEY = 'lf_active_scan_id';
+
+const DEFAULT_INDUSTRIES = [
+  'Any Industry',
+  'Information Technology (IT)',
+  'Software / SaaS',
+  'Banking & Financial Services (BFSI)',
+  'Healthcare & Pharmaceuticals',
+  'Manufacturing & Industrial',
+  'Retail & E-commerce',
+  'Education & EdTech',
+  'Logistics & Supply Chain',
+  'Real Estate & Construction',
+  'Media & Advertising',
+  'Telecommunications',
+  'Energy & Utilities',
+  'Automotive',
+  'Government & Public Sector',
+  'NGO / Non-profit',
+  'Hospitality & Travel',
+  'Agriculture & Food Processing',
+  'Legal & Compliance',
+  'Consulting & Professional Services',
+];
+const DEFAULT_COMPANY_SIZES = [
+  'Any Size', '1-10 (Micro)', '11-50 (Small)', '51-200 (Mid-size)',
+  '201-500 (Growing)', '501-1000 (Large)', '1000-5000 (Enterprise)', '5000+ (Global Enterprise)',
+];
+const DEFAULT_COMPANY_TYPES = [
+  'Any', 'Private Limited', 'Public Listed', 'Startup', 'MNC', 'SME',
+  'Government / PSU', 'NGO / Non-profit', 'Partnership Firm', 'LLP',
+  'Sole Proprietorship', 'Family Business',
+];
+const DEFAULT_DECISION_MAKERS = [
+  'CEO / Founder', 'CTO / CIO', 'CFO', 'CMO', 'COO', 'MD / Director',
+  'VP Sales', 'VP Operations', 'Head of HR', 'Talent Acquisition Manager',
+  'Procurement Head', 'Operations Manager', 'Department Head', 'Board Member',
+];
+const DEFAULT_CONTACT_CHANNELS = [
+  'Any', 'Email', 'LinkedIn', 'Phone / Call', 'WhatsApp', 'In-person / Visit',
+];
+const DEFAULT_SENIORITY_LEVELS = [
+  'Any', 'C-suite', 'VP / SVP Level', 'Director Level', 'Manager Level',
+  'Team Lead', 'Individual Contributor', 'Board / Advisor Level',
+];
+const DEFAULT_ANNUAL_REVENUE = [
+  'Any', 'Under $1M', '$1M – $5M', '$5M – $10M', '$10M – $25M', '$25M – $50M',
+  '$50M – $100M', '$100M – $250M', '$250M – $500M', '$500M – $1B', 'Above $1B',
+];
 
 function cn(...cls: (string | boolean | undefined | null)[]) {
   return cls.filter(Boolean).join(' ');
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SectionCard
-// ─────────────────────────────────────────────────────────────────────────────
 
 function SectionCard({
   title, subtitle, defaultOpen = true, children,
@@ -49,60 +87,80 @@ function SectionCard({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Page
-// ─────────────────────────────────────────────────────────────────────────────
+function MandatoryLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="label mb-1.5 flex items-center gap-1">
+      {children}
+      <span className="text-red-400 text-xs font-bold">*</span>
+    </p>
+  );
+}
+
+function ChipSelect({
+  options, selected, onToggle, color = 'violet',
+}: { options: string[]; selected: string[]; onToggle: (v: string) => void; color?: string }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map(opt => {
+        const active = selected.includes(opt);
+        return (
+          <button key={opt} type="button" onClick={() => onToggle(opt)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+              active
+                ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
+                : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
+            )}>
+            <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', active ? 'bg-violet-400' : 'bg-slate-500')} />
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function LeadDiscoveryPage() {
   const qc = useQueryClient();
-
   const [scanMode, setScanMode] = useState<'service' | 'product' | null>(null);
 
-  // Service mode
-  const [newService,          setNewService]          = useState('');
-  const [workTypes,           setWorkTypes]           = useState<string[]>([]);
-  const [targetIndustry,      setTargetIndustry]      = useState('');
-  const [targetRegion,        setTargetRegion]        = useState('');
-  const [selectedRoles,       setSelectedRoles]       = useState<string[]>([]);
-  const [customRoleInput,     setCustomRoleInput]     = useState('');
+  // Positions mode — mandatory
+  const [positionTitle,  setPositionTitle]  = useState('');
+  const [description,    setDescription]    = useState('');
+  const [geography,      setGeography]      = useState('');
+  const [skillsRequired, setSkillsRequired] = useState('');
 
-  function toggleRole(role: string) {
-    setSelectedRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
-  }
-  function addCustomRole() {
-    const r = customRoleInput.trim();
-    if (!r || selectedRoles.includes(r)) return;
-    setSelectedRoles(prev => [...prev, r]);
-    setCustomRoleInput('');
-  }
+  // Positions mode — optional
+  const [targetIndustry,         setTargetIndustry]         = useState('');
+  const [companySize,            setCompanySize]            = useState('');
+  const [companyType,            setCompanyType]            = useState('');
+  const [selectedDecisionMakers, setSelectedDecisionMakers] = useState<string[]>([]);
+  const [contactChannel,         setContactChannel]         = useState('');
+  const [seniorityLevel,         setSeniorityLevel]         = useState('');
+  const [leadCount,              setLeadCount]              = useState(50);
 
-  // Service mode — extended fields
-  const [companySize,    setCompanySize]    = useState('');
-  const [companyType,    setCompanyType]    = useState('');
-  const [revenueRanges,  setRevenueRanges]  = useState<string[]>([]);
-  const [serviceName,    setServiceName]    = useState('');
-  const [pricingModel,   setPricingModel]   = useState('');
-  const [valueProp,      setValueProp]      = useState('');
-  const [keywords,       setKeywords]       = useState('');
-  const [contactChannel, setContactChannel] = useState('');
-  const [seniorityLevel, setSeniorityLevel] = useState('');
-  const [leadCount,      setLeadCount]      = useState(50);
-  const [scoreThreshold, setScoreThreshold] = useState('');
-  const [excludeList,    setExcludeList]    = useState('');
+  // Products mode — mandatory
+  const [productName,      setProductName]      = useState('');
+  const [productGeography, setProductGeography] = useState('');
+  const [valueProposition, setValueProposition] = useState('');
 
-  function toggleRevenueRange(r: string) {
-    setRevenueRanges(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r]);
-  }
+  // Products mode — optional
+  const [productIndustry,       setProductIndustry]       = useState('');
+  const [productCompanySize,    setProductCompanySize]    = useState('');
+  const [productCompanyType,    setProductCompanyType]    = useState('');
+  const [productDecisionMakers, setProductDecisionMakers] = useState<string[]>([]);
+  const [productContactChannel, setProductContactChannel] = useState('');
+  const [productSeniorityLevel, setProductSeniorityLevel] = useState('');
+  const [productLeadCount,      setProductLeadCount]      = useState(50);
+  const [annualRevenue,         setAnnualRevenue]         = useState('');
 
-  // Product mode inputs
+  // Product supplementary inputs
   const [productUrl,          setProductUrl]          = useState('');
-  const [productDescription,  setProductDescription]  = useState('');
   const [productDocumentText, setProductDocumentText] = useState('');
   const [productFileName,     setProductFileName]     = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // AI prompt state (product mode only)
-  // Flow: fill inputs → Generate Prompt → review/edit → Start Scan
+  // AI prompt state
   const [promptText,      setPromptText]      = useState('');
   const [promptSummary,   setPromptSummary]   = useState('');
   const [promptBuyerType, setPromptBuyerType] = useState('');
@@ -112,8 +170,8 @@ export default function LeadDiscoveryPage() {
   // Scan state
   const [activeScanId,       setActiveScanId]       = useState<string | null>(null);
   const [optimisticProgress, setOptimisticProgress] = useState(0);
+  const [peakLeadsFound,     setPeakLeadsFound]     = useState(0);
 
-  // Restore
   useEffect(() => {
     const stored = localStorage.getItem(ACTIVE_SCAN_KEY);
     if (stored) setActiveScanId(stored);
@@ -122,6 +180,33 @@ export default function LeadDiscoveryPage() {
     if (activeScanId) localStorage.setItem(ACTIVE_SCAN_KEY, activeScanId);
     else              localStorage.removeItem(ACTIVE_SCAN_KEY);
   }, [activeScanId]);
+
+  // Admin-managed dropdowns (flat array, accessible to all roles)
+  const { data: allDropdowns } = useQuery({
+    queryKey: ['dropdowns', 'active'],
+    queryFn:  () => dropdownsApi.listActive().then(r => {
+      const raw = r.data.data;
+      return Array.isArray(raw) ? raw : [];
+    }),
+  });
+
+  function getDropdownOptions(category: string, defaults: string[]): string[] {
+    if (!allDropdowns || !Array.isArray(allDropdowns)) return defaults;
+    const items = allDropdowns.filter((d: any) => d.category === category && d.isActive !== false);
+    if (items.length === 0) return defaults;
+    // Merge: DB values first, then any default values not already present in DB
+    const dbValues = items.map((d: any) => d.value);
+    const extra = defaults.filter(d => !dbValues.includes(d));
+    return [...dbValues, ...extra];
+  }
+
+  const industryOptions       = getDropdownOptions('industry', DEFAULT_INDUSTRIES);
+  const companySizeOptions    = getDropdownOptions('company_size', DEFAULT_COMPANY_SIZES);
+  const companyTypeOptions    = getDropdownOptions('company_type', DEFAULT_COMPANY_TYPES);
+  const decisionMakerOptions  = getDropdownOptions('decision_maker', DEFAULT_DECISION_MAKERS);
+  const contactChannelOptions = getDropdownOptions('preferred_contact_channel', DEFAULT_CONTACT_CHANNELS);
+  const seniorityOptions      = getDropdownOptions('seniority_level', DEFAULT_SENIORITY_LEVELS);
+  const annualRevenueOptions  = getDropdownOptions('annual_revenue_range', DEFAULT_ANNUAL_REVENUE);
 
   // Server-side active scan restore
   const { data: serverActiveScan } = useQuery({
@@ -133,11 +218,6 @@ export default function LeadDiscoveryPage() {
     if (!activeScanId && serverActiveScan?.id) setActiveScanId(serverActiveScan.id);
   }, [serverActiveScan, activeScanId]);
 
-  // Data
-  const { data: servicesData, isLoading: servicesLoading } = useQuery({
-    queryKey: ['services'],
-    queryFn:  () => discoveryApi.getServices().then(r => r.data.data),
-  });
   const { data: scansData } = useQuery({
     queryKey: ['scans'],
     queryFn:  () => discoveryApi.getScans().then(r => ({
@@ -145,7 +225,6 @@ export default function LeadDiscoveryPage() {
     })),
   });
 
-  // Live poll
   const { data: activeScan } = useQuery({
     queryKey: ['scan', activeScanId],
     queryFn:  () => activeScanId
@@ -154,6 +233,13 @@ export default function LeadDiscoveryPage() {
     enabled:         !!activeScanId,
     refetchInterval: activeScanId ? 2000 : false,
   });
+
+  // Track peak leads count — backend may return 0 in the completed snapshot
+  useEffect(() => {
+    const count = activeScan?.leadsFound ?? activeScan?.totalLeads ?? activeScan?.leadsCount;
+    if (typeof count === 'number' && count > peakLeadsFound) setPeakLeadsFound(count);
+  }, [activeScan]);
+
   useEffect(() => {
     if (activeScan?.status === 'completed' || activeScan?.status === 'failed') {
       const t = setTimeout(() => {
@@ -166,26 +252,13 @@ export default function LeadDiscoveryPage() {
     }
   }, [activeScan?.status]);
 
-  // Service management
-  const updateServicesMutation = useMutation({
-    mutationFn: (s: any[]) => discoveryApi.updateServices(s),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['services'] }),
-  });
-  const services: any[] = servicesData ?? [];
-
-  function addService() {
-    if (!newService.trim()) return;
-    updateServicesMutation.mutate([...services, { name: newService.trim(), isActive: true }]);
-    setNewService('');
+  function toggleDecisionMaker(dm: string) {
+    setSelectedDecisionMakers(prev => prev.includes(dm) ? prev.filter(r => r !== dm) : [...prev, dm]);
   }
-  function removeService(i: number) {
-    updateServicesMutation.mutate(services.filter((_: any, j: number) => j !== i));
-  }
-  function toggleWorkType(wt: string) {
-    setWorkTypes(prev => prev.includes(wt) ? prev.filter(w => w !== wt) : [...prev, wt]);
+  function toggleProductDecisionMaker(dm: string) {
+    setProductDecisionMakers(prev => prev.includes(dm) ? prev.filter(r => r !== dm) : [...prev, dm]);
   }
 
-  // File upload
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -207,20 +280,34 @@ export default function LeadDiscoveryPage() {
 
   function startOptimisticProgress() {
     setOptimisticProgress(0);
+    setPeakLeadsFound(0);
     let v = 0;
     const iv = setInterval(() => { v += 2; setOptimisticProgress(v); if (v >= 10) clearInterval(iv); }, 600);
   }
 
-  // ── STEP 1: Generate AI prompt from product inputs ────────────────────────
+  const positionsMandatoryFilled =
+    positionTitle.trim().length > 0 &&
+    description.trim().length > 0 &&
+    geography.trim().length > 0 &&
+    skillsRequired.trim().length > 0;
+
+  const hasProductInputs =
+    productName.trim().length > 0 &&
+    productGeography.trim().length > 0 &&
+    valueProposition.trim().length > 0;
+
+  const canStartProductScan = promptGenerated && promptText.trim().length > 20;
+
   const generatePromptMutation = useMutation({
     mutationFn: () => {
-      if (!hasProductInputs) throw new Error('Add a product URL, description, or document first');
+      if (!hasProductInputs) throw new Error('Fill in all mandatory fields first');
       return discoveryApi.generateProductPrompt({
+        productName:         productName.trim(),
         productUrl:          productUrl.trim()          || undefined,
-        productDescription:  productDescription.trim()  || undefined,
+        productDescription:  valueProposition.trim()    || undefined,
         productDocumentText: productDocumentText.trim() || undefined,
-        targetIndustry:      targetIndustry.trim()      || undefined,
-        targetRegion:        targetRegion.trim()        || undefined,
+        targetIndustry:      productIndustry && productIndustry !== 'Any Industry' ? productIndustry : undefined,
+        targetRegion:        productGeography.trim(),
       });
     },
     onSuccess: res => {
@@ -237,14 +324,27 @@ export default function LeadDiscoveryPage() {
     },
   });
 
-  // ── Service scan ──────────────────────────────────────────────────────────
   const scanMutation = useMutation({
-    mutationFn: () => discoveryApi.startScan({
-      targetIndustry, targetRegion, workTypes, decisionMakerRoles: selectedRoles,
-      companySize, companyType, revenueRanges,
-      serviceName, pricingModel, valueProp, keywords,
-      contactChannel, seniorityLevel, leadCount, scoreThreshold, excludeList,
-    }),
+    mutationFn: () => {
+      if (!positionsMandatoryFilled) throw new Error('Fill in all mandatory fields');
+      return discoveryApi.startScan({
+        positionTitle:    positionTitle.trim(),
+        description:      description.trim(),
+        geography:        geography.trim(),
+        skillsRequired:   skillsRequired.trim(),
+        targetIndustry:   targetIndustry && targetIndustry !== 'Any Industry' ? targetIndustry : undefined,
+        companySize:      companySize    && companySize    !== 'Any Size'     ? companySize    : undefined,
+        companyType:      companyType    && companyType    !== 'Any'          ? companyType    : undefined,
+        decisionMakers:   selectedDecisionMakers.length > 0 ? selectedDecisionMakers : undefined,
+        contactChannel:   contactChannel && contactChannel !== 'Any' ? contactChannel : undefined,
+        seniorityLevel:   seniorityLevel && seniorityLevel !== 'Any' ? seniorityLevel : undefined,
+        numberOfLeads:    leadCount,
+        // Legacy compat
+        targetRegion:     geography.trim(),
+        decisionMakerRoles: selectedDecisionMakers,
+        leadCount,
+      });
+    },
     onSuccess: res => {
       const id = res.data.data.id ?? res.data.data.jobId;
       setActiveScanId(id);
@@ -252,10 +352,9 @@ export default function LeadDiscoveryPage() {
       qc.invalidateQueries({ queryKey: ['scans'] });
       startOptimisticProgress();
     },
-    onError: () => toast.error('Failed to start scan'),
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start scan'),
   });
 
-  // ── STEP 2: Product scan using the finalised prompt ───────────────────────
   const productScanMutation = useMutation({
     mutationFn: () => {
       const hasUrl = productUrl.trim().length > 0;
@@ -265,13 +364,23 @@ export default function LeadDiscoveryPage() {
       else if (hasDoc) productType = 'document';
 
       return discoveryApi.startProductScan({
+        productName:         productName.trim(),
+        geography:           productGeography.trim(),
+        valueProposition:    valueProposition.trim(),
         productType,
         productUrl:          productUrl.trim()          || undefined,
-        productDescription:  productDescription.trim()  || undefined,
+        productDescription:  valueProposition.trim()    || undefined,
         productDocumentText: productDocumentText.trim() || undefined,
-        // Pass the user-approved (possibly edited) prompt
         customPrompt:        promptText.trim()          || undefined,
-        targetIndustry, targetRegion, workTypes,
+        targetIndustry:      productIndustry && productIndustry !== 'Any Industry' ? productIndustry : undefined,
+        targetRegion:        productGeography.trim(),
+        companySize:         productCompanySize && productCompanySize !== 'Any Size' ? productCompanySize : undefined,
+        companyType:         productCompanyType && productCompanyType !== 'Any'     ? productCompanyType : undefined,
+        decisionMakers:      productDecisionMakers.length > 0 ? productDecisionMakers : undefined,
+        preferredContactChannel: productContactChannel && productContactChannel !== 'Any' ? productContactChannel : undefined,
+        seniorityLevel:      productSeniorityLevel && productSeniorityLevel !== 'Any' ? productSeniorityLevel : undefined,
+        numberOfLeads:       productLeadCount || undefined,
+        annualRevenueRange:  annualRevenue && annualRevenue !== 'Any' ? annualRevenue : undefined,
       });
     },
     onSuccess: res => {
@@ -281,416 +390,155 @@ export default function LeadDiscoveryPage() {
       qc.invalidateQueries({ queryKey: ['scans'] });
       startOptimisticProgress();
     },
-    onError: () => toast.error('Failed to start product scan'),
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start product scan'),
   });
 
-  // Derived
-  const isMutating     = scanMutation.isPending || productScanMutation.isPending || generatePromptMutation.isPending;
-  const scanning       = isMutating || (!!activeScanId && (activeScan == null || ['running','pending'].includes(activeScan?.status)));
-  const scanProgress   = (activeScan?.progress != null && activeScan.progress > 0) ? activeScan.progress : optimisticProgress;
-  const scanComplete   = activeScan?.status === 'completed';
-  const hasProductInputs = productUrl.trim().length > 0 || productDescription.trim().length > 10 || productDocumentText.trim().length > 10;
-  const canStartProductScan = promptGenerated && promptText.trim().length > 20;
-  const totalLeadsEver = (scansData?.items ?? []).reduce((s: number, j: any) => s + (j.leadsFound ?? 0), 0);
+  const isMutating   = scanMutation.isPending || productScanMutation.isPending || generatePromptMutation.isPending;
+  const scanning     = isMutating || (!!activeScanId && (activeScan == null || ['running','pending'].includes(activeScan?.status)));
+  const scanProgress = (activeScan?.progress != null && activeScan.progress > 0) ? activeScan.progress : optimisticProgress;
+  const scanComplete = activeScan?.status === 'completed';
 
-  // AI smart search
-  const [smartPrompt, setSmartPrompt] = useState('');
-
-  const smartScanMutation = useMutation({
-    mutationFn: () => {
-      if (!smartPrompt.trim()) throw new Error('Enter a description first');
-      return discoveryApi.smartScan(smartPrompt.trim());
-    },
-    onSuccess: (res) => {
-      const id = res.data.data.id ?? res.data.data.jobId;
-      setActiveScanId(id);
-      qc.invalidateQueries({ queryKey: ['scans'] });
-      startOptimisticProgress();
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message || err.message || 'Failed to start smart scan');
-    },
-  });
-
-  const smartScanning = smartScanMutation.isPending || (!!activeScanId && (activeScan == null || ['running','pending'].includes(activeScan?.status)));
-
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
 
-      {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="page-title">Lead Discovery Engine</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Finds companies that <span className="text-emerald-400 font-medium">need</span> your service or product — not competitors
+            Finds companies that <span className="text-emerald-400 font-medium">need</span> your service or product
           </p>
         </div>
-        {/* <div className="flex items-center gap-3">
-          {totalLeadsEver > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2">
-              <TrendingUp size={12} className="text-emerald-400" />
-              {totalLeadsEver.toLocaleString()} total discovered
-            </div>
-          )}
-          {scanMode === 'service' && (
-            <button className="btn-primary px-6 py-2.5 text-sm"
-              onClick={() => scanMutation.mutate()}
-              disabled={scanning || services.length === 0}>
-              {scanning
-                ? <><Loader2 size={14} className="animate-spin" /> Scanning…</>
-                : <><Zap size={14} /> Launch AI Scan</>}
-            </button>
-          )}
-        </div> */}
       </div>
 
-      {/* AI Smart Search */}
-      <div className="card overflow-hidden">
-        <div className="px-5 pt-5 pb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
-              <Sparkles size={13} className="text-violet-400" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">AI Smart Search</p>
-              <p className="text-xs text-slate-500">Describe your ideal lead in plain English — AI generates leads directly</p>
-            </div>
-          </div>
-
-          {smartScanning ? (
-            <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="violet"
-              steps={['AI parses your prompt', 'Generating job title variants', 'Scanning Google Jobs', 'Filtering results', 'Saving leads']} />
-          ) : scanComplete && activeScan ? (
-            <ScanComplete activeScan={activeScan} />
-          ) : (
-            <>
-              <div className="flex gap-2">
-                <textarea
-                  className="input text-sm resize-none flex-1 leading-relaxed"
-                  rows={2}
-                  placeholder='e.g. "Find 50 CTOs at mid-size SaaS companies in the USA that need DevOps consulting"'
-                  value={smartPrompt}
-                  onChange={e => setSmartPrompt(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) smartScanMutation.mutate(); }}
-                />
-                <button
-                  className="btn-primary flex-shrink-0 px-5 self-stretch text-sm"
-                  onClick={() => smartScanMutation.mutate()}
-                  disabled={!smartPrompt.trim()}
-                >
-                  <Zap size={14} /> Generate Leads
-                </button>
-              </div>
-              <p className="text-xs text-slate-600 mt-2">
-                Press <kbd className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-mono">Ctrl+Enter</kbd> to search · or use the structured form below for more control
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Mode dropdown */}
+      {/* Mode selector */}
       <div className="flex items-center gap-3">
         <div className="relative">
           <select
+            aria-label="Discovery mode"
             value={scanMode ?? ''}
             onChange={e => setScanMode((e.target.value as 'service' | 'product') || null)}
-            className="input text-sm pr-8 appearance-none cursor-pointer min-w-[220px] font-medium"
+            className="input text-sm pr-8 appearance-none cursor-pointer min-w-[300px] font-medium"
           >
-            <option value="">Select discovery mode…</option>
-            <option value="service">Service / Position</option>
-            <option value="product">Product Discovery</option>
+            <option value="">Select discovery mode...</option>
+            <option value="service">Find Clients for Our Resources </option>
+            <option value="product">Find Customers for Our Product </option>
           </select>
           <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
         </div>
-        {/* {scanMode && (
+        {scanMode && (
           <span className={cn(
             'text-xs font-medium px-2.5 py-1 rounded-lg border',
             scanMode === 'service'
               ? 'bg-blue-500/10 border-blue-500/25 text-blue-400'
               : 'bg-violet-500/10 border-violet-500/25 text-violet-400'
           )}>
-            {scanMode === 'service' ? '🎯 Google Jobs engine' : '🤖 AI product matching'}
+            {scanMode === 'service' ? 'Positions' : 'Products'}
           </span>
-        )} */}
+        )}
       </div>
 
-      {/* ════════════════════ SERVICE MODE ════════════════════ */}
+      {/* POSITIONS MODE */}
       {scanMode === 'service' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="space-y-4">
 
-            <SectionCard title="Services / Positions"
-              subtitle="AI finds companies actively HIRING for this role — they need your services">
-              <div className="pt-4">
-                {servicesLoading ? <Spinner /> : (
-                  <div className="space-y-2 mb-3">
-                    {services.map((s: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between bg-slate-100 dark:bg-slate-950 rounded-xl px-3 py-2.5 group">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 size={13} className="text-emerald-400" />
-                          <span className="text-sm text-slate-800 dark:text-slate-200">{s.name}</span>
-                        </div>
-                        <button onClick={() => removeService(i)}
-                          aria-label={`Remove ${s.name}`}
-                          className="text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors">
-                          <X size={13} />
-                        </button>
-                      </div>
-                    ))}
-                    {services.length === 0 && (
-                      <p className="text-xs text-slate-600 text-center py-3">No services yet</p>
-                    )}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <input className="input text-sm" value={newService}
-                    onChange={e => setNewService(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addService()}
-                    placeholder='"NetSuite Consultant", "Salesforce Admin", "SAP Developer"' />
-                  <button className="btn-primary flex-shrink-0 px-3" onClick={addService} aria-label="Add service"><Plus size={14} /></button>
-                </div>
-                <p className="text-xs text-slate-600 mt-2">💡 Be specific — "NetSuite Consultant" beats "ERP"</p>
-              </div>
-            </SectionCard>
-
-            {/* <SectionCard title="Work Profile" subtitle="Filter by arrangement (optional)">
-              <div className="pt-4 flex gap-2 flex-wrap">
-                {WORK_TYPES.map(({ label, icon }) => {
-                  const active = workTypes.includes(label);
-                  return (
-                    <button key={label} onClick={() => toggleWorkType(label)}
-                      className={cn(
-                        'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition-all',
-                        active ? 'bg-blue-500/20 border-blue-500/50 text-blue-300'
-                               : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-                      )}>
-                      <span>{icon}</span>{label}
-                      {active && <span className="ml-1 text-blue-400 text-xs">✓</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </SectionCard> */}
-
-            <SectionCard title="What You're Offering"
-              subtitle="Help AI understand your service to find better-matched leads">
-              <div className="pt-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="label mb-1.5">Service name / category</p>
-                    <input className="input text-sm" placeholder='e.g. "Digital Marketing", "HR Consulting"'
-                      value={serviceName} onChange={e => setServiceName(e.target.value)} />
-                  </div>
-                  <div>
-                    <p className="label mb-1.5">Pricing model</p>
-                    <select className="input text-sm" value={pricingModel} onChange={e => setPricingModel(e.target.value)}>
-                      <option value="">Select…</option>
-                      <option>Monthly retainer</option>
-                      <option>Project-based</option>
-                      <option>Per hour</option>
-                      <option>Revenue share</option>
-                      <option>Custom / negotiable</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <p className="label mb-1.5">Value proposition / key benefit</p>
-                  <textarea className="input text-sm resize-none w-full" rows={3}
-                    placeholder="What problem do you solve? What outcome does the client get?"
-                    value={valueProp} onChange={e => setValueProp(e.target.value)} />
-                </div>
-                <div>
-                  <p className="label mb-1.5">Keywords / pain points to target</p>
-                  <input className="input text-sm" placeholder="e.g. cost reduction, compliance, scalability…"
-                    value={keywords} onChange={e => setKeywords(e.target.value)} />
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Decision Maker Targeting"
-              subtitle="Contacts for these roles will be fetched automatically via Apollo">
-              <div className="pt-4 space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  {([
-                    'CEO / Founder', 'CTO / CIO', 'CMO', 'CFO',
-                    'VP Sales', 'Head of HR', 'Procurement', 'Operations',
-                    'Managing Director', 'IT Director', 'Finance Manager',
-                  ] as const).map(role => {
-                    const active = selectedRoles.includes(role);
-                    return (
-                      <button key={role} type="button" onClick={() => toggleRole(role)}
-                        className={cn(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                          active
-                            ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
-                            : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
-                        )}>
-                        <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', active ? 'bg-violet-400' : 'bg-slate-500')} />
-                        {role}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* Custom role input */}
-                <div className="flex gap-2">
-                  <input className="input text-xs h-8 flex-1" placeholder='e.g. "ERP Manager", "Plant Manager"'
-                    value={customRoleInput}
-                    onChange={e => setCustomRoleInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addCustomRole()} />
-                  <button type="button" className="btn-primary flex-shrink-0 px-3 h-8 text-xs" onClick={addCustomRole}
-                    aria-label="Add custom role"><Plus size={12} /></button>
-                </div>
-                {/* Show custom-added roles */}
-                {selectedRoles.filter(r => ![
-                  'CEO / Founder','CTO / CIO','CMO','CFO','VP Sales',
-                  'Head of HR','Procurement','Operations','Managing Director','IT Director','Finance Manager',
-                ].includes(r)).map(r => (
-                  <span key={r} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-violet-500/15 border border-violet-500/25 text-violet-300">
-                    {r}
-                    <button type="button" onClick={() => setSelectedRoles(prev => prev.filter(x => x !== r))}
-                      className="hover:text-white transition-colors ml-0.5"><X size={9} /></button>
-                  </span>
-                ))}
-                {selectedRoles.length === 0 && (
-                  <p className="text-xs text-slate-500">No roles selected — Apollo will search for default decision makers (CEO, CTO, Founder)</p>
-                )}
-                {/* Contact channel + seniority */}
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <p className="label mb-1.5">Contact channel</p>
-                    <select className="input text-sm" value={contactChannel} onChange={e => setContactChannel(e.target.value)}>
-                      <option value="">Any</option>
-                      <option>Email</option>
-                      <option>LinkedIn</option>
-                      <option>Phone</option>
-                      <option>WhatsApp</option>
-                    </select>
-                  </div>
-                  <div>
-                    <p className="label mb-1.5">Seniority level</p>
-                    <select className="input text-sm" value={seniorityLevel} onChange={e => setSeniorityLevel(e.target.value)}>
-                      <option value="">Any</option>
-                      <option>C-suite</option>
-                      <option>VP / Director</option>
-                      <option>Manager</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Target Company Profile" subtitle="Leave blank for any">
-              <div className="pt-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="label mb-1.5">Industry</p>
-                    <input className="input text-sm" placeholder="e.g. SaaS, Fintech"
-                      value={targetIndustry} onChange={e => setTargetIndustry(e.target.value)} />
-                  </div>
-                  <div>
-                    <p className="label mb-1.5">Region</p>
-                    <input className="input text-sm" placeholder="e.g. USA, India"
-                      value={targetRegion} onChange={e => setTargetRegion(e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="label mb-1.5">Company size</p>
-                    <select className="input text-sm" value={companySize} onChange={e => setCompanySize(e.target.value)}>
-                      <option value="">Any size</option>
-                      <option>1–10 (Micro)</option>
-                      <option>11–50 (Small)</option>
-                      <option>51–200 (Mid-market)</option>
-                      <option>201–500</option>
-                      <option>500–1000</option>
-                      <option>1000+ (Enterprise)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <p className="label mb-1.5">Company type</p>
-                    <select className="input text-sm" value={companyType} onChange={e => setCompanyType(e.target.value)}>
-                      <option value="">Any</option>
-                      <option>B2B</option>
-                      <option>B2C</option>
-                      <option>Government / PSU</option>
-                      <option>Non-profit / NGO</option>
-                      <option>Startup</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <p className="label mb-1.5">
-                    Annual revenue range
-                    <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {(['< ₹1 Cr', '₹1–10 Cr', '₹10–100 Cr', '₹100–500 Cr', '₹500 Cr+'] as const).map(r => {
-                      const active = revenueRanges.includes(r);
-                      return (
-                        <button key={r} type="button" onClick={() => toggleRevenueRange(r)}
-                          className={cn(
-                            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                            active
-                              ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
-                              : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
-                          )}>
-                          <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', active ? 'bg-violet-400' : 'bg-slate-500')} />
-                          {r}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Lead Quality Filters" subtitle="Control volume and quality" defaultOpen={false}>
+            <SectionCard title="Position Details" subtitle="Mandatory fields — fill all to enable scanning">
               <div className="pt-4 space-y-4">
+                <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                  <span className="text-red-400 font-bold">*</span> Required fields
+                </p>
+
                 <div>
-                  <p className="label mb-2">Number of leads to generate</p>
-                  <div className="flex items-center gap-3">
-                    <input type="range" min={10} max={500} step={10} value={leadCount}
+                  <MandatoryLabel>Position Title / Job Profile</MandatoryLabel>
+                  <input className="input text-sm"
+                    placeholder="e.g. NetSuite Consultant, Salesforce Admin, SAP Developer"
+                    value={positionTitle} onChange={e => setPositionTitle(e.target.value)} />
+                  <p className="text-xs text-slate-600 mt-1.5">Be specific — "NetSuite Consultant" beats "ERP"</p>
+                </div>
+
+                <div>
+                  <MandatoryLabel>Geography / Region</MandatoryLabel>
+                  <input className="input text-sm" placeholder="e.g. USA, India, UK, Europe"
+                    value={geography} onChange={e => setGeography(e.target.value)} />
+                </div>
+
+                <div>
+                  <MandatoryLabel>Skills / Key Requirements</MandatoryLabel>
+                  <textarea className="input text-sm resize-none w-full" rows={3}
+                    placeholder="e.g. SAP S/4HANA, Oracle ERP, 5+ years experience, implementation skills..."
+                    value={skillsRequired} onChange={e => setSkillsRequired(e.target.value)} />
+                </div>
+
+                <div>
+                  <MandatoryLabel>Description</MandatoryLabel>
+                  <textarea className="input text-sm resize-none w-full" rows={4}
+                    placeholder="Please enter a detailed description of what you are looking for..."
+                    value={description} onChange={e => setDescription(e.target.value)} />
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Optional Filters" subtitle="Leave blank for any" defaultOpen={false}>
+              <div className="pt-4 space-y-4">
+
+                <div>
+                  <p className="label mb-1.5">Industry / Vertical</p>
+                  <select aria-label="Industry" className="input text-sm" value={targetIndustry} onChange={e => setTargetIndustry(e.target.value)}>
+                    {industryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="label mb-1.5">Company Size</p>
+                    <select aria-label="Company size" className="input text-sm" value={companySize} onChange={e => setCompanySize(e.target.value)}>
+                      {companySizeOptions.map(opt => <option key={opt} value={opt === 'Any Size' ? '' : opt}>{opt}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="label mb-1.5">Company Type</p>
+                    <select aria-label="Company type" className="input text-sm" value={companyType} onChange={e => setCompanyType(e.target.value)}>
+                      {companyTypeOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="label mb-2">Who approves hiring? (Decision Maker)</p>
+                  <ChipSelect
+                    options={decisionMakerOptions}
+                    selected={selectedDecisionMakers}
+                    onToggle={toggleDecisionMaker}
+                    color="violet"
+                  />
+                  {selectedDecisionMakers.length === 0 && (
+                    <p className="text-xs text-slate-500 mt-2">No roles selected — Apollo searches for default decision makers</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="label mb-1.5">Preferred Contact Channel</p>
+                    <select aria-label="Contact channel" className="input text-sm" value={contactChannel} onChange={e => setContactChannel(e.target.value)}>
+                      {contactChannelOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="label mb-1.5">Seniority Level</p>
+                    <select aria-label="Seniority level" className="input text-sm" value={seniorityLevel} onChange={e => setSeniorityLevel(e.target.value)}>
+                      {seniorityOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <MandatoryLabel>Number of Leads to Generate</MandatoryLabel>
+                  <div className="flex items-center gap-3 mt-1">
+                    <input type="range" aria-label="Number of leads" min={10} max={500} step={10} value={leadCount}
                       onChange={e => setLeadCount(Number(e.target.value))}
                       className="flex-1 accent-violet-500" />
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 min-w-[72px] text-right">{leadCount} leads</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 min-w-[80px] text-right">{leadCount} leads</span>
                   </div>
-                </div>
-                <div>
-                  <p className="label mb-2">
-                    Min lead score
-                    <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {([
-                      { label: 'All leads', value: '' },
-                      { label: 'Warm (60%+)', value: 'warm' },
-                      { label: 'Hot (80%+)', value: 'hot' },
-                    ] as const).map(({ label, value }) => {
-                      const active = scoreThreshold === value;
-                      return (
-                        <button key={value} type="button" onClick={() => setScoreThreshold(value)}
-                          className={cn(
-                            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                            active
-                              ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
-                              : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
-                          )}>
-                          <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', active ? 'bg-violet-400' : 'bg-slate-500')} />
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <p className="label mb-1.5">
-                    Exclude
-                    <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
-                  </p>
-                  <input className="input text-sm" placeholder="Competitors, existing clients, blacklisted domains…"
-                    value={excludeList} onChange={e => setExcludeList(e.target.value)} />
                 </div>
               </div>
             </SectionCard>
@@ -703,7 +551,7 @@ export default function LeadDiscoveryPage() {
               <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="blue"
                 steps={['AI generates job title variants','Google Jobs page 1','Google Jobs page 2','Google Jobs page 3','Filtering agencies','More variants','Deduplicating','Saving leads']} />
             ) : scanComplete ? (
-              <ScanComplete activeScan={activeScan} />
+              <ScanComplete activeScan={activeScan} peakLeadsFound={peakLeadsFound} />
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600/20 to-cyan-500/10 border border-blue-500/25 flex items-center justify-center">
@@ -712,35 +560,41 @@ export default function LeadDiscoveryPage() {
                 <div>
                   <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Ready to Discover Leads</p>
                   <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                    Google Jobs engine finds companies ACTIVELY HIRING for your service.
+                    Google Jobs engine finds companies ACTIVELY HIRING for this position.
                     AI generates job title variants — no static lists.
-                    {targetRegion ? ` Targeting ${targetRegion}.` : ' Searching worldwide.'}
+                    {geography ? ` Targeting ${geography}.` : ' Fill in the mandatory fields to begin.'}
                   </p>
                 </div>
+                {!positionsMandatoryFilled && (
+                  <div className="w-full bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left space-y-1">
+                    <p className="text-xs font-semibold text-amber-400 mb-1.5">Complete mandatory fields to scan:</p>
+                    {!description.trim()    && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Description</p>}
+                    {!positionTitle.trim()  && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Position Title</p>}
+                    {!geography.trim()      && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Geography</p>}
+                    {!skillsRequired.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Skills / Key Requirements</p>}
+                  </div>
+                )}
                 <button className="btn-primary px-8 py-3 text-sm w-full justify-center"
-                  onClick={() => scanMutation.mutate()} disabled={scanMutation.isPending || services.length === 0}>
+                  onClick={() => scanMutation.mutate()}
+                  disabled={scanMutation.isPending || !positionsMandatoryFilled}>
                   {scanMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
                   Generate Leads
                 </button>
-                {services.length === 0 && (
-                  <p className="text-xs text-amber-400">↑ Add at least one service first</p>
-                )}
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ════════════════════ PRODUCT MODE ════════════════════ */}
+      {/* PRODUCTS MODE */}
       {scanMode === 'product' && (
         <div className="space-y-4">
 
-          {/* 3-step indicator */}
           <div className="flex items-center gap-2">
             {[
-              { n: '1', label: 'Enter product info',  done: hasProductInputs,                          active: !hasProductInputs },
-              { n: '2', label: 'Review AI prompt',     done: promptGenerated,                           active: hasProductInputs && !promptGenerated },
-              { n: '3', label: 'Start scan',           done: false,                                     active: promptGenerated && !scanning },
+              { n: '1', label: 'Enter product info', done: hasProductInputs,                active: !hasProductInputs },
+              { n: '2', label: 'Review AI prompt',   done: promptGenerated,                 active: hasProductInputs && !promptGenerated },
+              { n: '3', label: 'Start scan',         done: false,                           active: promptGenerated && !scanning },
             ].map(({ n, label, done, active }, i) => (
               <div key={n} className="flex items-center gap-2">
                 <div className={cn(
@@ -758,14 +612,42 @@ export default function LeadDiscoveryPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-            {/* Left: inputs */}
             <div className="space-y-4">
-              <SectionCard title="Product Information"
-                subtitle="Works for ANY product — software, toy, machine, equipment, service, anything">
-                <div className="pt-5 space-y-6">
 
-                  {/* URL */}
+              <SectionCard title="Product Details" subtitle="Mandatory fields — fill all to enable scanning">
+                <div className="pt-4 space-y-4">
+                  <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                    <span className="text-red-400 font-bold">*</span> Required fields
+                  </p>
+
+                  <div>
+                    <MandatoryLabel>Product Name / Category</MandatoryLabel>
+                    <input className="input text-sm"
+                      placeholder="e.g. CRM Software, Industrial Pump, LED Display Board"
+                      value={productName}
+                      onChange={e => { setProductName(e.target.value); resetPrompt(); }} />
+                  </div>
+
+                  <div>
+                    <MandatoryLabel>Geography / Region</MandatoryLabel>
+                    <input className="input text-sm" placeholder="e.g. USA, India, UK, Europe"
+                      value={productGeography}
+                      onChange={e => { setProductGeography(e.target.value); resetPrompt(); }} />
+                  </div>
+
+                  <div>
+                    <MandatoryLabel>Value Proposition / Key Benefit</MandatoryLabel>
+                    <textarea className="input text-sm resize-none w-full" rows={4}
+                      placeholder="Please enter a detailed description — what problem does your product solve? Who needs it? What results does it deliver?"
+                      value={valueProposition}
+                      onChange={e => { setValueProposition(e.target.value); resetPrompt(); }} />
+                    <p className="text-xs text-slate-600 mt-1">{valueProposition.length}/3000 chars</p>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Additional Product Information" subtitle="Optional — helps AI build a better targeting prompt" defaultOpen={false}>
+                <div className="pt-5 space-y-6">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-7 h-7 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center flex-shrink-0">
@@ -778,7 +660,7 @@ export default function LeadDiscoveryPage() {
                       <input className="input text-sm flex-1" placeholder="https://yourproduct.com"
                         value={productUrl} onChange={e => { setProductUrl(e.target.value); resetPrompt(); }} />
                       {productUrl && (
-                        <a href={productUrl} target="_blank" rel="noreferrer" className="btn-ghost flex-shrink-0 px-2.5">
+                        <a href={productUrl} target="_blank" rel="noreferrer" title="Open product URL" className="btn-ghost flex-shrink-0 px-2.5">
                           <ExternalLink size={13} />
                         </a>
                       )}
@@ -792,29 +674,6 @@ export default function LeadDiscoveryPage() {
                     <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
                   </div>
 
-                  {/* Description */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
-                        <AlignLeft size={13} className="text-violet-400" />
-                      </div>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Product Description</p>
-                      <span className="text-[10px] bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
-                    </div>
-                    <textarea className="input text-sm resize-none w-full" rows={5}
-                      placeholder="Describe your product: what it is, who needs it, problems it solves, features, use cases…"
-                      value={productDescription}
-                      onChange={e => { setProductDescription(e.target.value); resetPrompt(); }} />
-                    <p className="text-xs text-slate-600 mt-1.5">{productDescription.length}/3000 chars</p>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
-                    <span className="text-[10px] text-slate-600 font-semibold tracking-widest">AND / OR</span>
-                    <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
-                  </div>
-
-                  {/* Document upload */}
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center flex-shrink-0">
@@ -838,7 +697,7 @@ export default function LeadDiscoveryPage() {
                             <X size={12} />
                           </button>
                         </div>
-                        <p className="text-xs text-slate-500 line-clamp-2">{productDocumentText.slice(0, 180)}…</p>
+                        <p className="text-xs text-slate-500 line-clamp-2">{productDocumentText.slice(0, 180)}...</p>
                       </div>
                     ) : (
                       <button type="button" onClick={() => fileInputRef.current?.click()}
@@ -852,22 +711,85 @@ export default function LeadDiscoveryPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Target Filters" subtitle="Leave blank for worldwide">
-                <div className="pt-4 grid grid-cols-2 gap-3">
+              <SectionCard title="Optional Filters" subtitle="Narrow down your target audience" defaultOpen={false}>
+                <div className="pt-4 space-y-4">
+
                   <div>
-                    <p className="label mb-1.5">Industry</p>
-                    <input className="input text-sm" placeholder="e.g. Construction, SaaS"
-                      value={targetIndustry} onChange={e => { setTargetIndustry(e.target.value); resetPrompt(); }} />
+                    <p className="label mb-1.5">Industry / Vertical</p>
+                    <select aria-label="Industry" className="input text-sm" value={productIndustry}
+                      onChange={e => { setProductIndustry(e.target.value); resetPrompt(); }}>
+                      {industryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
+                    </select>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="label mb-1.5">Company Size</p>
+                      <select aria-label="Company size" className="input text-sm" value={productCompanySize} onChange={e => setProductCompanySize(e.target.value)}>
+                        {companySizeOptions.map(opt => <option key={opt} value={opt === 'Any Size' ? '' : opt}>{opt}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="label mb-1.5">Company Type</p>
+                      <select aria-label="Company type" className="input text-sm" value={productCompanyType} onChange={e => setProductCompanyType(e.target.value)}>
+                        {companyTypeOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
-                    <p className="label mb-1.5">Region</p>
-                    <input className="input text-sm" placeholder="e.g. USA, India"
-                      value={targetRegion} onChange={e => { setTargetRegion(e.target.value); resetPrompt(); }} />
+                    <p className="label mb-1.5">Annual Revenue Range (USD)</p>
+                    <select
+                      aria-label="Annual revenue range"
+                      className="input text-sm w-full"
+                      value={annualRevenue}
+                      onChange={e => setAnnualRevenue(e.target.value)}
+                    >
+                      {annualRevenueOptions.map(opt => (
+                        <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <p className="label mb-2">Who makes the buying decision?</p>
+                    <ChipSelect
+                      options={decisionMakerOptions}
+                      selected={productDecisionMakers}
+                      onToggle={toggleProductDecisionMaker}
+                      color="violet"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="label mb-1.5">Preferred Contact Channel</p>
+                      <select aria-label="Contact channel" className="input text-sm" value={productContactChannel} onChange={e => setProductContactChannel(e.target.value)}>
+                        {contactChannelOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="label mb-1.5">Seniority Level</p>
+                      <select aria-label="Seniority level" className="input text-sm" value={productSeniorityLevel} onChange={e => setProductSeniorityLevel(e.target.value)}>
+                        {seniorityOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="label mb-2">Number of Leads to Generate
+                      <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <input type="range" aria-label="Number of leads" min={10} max={500} step={10} value={productLeadCount}
+                        onChange={e => setProductLeadCount(Number(e.target.value))}
+                        className="flex-1 accent-violet-500" />
+                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 min-w-[80px] text-right">{productLeadCount} leads</span>
+                    </div>
                   </div>
                 </div>
               </SectionCard>
 
-              {/* Generate Prompt button — only shown before prompt is generated */}
               {!promptGenerated && (
                 <>
                   <button
@@ -875,27 +797,29 @@ export default function LeadDiscoveryPage() {
                     onClick={() => generatePromptMutation.mutate()}
                     disabled={!hasProductInputs || generatePromptMutation.isPending}>
                     {generatePromptMutation.isPending
-                      ? <><Loader2 size={14} className="animate-spin" /> AI analyzing your product…</>
+                      ? <><Loader2 size={14} className="animate-spin" /> AI analyzing your product...</>
                       : <><Sparkles size={14} /> Generate Discovery Prompt</>}
                   </button>
                   {!hasProductInputs && (
-                    <p className="text-xs text-amber-400 text-center">↑ Add a URL, description, or document first</p>
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-1">
+                      <p className="text-xs font-semibold text-amber-400 mb-1">Complete mandatory fields first:</p>
+                      {!productName.trim()      && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Product Name / Category</p>}
+                      {!productGeography.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Geography / Region</p>}
+                      {!valueProposition.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Value Proposition</p>}
+                    </div>
                   )}
                 </>
               )}
             </div>
 
-            {/* Right: prompt preview or scan panel */}
             <div className="space-y-4">
-
-              {/* Scan in progress / complete */}
               {(scanning || scanComplete) && (
                 <div className="card p-6">
                   <h2 className="section-title mb-4">
                     {scanComplete ? 'Scan Complete' : 'Product Scan in Progress'}
                   </h2>
                   {scanComplete ? (
-                    <ScanComplete activeScan={activeScan} />
+                    <ScanComplete activeScan={activeScan} peakLeadsFound={peakLeadsFound} />
                   ) : (
                     <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="violet"
                       steps={['AI call — analyzing product','AI batch scoring','Filtering competitors','Deduplicating','Saving leads']} />
@@ -903,7 +827,6 @@ export default function LeadDiscoveryPage() {
                 </div>
               )}
 
-              {/* AI Prompt preview — shown after generation, before scan */}
               {promptGenerated && !scanning && !scanComplete && (
                 <div className="card p-5 space-y-4">
                   <div className="flex items-start justify-between gap-3">
@@ -941,14 +864,13 @@ export default function LeadDiscoveryPage() {
                     </button>
                   </div>
 
-                  {/* Editable textarea */}
                   <div className="relative">
                     <textarea
                       className="input text-xs leading-relaxed resize-none w-full font-mono"
                       rows={18}
                       value={promptText}
                       onChange={e => { setPromptText(e.target.value); setPromptEdited(true); }}
-                      placeholder="AI prompt will appear here…"
+                      placeholder="AI prompt will appear here..."
                     />
                     <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur rounded-lg px-2 py-1 pointer-events-none">
                       <Edit3 size={9} className="text-slate-600" />
@@ -966,13 +888,12 @@ export default function LeadDiscoveryPage() {
                     onClick={() => productScanMutation.mutate()}
                     disabled={!canStartProductScan || productScanMutation.isPending}>
                     {productScanMutation.isPending
-                      ? <><Loader2 size={14} className="animate-spin" /> Starting scan…</>
+                      ? <><Loader2 size={14} className="animate-spin" /> Starting scan...</>
                       : <><Zap size={14} /> Generate Leads</>}
                   </button>
                 </div>
               )}
 
-              {/* Idle — waiting for user to generate prompt */}
               {!promptGenerated && !scanning && !scanComplete && (
                 <div className="card p-6 flex flex-col items-center justify-center text-center gap-4 min-h-[300px]">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600/20 to-blue-500/10 border border-violet-500/25 flex items-center justify-center">
@@ -981,20 +902,19 @@ export default function LeadDiscoveryPage() {
                   <div>
                     <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">AI Prompt Preview</p>
                     <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                      Fill in your product details, then click{' '}
+                      Fill in the mandatory product details, then click{' '}
                       <span className="text-violet-400 font-medium">Generate Discovery Prompt</span>.
                       AI will build a targeting strategy you can review and edit before scanning.
                     </p>
                   </div>
                   <div className="space-y-2 w-full text-left">
                     {[
-                      { icon: '🎯', text: 'Identifies who NEEDS your product' },
-                      { icon: '🔍', text: 'Generates search keywords & queries' },
-                      { icon: '✏️', text: 'You review & edit before scanning' },
-                      { icon: '🚀', text: 'Scan runs with your approved prompt' },
+                      { icon: 'target', text: 'Identifies who NEEDS your product' },
+                      { icon: 'search', text: 'Generates search keywords & queries' },
+                      { icon: 'edit',   text: 'You review & edit before scanning' },
+                      { icon: 'rocket', text: 'Scan runs with your approved prompt' },
                     ].map(({ icon, text }) => (
                       <div key={text} className="flex items-center gap-2.5 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2">
-                        <span className="text-sm">{icon}</span>
                         <p className="text-xs text-slate-400">{text}</p>
                       </div>
                     ))}
@@ -1024,18 +944,30 @@ export default function LeadDiscoveryPage() {
                     <span className={cn('text-xs rounded px-1.5 py-0.5 border',
                       isProduct ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
                                 : 'bg-blue-500/10 text-blue-400 border-blue-500/20')}>
-                      {isProduct ? 'product' : 'service'}
+                      {isProduct ? 'product' : 'positions'}
                     </span>
                     <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{scan.leadsFound ?? 0} leads</span>
-                    {scan.targetRegion && <span className="text-xs text-slate-500">· {scan.targetRegion}</span>}
-                    {!isProduct && (scan.services ?? []).length > 0 && (
-                      <span className="text-xs text-slate-500 truncate hidden sm:inline">
-                        · {(scan.services as string[]).slice(0, 2).join(', ')}
+                    {(scan.geography || scan.targetRegion) && (
+                      <span className="text-xs text-slate-500">· {scan.geography || scan.targetRegion}</span>
+                    )}
+                    {scan.avgMatchScore != null && (
+                      <span className={cn(
+                        'text-xs font-semibold px-2 py-0.5 rounded-full border',
+                        scan.avgMatchScore >= 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                        scan.avgMatchScore >= 50 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                                   'bg-red-500/10 text-red-400 border-red-500/20'
+                      )}>
+                        {scan.avgMatchScore}% match
                       </span>
                     )}
-                    {isProduct && scan.sources?.productDescriptionSnippet && (
+                    {!isProduct && (scan.positionTitle || (scan.services ?? []).length > 0) && (
                       <span className="text-xs text-slate-500 truncate hidden sm:inline">
-                        · {scan.sources.productDescriptionSnippet.slice(0, 50)}
+                        · {scan.positionTitle || (scan.services as string[]).slice(0, 2).join(', ')}
+                      </span>
+                    )}
+                    {isProduct && (scan.sources?.productName || scan.sources?.productDescriptionSnippet) && (
+                      <span className="text-xs text-slate-500 truncate hidden sm:inline">
+                        · {scan.sources.productName || scan.sources.productDescriptionSnippet?.slice(0, 50)}
                       </span>
                     )}
                   </div>
@@ -1050,10 +982,6 @@ export default function LeadDiscoveryPage() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared sub-components
-// ─────────────────────────────────────────────────────────────────────────────
-
 function cn2(...cls: (string | boolean | undefined | null)[]) {
   return cls.filter(Boolean).join(' ');
 }
@@ -1067,7 +995,7 @@ function ScanProgress({ activeScan, scanProgress, steps, color = 'blue' }: {
         <div className="flex items-center gap-2 mb-3">
           <div className={`w-2 h-2 rounded-full bg-${color}-400 animate-pulse`} />
           <span className={`text-sm font-semibold text-${color}-300`}>
-            {color === 'violet' ? 'Finding buyer companies…' : 'Scanning for leads…'}
+            {color === 'violet' ? 'Finding buyer companies...' : 'Scanning for leads...'}
           </span>
           <span className={`ml-auto text-xs text-${color}-400 font-mono`}>{scanProgress}%</span>
         </div>
@@ -1095,7 +1023,8 @@ function ScanProgress({ activeScan, scanProgress, steps, color = 'blue' }: {
   );
 }
 
-function ScanComplete({ activeScan }: { activeScan: any }) {
+function ScanComplete({ activeScan, peakLeadsFound = 0 }: { activeScan: any; peakLeadsFound?: number }) {
+  const leadsFound = activeScan?.leadsFound || activeScan?.totalLeads || activeScan?.leadsCount || peakLeadsFound;
   return (
     <div className="flex flex-col items-center justify-center text-center gap-4 py-4">
       <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
@@ -1103,11 +1032,11 @@ function ScanComplete({ activeScan }: { activeScan: any }) {
       </div>
       <div>
         <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Scan Complete!</p>
-        <p className="text-3xl font-bold text-emerald-400">{activeScan?.leadsFound ?? 0}</p>
+        <p className="text-3xl font-bold text-emerald-400">{leadsFound}</p>
         <p className="text-sm text-slate-500 mt-1">new leads discovered</p>
       </div>
       <a href="/dashboard/leads" className="btn-primary text-sm px-6 py-2.5 w-full justify-center">
-        <Users size={14} /> View All Leads →
+        <Users size={14} /> View All Leads
       </a>
     </div>
   );
