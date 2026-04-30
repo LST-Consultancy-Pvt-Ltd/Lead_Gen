@@ -11,6 +11,7 @@ const { requireAdmin, requireManagerOrAdmin } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const leadsController = require('../controllers/leads.controller');
 const leadController = require('../controllers/leadController');
+const { getQuotaInfo } = require('../utils/leadQuota');
 
 // Validation rules
 const createLeadValidation = [
@@ -332,6 +333,24 @@ router.get(
   '/config',
   authenticate,
   leadsController.getLeadConfig
+);
+
+/**
+ * GET /api/leads/quota
+ * Returns the organisation's lead quota, usage, and remaining count.
+ * Access: All authenticated users
+ */
+router.get(
+  '/quota',
+  authenticate,
+  async (req, res) => {
+    try {
+      const info = await getQuotaInfo(req.user.organizationId);
+      return res.json({ success: true, data: info });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: 'Failed to fetch quota info' });
+    }
+  }
 );
 
 /**

@@ -10,6 +10,7 @@ const { sendLeadAssignmentEmail } = require('./emailService');
 const { logAudit } = require('../utils/auditLogger');
 const { createBulkNotifications } = require('../utils/notificationService');
 const dashboardEvents = require('../utils/dashboardEvents');
+const { checkLeadQuota, incrementLeadUsage, decrementLeadUsage } = require('../utils/leadQuota');
 
 // Statuses that require a follow-up date
 const FOLLOW_UP_REQUIRED_STATUSES = ['new', 'contacted', 'replied'];
@@ -242,6 +243,16 @@ class LeadsService {
    * Create a new lead with spec validations and soft duplicate detection
    */
   async createLead(data, user) {
+    // ── Lead Quota Check ───────────────────────────────────────────────────────
+    const quota = await checkLeadQuota(user.organizationId);
+    if (!quota.allowed) {
+      return {
+        success: false,
+        message: `Lead limit reached (${quota.quota}). You have used all your available leads. Please upgrade your plan to add more.`,
+        statusCode: 403,
+      };
+    }
+
     // ── Validation: followUpDate ──────────────────────────────────────────────
     // Follow-up date is now optional, but if provided, it cannot be in the past
     if (data.followUpDate) {
@@ -382,6 +393,9 @@ class LeadsService {
         logger.warn('Lead assignment email failed (non-fatal)', { error: emailErr.message });
       }
     }
+
+    // ── Increment lead usage counter ──────────────────────────────────────────
+    await incrementLeadUsage(user.organizationId);
 
     dashboardEvents.notifyOrg(user.organizationId, 'lead');
     return { success: true, lead, possibleDuplicate };
@@ -554,6 +568,9 @@ class LeadsService {
     await prisma.lead.delete({
       where: { id: leadId },
     });
+
+    // ── Decrement lead usage counter ─────────────────────────────────────────
+    await decrementLeadUsage(user.organizationId);
 
     dashboardEvents.notifyOrg(user.organizationId, 'lead');
     return { success: true, message: 'Lead deleted successfully' };

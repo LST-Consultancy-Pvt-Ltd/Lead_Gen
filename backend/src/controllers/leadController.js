@@ -9,6 +9,7 @@ const { sendEmail } = require('../services/emailService');
 const logger = require('../utils/logger');
 const { Parser } = require('json2csv');
 const { enrichViaSignalHire, enrichViaApollo } = require('../services/leadEnrichmentPipeline');
+const { checkLeadQuota, incrementLeadUsage, decrementLeadUsage } = require('../utils/leadQuota');
 
 async function getLeads(req, res) {
   try {
@@ -84,10 +85,20 @@ async function getLead(req, res) {
 
 async function createLead(req, res) {
   try {
+    // Check lead quota
+    const quota = await checkLeadQuota(req.user.organizationId);
+    if (!quota.allowed) {
+      return error(res, `Lead limit reached (${quota.quota}). You have used all your available leads. Please upgrade your plan to add more.`, 403);
+    }
+
     const data = { ...req.body, organizationId: req.user.organizationId, createdById: req.user.id };
     const lead = await prisma.lead.create({ data });
     await prisma.activityLog.create({ data: { organizationId: req.user.organizationId, userId: req.user.id,
       leadId: lead.id, action: 'lead_created', description: `Lead created: ${lead.companyName}` } }).catch(()=>{});
+
+    // Increment lead usage counter
+    await incrementLeadUsage(req.user.organizationId);
+
     dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, lead, 'Lead created', 201);
   } catch (err) {
@@ -114,6 +125,10 @@ async function deleteLead(req, res) {
     const existing = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!existing) return error(res, 'Lead not found', 404);
     await prisma.lead.delete({ where: { id: req.params.id } });
+
+    // Decrement lead usage counter
+    await decrementLeadUsage(req.user.organizationId);
+
     dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, null, 'Lead deleted');
   } catch (err) {

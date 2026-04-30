@@ -10,6 +10,7 @@ const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
 const { getTeamMemberIds } = require('../middleware/rbac');
 const dashboardEvents = require('../utils/dashboardEvents');
+const { checkLeadQuota, incrementLeadUsage } = require('../utils/leadQuota');
 
 const ALLOWED_MIME_TYPES = [
   'text/csv',
@@ -70,6 +71,18 @@ async function importLeads(req, res) {
     if (rows.length === 0) return error(res, 'File contains no data rows', 422);
     if (rows.length > MAX_ROWS) return error(res, `File exceeds maximum of ${MAX_ROWS} rows`, 422);
 
+    // ── Lead Quota Check ────────────────────────────────────────────────────
+    const quota = await checkLeadQuota(req.user.organizationId, 1);
+    if (!quota.allowed) {
+      return error(res, `Lead limit reached (${quota.quota}). You have used all your available leads. Please upgrade your plan to import more.`, 403);
+    }
+    // Cap importable rows to remaining quota
+    const maxImportable = quota.remaining;
+    let quotaExhaustedWarning = false;
+    if (rows.length > maxImportable) {
+      quotaExhaustedWarning = true;
+    }
+
     // ── Round-robin assignment setup ────────────────────────────────────────
     const roundRobin = req.body.roundRobin === true || req.body.roundRobin === 'true';
     const fixedAssignedToId = req.body.assignedToId || null;
@@ -97,6 +110,12 @@ async function importLeads(req, res) {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       try {
+        // Check if quota is exhausted mid-import
+        if (successLeads.length >= maxImportable) {
+          importErrors.push({ row: i + 2, error: `Lead quota exhausted (limit: ${quota.quota}). Remaining rows skipped.` });
+          break;
+        }
+
         const companyName = String(row.companyName || row['Company Name'] || row.company || '').trim();
         if (!companyName) {
           importErrors.push({ row: i + 2, error: 'companyName is required' });
@@ -173,14 +192,24 @@ async function importLeads(req, res) {
       failed: importErrors.length,
     });
 
-    if (successLeads.length > 0) dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
+    // ── Update lead usage counter ───────────────────────────────────────────
+    if (successLeads.length > 0) {
+      await incrementLeadUsage(req.user.organizationId, successLeads.length);
+      dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
+    }
+
+    let message = `Import complete: ${successLeads.length} leads created, ${importErrors.length} skipped`;
+    if (quotaExhaustedWarning) {
+      message += `. Note: Only ${maxImportable} of ${rows.length} rows were imported due to your lead quota (${quota.quota}).`;
+    }
 
     return success(res, {
       totalRows: rows.length,
       successRows: successLeads.length,
       failedRows: importErrors.length,
       errors: importErrors.slice(0, 50),
-    }, `Import complete: ${successLeads.length} leads created, ${importErrors.length} skipped`, 201);
+      quotaRemaining: quota.remaining - successLeads.length,
+    }, message, 201);
   } catch (err) {
     logger.error('importLeads error', { error: err.message, userId: req.user.id });
     return error(res, 'Import failed due to a server error', 500);

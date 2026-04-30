@@ -9,7 +9,7 @@ import { usePermissions } from '../../../lib/rbac';
 import { usePermissions as useAuthPermissions } from '../../../store/authStore';
 import { useAuthStore } from '../../../store/authStore';
 import { getInitials, downloadBlob, statusColors } from '../../../lib/utils';
-import { Users, Plus, Download, Search, Trash2, Edit2, UserCog, X, Loader2, Clock, CalendarDays } from 'lucide-react';
+import { Users, Plus, Download, Search, Trash2, Edit2, UserCog, X, Loader2, Clock, CalendarDays, Lock } from 'lucide-react';
 import { isToday, isPast, isTomorrow, format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -60,6 +60,12 @@ export default function LeadsPage() {
     queryKey: ['leads', queryParams],
     queryFn: () => leadsApi.list(queryParams).then(r => r.data),
     placeholderData: (prev) => prev,
+  });
+
+  const { data: quota, isLoading: isQuotaLoading } = useQuery({
+    queryKey: ['lead-quota'],
+    queryFn: () => leadsApi.quota().then(r => r.data?.data),
+    staleTime: 60000,
   });
 
   const deleteMutation = useMutation({
@@ -182,7 +188,24 @@ export default function LeadsPage() {
             {total.toLocaleString()} {permissions.canViewAllLeads ? 'total leads' : 'leads assigned to you'}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
+          {!isQuotaLoading && quota && (
+            <div className="mr-4 flex flex-col items-end hidden sm:flex">
+                <div className="flex justify-between w-32 mb-1">
+                    <span className="text-[10px] font-medium text-slate-500">Lead Quota</span>
+                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                        {quota.used} / {quota.quota}
+                    </span>
+                </div>
+                <div className="h-1.5 w-32 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                        className={`h-full rounded-full transition-all duration-500 ${quota.used >= quota.quota ? 'bg-red-500' : 'bg-blue-500'}`}
+                        style={{ width: `${Math.min(100, Math.max(0, (quota.used / quota.quota) * 100))}%` }}
+                    />
+                </div>
+            </div>
+          )}
+
           {permissions.canReassignLead && selectedLeads.size > 0 && (
             <button className="btn-ghost" onClick={() => setAssignOpen(true)}>
               <UserCog size={14} /> Assign ({selectedLeads.size})
@@ -196,8 +219,13 @@ export default function LeadsPage() {
             </RoleGuard>
           )}
           <RoleGuard permission="canCreateLead">
-            <button className="btn-primary" onClick={() => setIsCreateModalOpen(true)}>
-              <Plus size={14} /> Add Lead
+            <button 
+                className="btn-primary" 
+                onClick={() => setIsCreateModalOpen(true)}
+                disabled={quota?.used >= quota?.quota}
+                title={quota?.used >= quota?.quota ? 'Lead quota limit reached' : ''}
+            >
+              {quota?.used >= quota?.quota ? <Lock size={14} /> : <Plus size={14} />} Add Lead
             </button>
           </RoleGuard>
         </div>
