@@ -537,7 +537,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
           <div>
             <label className="label">
-              Status <span className="text-red-400">*</span>
+              Lead Status <span className="text-red-400">*</span>
             </label>
             <select {...register("status")} title="Status" className="input">
               <option value="new">New</option>
@@ -752,7 +752,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
           ── End Disqualification Reason ── */}
 
           <div>
-            <label className="label">Source <span className="text-red-400">*</span></label>
+            <label className="label">Lead Source <span className="text-red-400">*</span></label>
             <select {...register("source")} title="Lead Source" className="input">
               <option value="">Select source...</option>
               {dynamicSourceOptions.map((source) => (

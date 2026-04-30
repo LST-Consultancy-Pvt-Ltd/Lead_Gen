@@ -472,7 +472,7 @@ export default function LeadDiscoveryPage() {
                 <div>
                   <MandatoryLabel>Description</MandatoryLabel>
                   <textarea className="input text-sm resize-none w-full" rows={4}
-                    placeholder="Please enter a detailed description of what you are looking for..."
+                    placeholder="Please enter a detailed description"
                     value={description} onChange={e => setDescription(e.target.value)} />
                 </div>
               </div>
@@ -532,7 +532,7 @@ export default function LeadDiscoveryPage() {
                 </div>
 
                 <div>
-                  <MandatoryLabel>Number of Leads to Generate</MandatoryLabel>
+                  <MandatoryLabel>Number of Leads</MandatoryLabel>
                   <div className="flex items-center gap-3 mt-1">
                     <input type="range" aria-label="Number of leads" min={10} max={500} step={10} value={leadCount}
                       onChange={e => setLeadCount(Number(e.target.value))}
