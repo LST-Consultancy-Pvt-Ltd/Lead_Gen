@@ -391,52 +391,40 @@ export default function SettingsPage() {
                             }`}>
                               {item.value}
                             </span>
-                            <div className="flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-1">
                               {/* Edit */}
-                              <div className="relative group/tip">
-                                <button
-                                  aria-label="Edit"
-                                  className="p-1.5 rounded-md text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
-                                  onClick={() => { setEditingId(item.id); setEditingValue(item.value); }}
-                                >
-                                  <Pencil size={13} />
-                                </button>
-                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-slate-800 dark:bg-slate-700 px-2 py-1 text-[10px] text-white opacity-0 group-hover/tip:opacity-100 transition-opacity z-10">
-                                  Edit
-                                </span>
-                              </div>
+                              <button
+                                aria-label="Edit"
+                                title="Edit"
+                                className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-500/20 active:scale-95 transition-all"
+                                onClick={() => { setEditingId(item.id); setEditingValue(item.value); }}
+                              >
+                                <Pencil size={14} />
+                              </button>
                               {/* Disable / Enable */}
-                              <div className="relative group/tip">
-                                <button
-                                  className={`p-1.5 rounded-md transition-colors ${
-                                    item.isActive
-                                      ? 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10'
-                                      : 'text-green-500 hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-500/10'
-                                  }`}
-                                  onClick={() => {
-                                    if (!item.id) { toast.error('This value has no database ID — please run the seed script'); return; }
-                                    toggleMutation.mutate({ id: item.id, isActive: item.isActive });
-                                  }}
-                                >
-                                  {item.isActive ? <EyeOff size={13} /> : <Eye size={13} />}
-                                </button>
-                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-slate-800 dark:bg-slate-700 px-2 py-1 text-[10px] text-white opacity-0 group-hover/tip:opacity-100 transition-opacity z-10">
-                                  {item.isActive ? 'Disable' : 'Enable'}
-                                </span>
-                              </div>
+                              <button
+                                title={item.isActive ? 'Disable' : 'Enable'}
+                                className={`p-2 rounded-lg transition-all active:scale-95 ${
+                                  item.isActive
+                                    ? 'text-slate-400 hover:text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-500/20'
+                                    : 'text-emerald-500 hover:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20'
+                                }`}
+                                onClick={() => {
+                                  if (!item.id) { toast.error('This value has no database ID — please run the seed script'); return; }
+                                  toggleMutation.mutate({ id: item.id, isActive: item.isActive });
+                                }}
+                              >
+                                {item.isActive ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
                               {/* Delete */}
-                              <div className="relative group/tip">
-                                <button
-                                  aria-label="Delete"
-                                  className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                                  onClick={() => setDeletingId(item.id)}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-slate-800 dark:bg-slate-700 px-2 py-1 text-[10px] text-white opacity-0 group-hover/tip:opacity-100 transition-opacity z-10">
-                                  Delete
-                                </span>
-                              </div>
+                              <button
+                                aria-label="Delete"
+                                title="Delete"
+                                className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20 active:scale-95 transition-all"
+                                onClick={() => setDeletingId(item.id)}
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </div>
                           </>
                         )}
