@@ -166,8 +166,6 @@ export default function LeadDiscoveryPage() {
   const [promptBuyerType, setPromptBuyerType] = useState('');
   const [promptGenerated, setPromptGenerated] = useState(false);
   const [promptEdited, setPromptEdited] = useState(false);
-
-  // AI Smart Search state
   const [smartPrompt, setSmartPrompt] = useState('');
 
   // Scan state
@@ -404,6 +402,11 @@ export default function LeadDiscoveryPage() {
     },
     onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start product scan'),
   });
+  
+  const isMutating = scanMutation.isPending || productScanMutation.isPending || generatePromptMutation.isPending;
+  const scanning = isMutating || (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
+  const scanProgress = (activeScan?.progress != null && activeScan.progress > 0) ? activeScan.progress : optimisticProgress;
+  const scanComplete = activeScan?.status === 'completed';
 
   const smartScanMutation = useMutation({
     mutationFn: () => {
@@ -420,11 +423,8 @@ export default function LeadDiscoveryPage() {
     onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start smart scan'),
   });
 
-  const isMutating = scanMutation.isPending || productScanMutation.isPending || generatePromptMutation.isPending || smartScanMutation.isPending;
-  const scanning = isMutating || (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
-  const smartScanning = smartScanMutation.isPending || (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
-  const scanProgress = (activeScan?.progress != null && activeScan.progress > 0) ? activeScan.progress : optimisticProgress;
-  const scanComplete = activeScan?.status === 'completed';
+  const smartScanning = smartScanMutation.isPending ||
+    (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
 
   const smartScanMutation = useMutation({
     mutationFn: () => {
@@ -668,15 +668,12 @@ export default function LeadDiscoveryPage() {
                 )}
                 <button className="btn-primary px-8 py-3 text-sm w-full justify-center"
                   onClick={() => scanMutation.mutate()}
-                  disabled={scanMutation.isPending || !positionsMandatoryFilled || quotaReached}
+                  disabled={scanMutation.isPending || quotaReached}
                   title={quotaReached ? 'Lead quota reached' : ''}
                 >
                   {scanMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
                   Generate Leads
                 </button>
-                {!positionsMandatoryFilled && !quotaReached && (
-                  <p className="text-xs text-amber-400">↑ Add at least one service first</p>
-                )}
                 {quotaReached && (
                   <p className="text-xs text-red-500">Lead quota reached. Upgrade plan to discover more.</p>
                 )}
