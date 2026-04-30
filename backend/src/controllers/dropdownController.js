@@ -20,6 +20,7 @@ const VALID_CATEGORIES = [
   "pipeline_stage",
   "loss_reason",
   "job_title",
+  "location",
 ];
 
 // Default values seeded for every new organisation

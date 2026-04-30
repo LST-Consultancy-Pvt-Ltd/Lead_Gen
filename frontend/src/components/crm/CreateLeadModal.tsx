@@ -94,7 +94,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
   const { canReassignLead, canManageDropdowns } = usePermissions();
   const [utmOpen, setUtmOpen] = useState(false);
-  const [countryCode, setCountryCode] = useState('+91');
+
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
     payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: string };
@@ -120,9 +120,17 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     contactTitle: yup.string().optional(),
     contactEmail: yup
       .string()
-      .email("Enter a valid email")
+      .trim()
+      .email("Enter a valid email address")
       .required("Email is required"),
-    contactPhone: yup.string().optional(),
+    contactPhone: yup
+      .string()
+      .transform((value) => (value ? value.trim() : value))
+      .matches(
+        /^[+]?[0-9\s\-().]{7,20}$/,
+        "Enter a valid phone number (7–20 digits)"
+      )
+      .optional(),
     source: yup.string().required("Source is required"),
     assignedToId: yup.string().optional(),
     status: yup.string().required("Status is required"),
@@ -417,7 +425,6 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
   const resetForm = () => {
     reset(defaultValues);
-    setCountryCode('+91');
     setDuplicateConfirm(null);
     pendingPayloadRef.current = null;
     setUtmOpen(false);
@@ -429,10 +436,6 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   };
 
   const onSubmit = (formData: any) => {
-    // Prepend country code to phone number if phone is provided
-    if (formData.contactPhone?.trim()) {
-      formData.contactPhone = countryCode + formData.contactPhone.trim();
-    }
     // Filter out empty values; exclude assignedToId when cannot reassign
     const cleanedData = Object.fromEntries(
       Object.entries(formData).filter(([k, v]) => {
@@ -619,31 +622,13 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
           <div>
             <label className="label">Phone</label>
-            <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-white/10 focus-within:ring-2 focus-within:ring-blue-500/40">
-              <select
-                value={countryCode}
-                onChange={(e) => setCountryCode(e.target.value)}
-                title="Country code"
-                className="shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm px-2 border-r border-slate-200 dark:border-white/10 focus:outline-none"
-              >
-                <option value="+1">+1 (US)</option>
-                <option value="+44">+44 (UK)</option>
-                <option value="+91">+91 (IN)</option>
-                <option value="+61">+61 (AU)</option>
-                <option value="+971">+971 (UAE)</option>
-                <option value="+65">+65 (SG)</option>
-                <option value="+49">+49 (DE)</option>
-                <option value="+33">+33 (FR)</option>
-                <option value="+81">+81 (JP)</option>
-                <option value="+86">+86 (CN)</option>
-              </select>
-              <input
-                type="tel"
-                {...register("contactPhone")}
-                className="flex-1 bg-transparent text-sm px-3 py-2.5 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
-                placeholder="9876543210"
-              />
-            </div>
+            <input
+              type="tel"
+              {...register("contactPhone")}
+              className="input"
+              placeholder="+91 9876543210"
+            />
+            {errors.contactPhone && <p className="text-xs text-red-400 mt-1">{errors.contactPhone.message}</p>}
           </div>
         </div>
 
