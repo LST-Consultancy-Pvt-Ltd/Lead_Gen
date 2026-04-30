@@ -1,7 +1,7 @@
 ﻿'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { discoveryApi, leadsApi } from '../../../lib/api';
+import { discoveryApi, leadsApi, dropdownsApi } from '../../../lib/api';
 import { Badge, ProgressBar, Spinner } from '../../../components/ui';
 import {
   X, Zap, Loader2, CheckCircle2,
@@ -166,11 +166,13 @@ export default function LeadDiscoveryPage() {
   const [promptBuyerType, setPromptBuyerType] = useState('');
   const [promptGenerated, setPromptGenerated] = useState(false);
   const [promptEdited, setPromptEdited] = useState(false);
+  const [smartPrompt, setSmartPrompt] = useState('');
 
   // Scan state
   const [activeScanId, setActiveScanId] = useState<string | null>(null);
   const [optimisticProgress, setOptimisticProgress] = useState(0);
   const [peakLeadsFound, setPeakLeadsFound] = useState(0);
+  
 
   useEffect(() => {
     const stored = localStorage.getItem(ACTIVE_SCAN_KEY);
@@ -400,11 +402,29 @@ export default function LeadDiscoveryPage() {
     },
     onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start product scan'),
   });
-
+  
   const isMutating = scanMutation.isPending || productScanMutation.isPending || generatePromptMutation.isPending;
   const scanning = isMutating || (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
   const scanProgress = (activeScan?.progress != null && activeScan.progress > 0) ? activeScan.progress : optimisticProgress;
   const scanComplete = activeScan?.status === 'completed';
+
+  const smartScanMutation = useMutation({
+    mutationFn: () => {
+      if (!smartPrompt.trim()) throw new Error('Enter a prompt first');
+      return discoveryApi.smartScan(smartPrompt.trim());
+    },
+    onSuccess: res => {
+      const id = res.data.data.id ?? res.data.data.jobId;
+      setActiveScanId(id);
+      toast.success('Smart scan started!');
+      qc.invalidateQueries({ queryKey: ['scans'] });
+      startOptimisticProgress();
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start smart scan'),
+  });
+
+  const smartScanning = smartScanMutation.isPending ||
+    (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
 
   return (
     <div className="space-y-5">
@@ -419,7 +439,7 @@ export default function LeadDiscoveryPage() {
       </div>
 
       {/* AI Smart Search */}
-      <div className="card overflow-hidden">
+      {/* <div className="card overflow-hidden">
         <div className="px-5 pt-5 pb-4">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
@@ -462,7 +482,7 @@ export default function LeadDiscoveryPage() {
             </>
           )}
         </div>
-      </div>
+      </div> */}
 
       {/* Mode dropdown */}
       <div className="flex items-center gap-3">
@@ -630,15 +650,12 @@ export default function LeadDiscoveryPage() {
                 )}
                 <button className="btn-primary px-8 py-3 text-sm w-full justify-center"
                   onClick={() => scanMutation.mutate()}
-                  disabled={scanMutation.isPending || services.length === 0 || quotaReached}
+                  disabled={scanMutation.isPending || quotaReached}
                   title={quotaReached ? 'Lead quota reached' : ''}
                 >
                   {scanMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
                   Generate Leads
                 </button>
-                {services.length === 0 && !quotaReached && (
-                  <p className="text-xs text-amber-400">↑ Add at least one service first</p>
-                )}
                 {quotaReached && (
                   <p className="text-xs text-red-500">Lead quota reached. Upgrade plan to discover more.</p>
                 )}
