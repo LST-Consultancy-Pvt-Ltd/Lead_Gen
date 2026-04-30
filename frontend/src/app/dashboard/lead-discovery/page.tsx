@@ -556,7 +556,7 @@ export default function LeadDiscoveryPage() {
               <div className="pt-4 space-y-4">
 
                 <div>
-                  <p className="label mb-1.5">Industry / Vertical</p>
+                  <p className="label mb-1.5">Target Industry </p>
                   <select aria-label="Industry" className="input text-sm" value={targetIndustry} onChange={e => setTargetIndustry(e.target.value)}>
                     {industryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
                   </select>
@@ -794,7 +794,7 @@ export default function LeadDiscoveryPage() {
                 <div className="pt-4 space-y-4">
 
                   <div>
-                    <p className="label mb-1.5">Industry / Vertical</p>
+                    <p className="label mb-1.5">Target Industry</p>
                     <select aria-label="Industry" className="input text-sm" value={productIndustry}
                       onChange={e => { setProductIndustry(e.target.value); resetPrompt(); }}>
                       {industryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}

@@ -60,7 +60,7 @@ export default function SettingsPage() {
     { key: 'job_title',                 label: 'Job Title' },
     { key: 'pipeline_stage',            label: 'Pipeline Stage' },
     { key: 'loss_reason',               label: 'Loss Reason' },
-    { key: 'industry',                  label: 'Industry / Vertical' },
+    { key: 'industry',                  label: 'Target Industry' },
     { key: 'company_size',              label: 'Company Size' },
     { key: 'company_type',              label: 'Company Type' },
     { key: 'decision_maker',            label: 'Decision Maker' },
