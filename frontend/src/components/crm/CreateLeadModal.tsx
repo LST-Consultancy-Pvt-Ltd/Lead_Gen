@@ -222,7 +222,10 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   // ── Dynamic field queries for Create Lead form ──────────────────────────
   const extractDropdownValues = (data: any): string[] => {
     const items = Array.isArray(data) ? data : [];
-    return items.map((item: any) => (typeof item === 'string' ? item : item.value)).filter(Boolean);
+    return items
+      .filter((item: any) => typeof item === 'string' || item.isActive !== false)
+      .map((item: any) => (typeof item === 'string' ? item : item.value))
+      .filter(Boolean);
   };
 
   const { data: requirementTypeRaw } = useQuery({
@@ -543,17 +546,10 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               Lead Status <span className="text-red-400">*</span>
             </label>
             <select {...register("status")} title="Status" className="input">
-              <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="qualified">Qualified</option>
-              <option value="warm">Warm</option>
-              <option value="hot">Hot</option>
-              <option value="proposal_sent">Proposal Sent</option>
-              <option value="negotiation">Negotiation</option>
-              <option value="won">Won</option>
-              <option value="lost">Lost</option>
-              <option value="on_hold">On Hold</option>
-              <option value="unqualified">Unqualified</option>
+              <option value="">Select status...</option>
+              {dynamicLeadStatusOptions.map((opt) => (
+                <option key={opt} value={opt}>{formatOptionLabel(opt)}</option>
+              ))}
             </select>
             {errors.status && <p className="text-xs text-red-400 mt-1">{errors.status.message}</p>}
           </div>
