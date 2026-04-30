@@ -408,23 +408,23 @@ export default function LeadDiscoveryPage() {
   const scanProgress = (activeScan?.progress != null && activeScan.progress > 0) ? activeScan.progress : optimisticProgress;
   const scanComplete = activeScan?.status === 'completed';
 
-  const smartScanMutation = useMutation({
-    mutationFn: () => {
-      if (!smartPrompt.trim()) throw new Error('Enter a prompt first');
-      return discoveryApi.smartScan(smartPrompt.trim());
-    },
-    onSuccess: res => {
-      const id = res.data.data.id ?? res.data.data.jobId;
-      setActiveScanId(id);
-      toast.success('Smart scan started!');
-      qc.invalidateQueries({ queryKey: ['scans'] });
-      startOptimisticProgress();
-    },
-    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start smart scan'),
-  });
+  // const smartScanMutation = useMutation({
+  //   mutationFn: () => {
+  //     if (!smartPrompt.trim()) throw new Error('Enter a prompt first');
+  //     return discoveryApi.smartScan(smartPrompt.trim());
+  //   },
+  //   onSuccess: res => {
+  //     const id = res.data.data.id ?? res.data.data.jobId;
+  //     setActiveScanId(id);
+  //     toast.success('Smart scan started!');
+  //     qc.invalidateQueries({ queryKey: ['scans'] });
+  //     startOptimisticProgress();
+  //   },
+  //   onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start smart scan'),
+  // });
 
-  const smartScanning = smartScanMutation.isPending ||
-    (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
+  // const smartScanning = smartScanMutation.isPending ||
+  //   (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
 
   return (
     <div className="space-y-5">
