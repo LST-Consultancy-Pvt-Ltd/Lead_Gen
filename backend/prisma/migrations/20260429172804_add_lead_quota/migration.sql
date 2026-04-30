@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Organization" ADD COLUMN     "leadQuota" INTEGER NOT NULL DEFAULT 50,
+ADD COLUMN     "leadUsed" INTEGER NOT NULL DEFAULT 0;

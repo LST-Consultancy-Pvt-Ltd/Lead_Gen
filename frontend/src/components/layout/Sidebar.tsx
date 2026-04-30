@@ -63,17 +63,29 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         })}
       </nav>
 
-      {/* User — name only, no role badge */}
-      {/* <div className="px-3 py-3 border-t border-white/[0.06]">
-        <div className="flex items-center gap-2.5">
-          <Avatar initials={user ? getInitials(user.name) : 'U'} size="sm"/>
-          {!collapsed && user && (
-            <div className="overflow-hidden">
-              <p className="text-xs font-semibold text-slate-200 truncate">{user.name}</p>
-            </div>
-          )}
+      {/* User / Quota info at the bottom */}
+      {!collapsed && user?.leadQuota && (
+        <div className="px-4 pb-4 pt-2 mt-auto border-t border-slate-200 dark:border-white/[0.06]">
+          <div className="flex justify-between items-center mb-1.5">
+            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Leads Used</span>
+            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
+              {user.leadQuota.used} <span className="font-medium text-slate-400 dark:text-slate-500">/ {user.leadQuota.quota}</span>
+            </span>
+          </div>
+          <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all duration-500 ${
+                user.leadQuota.used >= user.leadQuota.quota 
+                  ? 'bg-red-500' 
+                  : user.leadQuota.used >= user.leadQuota.quota * 0.8 
+                    ? 'bg-amber-400' 
+                    : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+              }`}
+              style={{ width: `${Math.min(100, Math.max(0, (user.leadQuota.used / user.leadQuota.quota) * 100))}%` }}
+            />
+          </div>
         </div>
-      </div> */}
+      )}
     </aside>
   );
 }

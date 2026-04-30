@@ -21,6 +21,7 @@ const { runProductDiscoveryScan, generateProductPrompt } = require('../services/
 const { runBackgroundEnrichment, runApolloEnrichmentBackground } = require('../services/leadEnrichmentPipeline');
 const { analyzeLeadIntent, parseUserPrompt } = require('../services/aiService');
 const logger = require('../utils/logger');
+const { checkLeadQuota, incrementLeadUsage } = require('../utils/leadQuota');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /discovery/scan  — service / position based
@@ -259,6 +260,15 @@ async function startProductScan(req, res) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function saveDiscoveredLead(organizationId, dl, services) {
+  // ── Lead Quota Check ─────────────────────────────────────────────────────
+  const quota = await checkLeadQuota(organizationId);
+  if (!quota.allowed) {
+    logger.info('Lead quota exhausted — skipping discovered lead', {
+      company: dl.companyName, orgId: organizationId, quota: quota.quota, used: quota.used,
+    });
+    return null;
+  }
+
   // Deduplicate: skip only if same company + same job title already exists
   const jobTitle = dl.jobPostings?.[0]?.title || '';
   const existing = await prisma.lead.findFirst({
@@ -354,6 +364,9 @@ async function saveDiscoveredLead(organizationId, dl, services) {
   runBackgroundEnrichment(lead, prisma).catch(err =>
     logger.error('runBackgroundEnrichment failed', { leadId: lead.id, err: err.message })
   );
+
+  // ── Increment lead usage counter ─────────────────────────────────────────
+  await incrementLeadUsage(organizationId);
 
   logger.info('Lead saved to DB', {
     leadId: lead.id,

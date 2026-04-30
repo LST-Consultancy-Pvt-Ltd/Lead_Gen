@@ -80,6 +80,8 @@ model Organization {
   id        String   @id @default(uuid())
   name      String
   slug      String   @unique
+  leadQuota Int      @default(50)
+  leadUsed  Int      @default(0)
   website   String?
   industry  String?
   logoUrl   String?

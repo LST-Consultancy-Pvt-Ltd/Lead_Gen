@@ -8,6 +8,7 @@ interface User {
   role: string;
   avatarUrl?: string;
   organization: { id: string; name: string; slug: string };
+  leadQuota?: { quota: number; used: number; remaining: number };
 }
 
 interface AuthState {

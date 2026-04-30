@@ -249,6 +249,7 @@ export const leadsApi = {
   generateEmail: (id: string) => api.post(`/leads/${id}/generate-email`),
   sendOutreach: (id: string, data: any) => api.post(`/leads/${id}/send-outreach`, data),
   export: (params?: any) => api.get('/leads/export', { params, responseType: 'blob' }),
+  quota: () => api.get('/leads/quota'),
 };
 
 export const activitiesApi = {

@@ -1,8 +1,8 @@
 ﻿'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { discoveryApi, dropdownsApi } from '../../../lib/api';
-import { Badge, ProgressBar } from '../../../components/ui';
+import { discoveryApi, leadsApi } from '../../../lib/api';
+import { Badge, ProgressBar, Spinner } from '../../../components/ui';
 import {
   X, Zap, Loader2, CheckCircle2,
   Link2, FileText,
@@ -80,7 +80,7 @@ function SectionCard({
           {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
         </div>
         {open ? <ChevronUp size={14} className="text-slate-500 flex-shrink-0" />
-              : <ChevronDown size={14} className="text-slate-500 flex-shrink-0" />}
+          : <ChevronDown size={14} className="text-slate-500 flex-shrink-0" />}
       </button>
       {open && <div className="px-5 pb-5 border-t border-slate-200 dark:border-white/[0.04]">{children}</div>}
     </div>
@@ -125,52 +125,52 @@ export default function LeadDiscoveryPage() {
   const [scanMode, setScanMode] = useState<'service' | 'product' | null>(null);
 
   // Positions mode — mandatory
-  const [positionTitle,  setPositionTitle]  = useState('');
-  const [description,    setDescription]    = useState('');
-  const [geography,      setGeography]      = useState('');
+  const [positionTitle, setPositionTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [geography, setGeography] = useState('');
   const [skillsRequired, setSkillsRequired] = useState('');
 
   // Positions mode — optional
-  const [targetIndustry,         setTargetIndustry]         = useState('');
-  const [companySize,            setCompanySize]            = useState('');
-  const [companyType,            setCompanyType]            = useState('');
+  const [targetIndustry, setTargetIndustry] = useState('');
+  const [companySize, setCompanySize] = useState('');
+  const [companyType, setCompanyType] = useState('');
   const [selectedDecisionMakers, setSelectedDecisionMakers] = useState<string[]>([]);
-  const [contactChannel,         setContactChannel]         = useState('');
-  const [seniorityLevel,         setSeniorityLevel]         = useState('');
-  const [leadCount,              setLeadCount]              = useState(50);
+  const [contactChannel, setContactChannel] = useState('');
+  const [seniorityLevel, setSeniorityLevel] = useState('');
+  const [leadCount, setLeadCount] = useState(50);
 
   // Products mode — mandatory
-  const [productName,      setProductName]      = useState('');
+  const [productName, setProductName] = useState('');
   const [productGeography, setProductGeography] = useState('');
   const [valueProposition, setValueProposition] = useState('');
 
   // Products mode — optional
-  const [productIndustry,       setProductIndustry]       = useState('');
-  const [productCompanySize,    setProductCompanySize]    = useState('');
-  const [productCompanyType,    setProductCompanyType]    = useState('');
+  const [productIndustry, setProductIndustry] = useState('');
+  const [productCompanySize, setProductCompanySize] = useState('');
+  const [productCompanyType, setProductCompanyType] = useState('');
   const [productDecisionMakers, setProductDecisionMakers] = useState<string[]>([]);
   const [productContactChannel, setProductContactChannel] = useState('');
   const [productSeniorityLevel, setProductSeniorityLevel] = useState('');
-  const [productLeadCount,      setProductLeadCount]      = useState(50);
-  const [annualRevenue,         setAnnualRevenue]         = useState('');
+  const [productLeadCount, setProductLeadCount] = useState(50);
+  const [annualRevenue, setAnnualRevenue] = useState('');
 
   // Product supplementary inputs
-  const [productUrl,          setProductUrl]          = useState('');
+  const [productUrl, setProductUrl] = useState('');
   const [productDocumentText, setProductDocumentText] = useState('');
-  const [productFileName,     setProductFileName]     = useState('');
+  const [productFileName, setProductFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // AI prompt state
-  const [promptText,      setPromptText]      = useState('');
-  const [promptSummary,   setPromptSummary]   = useState('');
+  const [promptText, setPromptText] = useState('');
+  const [promptSummary, setPromptSummary] = useState('');
   const [promptBuyerType, setPromptBuyerType] = useState('');
   const [promptGenerated, setPromptGenerated] = useState(false);
-  const [promptEdited,    setPromptEdited]    = useState(false);
+  const [promptEdited, setPromptEdited] = useState(false);
 
   // Scan state
-  const [activeScanId,       setActiveScanId]       = useState<string | null>(null);
+  const [activeScanId, setActiveScanId] = useState<string | null>(null);
   const [optimisticProgress, setOptimisticProgress] = useState(0);
-  const [peakLeadsFound,     setPeakLeadsFound]     = useState(0);
+  const [peakLeadsFound, setPeakLeadsFound] = useState(0);
 
   useEffect(() => {
     const stored = localStorage.getItem(ACTIVE_SCAN_KEY);
@@ -178,13 +178,13 @@ export default function LeadDiscoveryPage() {
   }, []);
   useEffect(() => {
     if (activeScanId) localStorage.setItem(ACTIVE_SCAN_KEY, activeScanId);
-    else              localStorage.removeItem(ACTIVE_SCAN_KEY);
+    else localStorage.removeItem(ACTIVE_SCAN_KEY);
   }, [activeScanId]);
 
   // Admin-managed dropdowns (flat array, accessible to all roles)
   const { data: allDropdowns } = useQuery({
     queryKey: ['dropdowns', 'active'],
-    queryFn:  () => dropdownsApi.listActive().then(r => {
+    queryFn: () => dropdownsApi.listActive().then(r => {
       const raw = r.data.data;
       return Array.isArray(raw) ? raw : [];
     }),
@@ -200,18 +200,18 @@ export default function LeadDiscoveryPage() {
     return items.map((d: any) => d.value);
   }
 
-  const industryOptions       = getDropdownOptions('industry', DEFAULT_INDUSTRIES);
-  const companySizeOptions    = getDropdownOptions('company_size', DEFAULT_COMPANY_SIZES);
-  const companyTypeOptions    = getDropdownOptions('company_type', DEFAULT_COMPANY_TYPES);
-  const decisionMakerOptions  = getDropdownOptions('decision_maker', DEFAULT_DECISION_MAKERS);
+  const industryOptions = getDropdownOptions('industry', DEFAULT_INDUSTRIES);
+  const companySizeOptions = getDropdownOptions('company_size', DEFAULT_COMPANY_SIZES);
+  const companyTypeOptions = getDropdownOptions('company_type', DEFAULT_COMPANY_TYPES);
+  const decisionMakerOptions = getDropdownOptions('decision_maker', DEFAULT_DECISION_MAKERS);
   const contactChannelOptions = getDropdownOptions('preferred_contact_channel', DEFAULT_CONTACT_CHANNELS);
-  const seniorityOptions      = getDropdownOptions('seniority_level', DEFAULT_SENIORITY_LEVELS);
-  const annualRevenueOptions  = getDropdownOptions('annual_revenue_range', DEFAULT_ANNUAL_REVENUE);
+  const seniorityOptions = getDropdownOptions('seniority_level', DEFAULT_SENIORITY_LEVELS);
+  const annualRevenueOptions = getDropdownOptions('annual_revenue_range', DEFAULT_ANNUAL_REVENUE);
 
   // Server-side active scan restore
   const { data: serverActiveScan } = useQuery({
     queryKey: ['activeScan'],
-    queryFn:  () => discoveryApi.getActiveScan().then(r => r.data.data),
+    queryFn: () => discoveryApi.getActiveScan().then(r => r.data.data),
     staleTime: 0, refetchOnWindowFocus: false,
   });
   useEffect(() => {
@@ -220,17 +220,25 @@ export default function LeadDiscoveryPage() {
 
   const { data: scansData } = useQuery({
     queryKey: ['scans'],
-    queryFn:  () => discoveryApi.getScans().then(r => ({
+    queryFn: () => discoveryApi.getScans().then(r => ({
       items: Array.isArray(r.data.data) ? r.data.data : (r.data.data?.items ?? []),
     })),
   });
 
+  const { data: quota } = useQuery({
+    queryKey: ['lead-quota'],
+    queryFn: () => leadsApi.quota().then(r => r.data?.data),
+    staleTime: 60000,
+  });
+  const quotaReached = quota?.used >= quota?.quota;
+
+  // Live poll
   const { data: activeScan } = useQuery({
     queryKey: ['scan', activeScanId],
-    queryFn:  () => activeScanId
+    queryFn: () => activeScanId
       ? discoveryApi.getScanStatus(activeScanId).then(r => r.data.data)
       : null,
-    enabled:         !!activeScanId,
+    enabled: !!activeScanId,
     refetchInterval: activeScanId ? 2000 : false,
   });
 
@@ -302,18 +310,18 @@ export default function LeadDiscoveryPage() {
     mutationFn: () => {
       if (!hasProductInputs) throw new Error('Fill in all mandatory fields first');
       return discoveryApi.generateProductPrompt({
-        productName:         productName.trim(),
-        productUrl:          productUrl.trim()          || undefined,
-        productDescription:  valueProposition.trim()    || undefined,
+        productName: productName.trim(),
+        productUrl: productUrl.trim() || undefined,
+        productDescription: valueProposition.trim() || undefined,
         productDocumentText: productDocumentText.trim() || undefined,
-        targetIndustry:      productIndustry && productIndustry !== 'Any Industry' ? productIndustry : undefined,
-        targetRegion:        productGeography.trim(),
+        targetIndustry: productIndustry && productIndustry !== 'Any Industry' ? productIndustry : undefined,
+        targetRegion: productGeography.trim(),
       });
     },
     onSuccess: res => {
       const d = res.data.data;
-      setPromptText(d.promptText   || '');
-      setPromptSummary(d.summary   || '');
+      setPromptText(d.promptText || '');
+      setPromptSummary(d.summary || '');
       setPromptBuyerType(d.buyerType || '');
       setPromptGenerated(true);
       setPromptEdited(false);
@@ -328,19 +336,19 @@ export default function LeadDiscoveryPage() {
     mutationFn: () => {
       if (!positionsMandatoryFilled) throw new Error('Fill in all mandatory fields');
       return discoveryApi.startScan({
-        positionTitle:    positionTitle.trim(),
-        description:      description.trim(),
-        geography:        geography.trim(),
-        skillsRequired:   skillsRequired.trim(),
-        targetIndustry:   targetIndustry && targetIndustry !== 'Any Industry' ? targetIndustry : undefined,
-        companySize:      companySize    && companySize    !== 'Any Size'     ? companySize    : undefined,
-        companyType:      companyType    && companyType    !== 'Any'          ? companyType    : undefined,
-        decisionMakers:   selectedDecisionMakers.length > 0 ? selectedDecisionMakers : undefined,
-        contactChannel:   contactChannel && contactChannel !== 'Any' ? contactChannel : undefined,
-        seniorityLevel:   seniorityLevel && seniorityLevel !== 'Any' ? seniorityLevel : undefined,
-        numberOfLeads:    leadCount,
+        positionTitle: positionTitle.trim(),
+        description: description.trim(),
+        geography: geography.trim(),
+        skillsRequired: skillsRequired.trim(),
+        targetIndustry: targetIndustry && targetIndustry !== 'Any Industry' ? targetIndustry : undefined,
+        companySize: companySize && companySize !== 'Any Size' ? companySize : undefined,
+        companyType: companyType && companyType !== 'Any' ? companyType : undefined,
+        decisionMakers: selectedDecisionMakers.length > 0 ? selectedDecisionMakers : undefined,
+        contactChannel: contactChannel && contactChannel !== 'Any' ? contactChannel : undefined,
+        seniorityLevel: seniorityLevel && seniorityLevel !== 'Any' ? seniorityLevel : undefined,
+        numberOfLeads: leadCount,
         // Legacy compat
-        targetRegion:     geography.trim(),
+        targetRegion: geography.trim(),
         decisionMakerRoles: selectedDecisionMakers,
         leadCount,
       });
@@ -364,23 +372,23 @@ export default function LeadDiscoveryPage() {
       else if (hasDoc) productType = 'document';
 
       return discoveryApi.startProductScan({
-        productName:         productName.trim(),
-        geography:           productGeography.trim(),
-        valueProposition:    valueProposition.trim(),
+        productName: productName.trim(),
+        geography: productGeography.trim(),
+        valueProposition: valueProposition.trim(),
         productType,
-        productUrl:          productUrl.trim()          || undefined,
-        productDescription:  valueProposition.trim()    || undefined,
+        productUrl: productUrl.trim() || undefined,
+        productDescription: valueProposition.trim() || undefined,
         productDocumentText: productDocumentText.trim() || undefined,
-        customPrompt:        promptText.trim()          || undefined,
-        targetIndustry:      productIndustry && productIndustry !== 'Any Industry' ? productIndustry : undefined,
-        targetRegion:        productGeography.trim(),
-        companySize:         productCompanySize && productCompanySize !== 'Any Size' ? productCompanySize : undefined,
-        companyType:         productCompanyType && productCompanyType !== 'Any'     ? productCompanyType : undefined,
-        decisionMakers:      productDecisionMakers.length > 0 ? productDecisionMakers : undefined,
+        customPrompt: promptText.trim() || undefined,
+        targetIndustry: productIndustry && productIndustry !== 'Any Industry' ? productIndustry : undefined,
+        targetRegion: productGeography.trim(),
+        companySize: productCompanySize && productCompanySize !== 'Any Size' ? productCompanySize : undefined,
+        companyType: productCompanyType && productCompanyType !== 'Any' ? productCompanyType : undefined,
+        decisionMakers: productDecisionMakers.length > 0 ? productDecisionMakers : undefined,
         preferredContactChannel: productContactChannel && productContactChannel !== 'Any' ? productContactChannel : undefined,
-        seniorityLevel:      productSeniorityLevel && productSeniorityLevel !== 'Any' ? productSeniorityLevel : undefined,
-        numberOfLeads:       productLeadCount || undefined,
-        annualRevenueRange:  annualRevenue && annualRevenue !== 'Any' ? annualRevenue : undefined,
+        seniorityLevel: productSeniorityLevel && productSeniorityLevel !== 'Any' ? productSeniorityLevel : undefined,
+        numberOfLeads: productLeadCount || undefined,
+        annualRevenueRange: annualRevenue && annualRevenue !== 'Any' ? annualRevenue : undefined,
       });
     },
     onSuccess: res => {
@@ -393,8 +401,8 @@ export default function LeadDiscoveryPage() {
     onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start product scan'),
   });
 
-  const isMutating   = scanMutation.isPending || productScanMutation.isPending || generatePromptMutation.isPending;
-  const scanning     = isMutating || (!!activeScanId && (activeScan == null || ['running','pending'].includes(activeScan?.status)));
+  const isMutating = scanMutation.isPending || productScanMutation.isPending || generatePromptMutation.isPending;
+  const scanning = isMutating || (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
   const scanProgress = (activeScan?.progress != null && activeScan.progress > 0) ? activeScan.progress : optimisticProgress;
   const scanComplete = activeScan?.status === 'completed';
 
@@ -410,7 +418,53 @@ export default function LeadDiscoveryPage() {
         </div>
       </div>
 
-      {/* Mode selector */}
+      {/* AI Smart Search */}
+      <div className="card overflow-hidden">
+        <div className="px-5 pt-5 pb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
+              <Sparkles size={13} className="text-violet-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">AI Smart Search</p>
+              <p className="text-xs text-slate-500">Describe your ideal lead in plain English — AI generates leads directly</p>
+            </div>
+          </div>
+
+          {smartScanning ? (
+            <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="violet"
+              steps={['AI parses your prompt', 'Generating job title variants', 'Scanning Google Jobs', 'Filtering results', 'Saving leads']} />
+          ) : scanComplete && activeScan ? (
+            <ScanComplete activeScan={activeScan} />
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <textarea
+                  className="input text-sm resize-none flex-1 leading-relaxed"
+                  rows={2}
+                  placeholder='e.g. "Find 50 CTOs at mid-size SaaS companies in the USA that need DevOps consulting"'
+                  value={smartPrompt}
+                  onChange={e => setSmartPrompt(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) smartScanMutation.mutate(); }}
+                />
+                <button
+                  className="btn-primary flex-shrink-0 px-5 self-stretch text-sm"
+                  onClick={() => smartScanMutation.mutate()}
+                  disabled={!smartPrompt.trim() || quotaReached}
+                  title={quotaReached ? 'Lead quota reached' : ''}
+                >
+                  <Zap size={14} /> Generate Leads
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 mt-2">
+                Press <kbd className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-mono">Ctrl+Enter</kbd> to search · or use the structured form below for more control
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Mode dropdown */}
       <div className="flex items-center gap-3">
         <div className="relative">
           <select
@@ -549,7 +603,7 @@ export default function LeadDiscoveryPage() {
             <h2 className="section-title mb-4">Discovery Control</h2>
             {scanning ? (
               <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="blue"
-                steps={['AI generates job title variants','Google Jobs page 1','Google Jobs page 2','Google Jobs page 3','Filtering agencies','More variants','Deduplicating','Saving leads']} />
+                steps={['AI generates job title variants', 'Google Jobs page 1', 'Google Jobs page 2', 'Google Jobs page 3', 'Filtering agencies', 'More variants', 'Deduplicating', 'Saving leads']} />
             ) : scanComplete ? (
               <ScanComplete activeScan={activeScan} peakLeadsFound={peakLeadsFound} />
             ) : (
@@ -568,18 +622,26 @@ export default function LeadDiscoveryPage() {
                 {!positionsMandatoryFilled && (
                   <div className="w-full bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left space-y-1">
                     <p className="text-xs font-semibold text-amber-400 mb-1.5">Complete mandatory fields to scan:</p>
-                    {!description.trim()    && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Description</p>}
-                    {!positionTitle.trim()  && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Position Title</p>}
-                    {!geography.trim()      && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Geography</p>}
+                    {!description.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Description</p>}
+                    {!positionTitle.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Position Title</p>}
+                    {!geography.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Geography</p>}
                     {!skillsRequired.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Skills / Key Requirements</p>}
                   </div>
                 )}
                 <button className="btn-primary px-8 py-3 text-sm w-full justify-center"
                   onClick={() => scanMutation.mutate()}
-                  disabled={scanMutation.isPending || !positionsMandatoryFilled}>
+                  disabled={scanMutation.isPending || services.length === 0 || quotaReached}
+                  title={quotaReached ? 'Lead quota reached' : ''}
+                >
                   {scanMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
                   Generate Leads
                 </button>
+                {services.length === 0 && !quotaReached && (
+                  <p className="text-xs text-amber-400">↑ Add at least one service first</p>
+                )}
+                {quotaReached && (
+                  <p className="text-xs text-red-500">Lead quota reached. Upgrade plan to discover more.</p>
+                )}
               </div>
             )}
           </div>
@@ -592,9 +654,9 @@ export default function LeadDiscoveryPage() {
 
           <div className="flex items-center gap-2">
             {[
-              { n: '1', label: 'Enter product info', done: hasProductInputs,                active: !hasProductInputs },
-              { n: '2', label: 'Review AI prompt',   done: promptGenerated,                 active: hasProductInputs && !promptGenerated },
-              { n: '3', label: 'Start scan',         done: false,                           active: promptGenerated && !scanning },
+              { n: '1', label: 'Enter product info', done: hasProductInputs, active: !hasProductInputs },
+              { n: '2', label: 'Review AI prompt', done: promptGenerated, active: hasProductInputs && !promptGenerated },
+              { n: '3', label: 'Start scan', done: false, active: promptGenerated && !scanning },
             ].map(({ n, label, done, active }, i) => (
               <div key={n} className="flex items-center gap-2">
                 <div className={cn(
@@ -803,7 +865,7 @@ export default function LeadDiscoveryPage() {
                   {!hasProductInputs && (
                     <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-1">
                       <p className="text-xs font-semibold text-amber-400 mb-1">Complete mandatory fields first:</p>
-                      {!productName.trim()      && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Product Name / Category</p>}
+                      {!productName.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Product Name / Category</p>}
                       {!productGeography.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Geography / Region</p>}
                       {!valueProposition.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Value Proposition</p>}
                     </div>
@@ -822,7 +884,7 @@ export default function LeadDiscoveryPage() {
                     <ScanComplete activeScan={activeScan} peakLeadsFound={peakLeadsFound} />
                   ) : (
                     <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="violet"
-                      steps={['AI call — analyzing product','AI batch scoring','Filtering competitors','Deduplicating','Saving leads']} />
+                      steps={['AI call — analyzing product', 'AI batch scoring', 'Filtering competitors', 'Deduplicating', 'Saving leads']} />
                   )}
                 </div>
               )}
@@ -844,9 +906,9 @@ export default function LeadDiscoveryPage() {
                         {promptBuyerType && (
                           <span className={cn(
                             'text-[10px] font-semibold px-1.5 py-0.5 rounded border',
-                            promptBuyerType === 'B2B'  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                            : promptBuyerType === 'B2C' ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            promptBuyerType === 'B2B' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                              : promptBuyerType === 'B2C' ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                           )}>
                             {promptBuyerType}
                           </span>
@@ -886,11 +948,16 @@ export default function LeadDiscoveryPage() {
                   <button
                     className="btn-primary w-full py-3 text-sm justify-center"
                     onClick={() => productScanMutation.mutate()}
-                    disabled={!canStartProductScan || productScanMutation.isPending}>
+                    disabled={!canStartProductScan || productScanMutation.isPending || quotaReached}
+                    title={quotaReached ? 'Lead quota reached' : ''}
+                  >
                     {productScanMutation.isPending
                       ? <><Loader2 size={14} className="animate-spin" /> Starting scan...</>
                       : <><Zap size={14} /> Generate Leads</>}
                   </button>
+                  {quotaReached && (
+                    <p className="text-xs text-red-500 text-center mt-2">Lead quota reached. Upgrade plan to discover more.</p>
+                  )}
                 </div>
               )}
 
@@ -911,7 +978,7 @@ export default function LeadDiscoveryPage() {
                     {[
                       { icon: 'target', text: 'Identifies who NEEDS your product' },
                       { icon: 'search', text: 'Generates search keywords & queries' },
-                      { icon: 'edit',   text: 'You review & edit before scanning' },
+                      { icon: 'edit', text: 'You review & edit before scanning' },
                       { icon: 'rocket', text: 'Scan runs with your approved prompt' },
                     ].map(({ icon, text }) => (
                       <div key={text} className="flex items-center gap-2.5 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2">
@@ -938,12 +1005,12 @@ export default function LeadDiscoveryPage() {
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <Badge color={
                       scan.status === 'completed' ? 'green' :
-                      scan.status === 'running'   ? 'blue'  :
-                      scan.status === 'failed'    ? 'red'   : 'gray'
+                        scan.status === 'running' ? 'blue' :
+                          scan.status === 'failed' ? 'red' : 'gray'
                     }>{scan.status}</Badge>
                     <span className={cn('text-xs rounded px-1.5 py-0.5 border',
                       isProduct ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                                : 'bg-blue-500/10 text-blue-400 border-blue-500/20')}>
+                        : 'bg-blue-500/10 text-blue-400 border-blue-500/20')}>
                       {isProduct ? 'product' : 'positions'}
                     </span>
                     <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{scan.leadsFound ?? 0} leads</span>
@@ -954,8 +1021,8 @@ export default function LeadDiscoveryPage() {
                       <span className={cn(
                         'text-xs font-semibold px-2 py-0.5 rounded-full border',
                         scan.avgMatchScore >= 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                        scan.avgMatchScore >= 50 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                                                   'bg-red-500/10 text-red-400 border-red-500/20'
+                          scan.avgMatchScore >= 50 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                            'bg-red-500/10 text-red-400 border-red-500/20'
                       )}>
                         {scan.avgMatchScore}% match
                       </span>
@@ -1005,14 +1072,14 @@ function ScanProgress({ activeScan, scanProgress, steps, color = 'blue' }: {
       <div className="space-y-2">
         {steps.map((step, i) => {
           const threshold = (i + 1) / steps.length * 100;
-          const done   = scanProgress >= threshold;
+          const done = scanProgress >= threshold;
           const active = !done && scanProgress >= threshold - (100 / steps.length);
           return (
             <div key={i} className={cn2('flex items-center gap-2 text-xs transition-all',
               done ? 'text-emerald-400' : active ? `text-${color}-400` : 'text-slate-600')}>
-              {done   ? <CheckCircle2 size={11} className="flex-shrink-0" />
+              {done ? <CheckCircle2 size={11} className="flex-shrink-0" />
                 : active ? <Loader2 size={11} className="animate-spin flex-shrink-0" />
-                : <span className="w-3 text-center flex-shrink-0">○</span>}
+                  : <span className="w-3 text-center flex-shrink-0">○</span>}
               {step}
             </div>
           );

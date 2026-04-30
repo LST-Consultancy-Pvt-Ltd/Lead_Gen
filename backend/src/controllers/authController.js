@@ -295,6 +295,9 @@ async function logout(req, res) {
 }
 
 async function me(req, res) {
+  const { getQuotaInfo } = require('../utils/leadQuota');
+  const quotaInfo = await getQuotaInfo(req.user.organizationId).catch(() => null);
+
   return success(res, {
     id: req.user.id,
     name: req.user.name,
@@ -303,6 +306,7 @@ async function me(req, res) {
     avatarUrl: req.user.avatarUrl,
     organization: req.user.organization,
     lastLoginAt: req.user.lastLoginAt,
+    leadQuota: quotaInfo,
   });
 }
 
