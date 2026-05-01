@@ -206,7 +206,10 @@ async function login(req, res) {
     if (!valid) return error(res, 'Invalid credentials', 401);
 
     const { accessToken, refreshToken } = generateTokens(user.id);
-    await prisma.user.update({ where: { id: user.id }, data: { refreshToken, lastLoginAt: new Date() } });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { refreshToken, lastLoginAt: new Date(), roleChangedAt: null },
+    });
 
     return success(res, {
       accessToken, refreshToken,

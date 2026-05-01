@@ -20,6 +20,21 @@ const authenticate = async (req, res, next) => {
       include: { organization: true },
     });
     if (!user || !user.isActive) return error(res, 'Unauthorized', 401);
+
+    // If role was changed AFTER this token was issued → force logout
+    if (user.roleChangedAt) {
+      const tokenIssuedAt = decoded.iat; // seconds
+      const roleChangedAtSeconds = Math.floor(user.roleChangedAt.getTime() / 1000);
+      if (roleChangedAtSeconds > tokenIssuedAt) {
+        // Invalidate refresh token so auto-refresh also fails
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { refreshToken: null },
+        });
+        return error(res, 'Session invalidated. Your role was changed. Please log in again.', 401);
+      }
+    }
+
     req.user = user;
     next();
   } catch (err) {

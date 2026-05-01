@@ -69,9 +69,15 @@ async function updateUser(req, res) {
       return error(res, 'Managers cannot change user roles', 403);
     }
 
+    const updateData = {
+      ...(role && { role, roleChangedAt: new Date() }),
+      ...(isActive !== undefined && { isActive }),
+      ...(name && { name }),
+    };
+
     const user = await prisma.user.update({
       where: { id: req.params.id },
-      data: { ...(role && { role }), ...(isActive !== undefined && { isActive }), ...(name && { name }) },
+      data: updateData,
       select: { id: true, name: true, email: true, role: true, isActive: true },
     });
     return success(res, user);
