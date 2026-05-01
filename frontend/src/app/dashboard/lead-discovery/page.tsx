@@ -570,7 +570,7 @@ export default function LeadDiscoveryPage() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Optional Filters" subtitle="Leave blank for any" defaultOpen={false}>
+            <SectionCard title="Optional Filters" subtitle="Leave blank for any" defaultOpen={true}>
               <div className="pt-4 space-y-4">
 
                 <div>
@@ -808,7 +808,7 @@ export default function LeadDiscoveryPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Optional Filters" subtitle="Narrow down your target audience" defaultOpen={false}>
+              <SectionCard title="Optional Filters" subtitle="Narrow down your target audience" defaultOpen={true}>
                 <div className="pt-4 space-y-4">
 
                   <div>
