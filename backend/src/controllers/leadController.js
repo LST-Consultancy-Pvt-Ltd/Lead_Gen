@@ -91,7 +91,12 @@ async function createLead(req, res) {
       return error(res, `Lead limit reached (${quota.quota}). You have used all your available leads. Please upgrade your plan to add more.`, 403);
     }
 
-    const data = { ...req.body, organizationId: req.user.organizationId, createdById: req.user.id };
+    const data = {
+      ...req.body,
+      organizationId: req.user.organizationId,
+      createdById: req.user.id,
+      subSource: req.body.subSource || 'created',
+    };
     const lead = await prisma.lead.create({ data });
     await prisma.activityLog.create({ data: { organizationId: req.user.organizationId, userId: req.user.id,
       leadId: lead.id, action: 'lead_created', description: `Lead created: ${lead.companyName}` } }).catch(()=>{});

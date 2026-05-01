@@ -345,6 +345,7 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       aiPitch:     analysis.aiPitch,
       source:      dl.source,
       sourceUrl:   dl.sourceUrl,
+      subSource:   dl.subSource || null,
     },
   });
 
@@ -401,6 +402,7 @@ async function processScan(jobId, orgId, services, filters = {}, decisionMakerRo
 
     for (const dl of discovered) {
       try {
+        dl.subSource = 'position';
         if (savedIds.length >= maxLeads) break;
         const id = await saveDiscoveredLead(orgId, dl, services);
         if (id) {
@@ -468,6 +470,7 @@ async function processProductScan(jobId, orgId, productInput, filters = {}, maxL
 
     for (const dl of discovered) {
       try {
+        dl.subSource = 'product';
         if (savedIds.length >= maxLeads) break;
         const id = await saveDiscoveredLead(orgId, dl, keywords);
         if (id) savedIds.push(id);
