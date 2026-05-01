@@ -485,11 +485,11 @@ export default function LeadDetailPage() {
               <Edit2 size={14} /> Edit Lead
             </button>
           )}
-          <button className="btn-ghost" onClick={() => analyzeMutation.mutate()}
+          {/* <button className="btn-ghost" onClick={() => analyzeMutation.mutate()}
             disabled={analyzeMutation.isPending}>
             {analyzeMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Re-analyze
-          </button>
+          </button> */}
           <button className="btn-primary" onClick={() => generateEmailMutation.mutate()}
             disabled={generateEmailMutation.isPending}>
             {generateEmailMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
