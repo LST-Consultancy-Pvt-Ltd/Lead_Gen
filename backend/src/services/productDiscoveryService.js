@@ -284,7 +284,7 @@ function isCompetitor(lead, profile) {
 // Apollo API — used ONLY for digital/software products
 // ─────────────────────────────────────────────────────────────────────────────
 
-const APOLLO_BASE = 'https://api.apollo.io/v1';
+const APOLLO_BASE = 'https://api.apollo.io/api/v1';
 
 async function apolloPeopleSearch(params, page = 1) {
   if (!config.apollo?.apiKey) {
@@ -322,7 +322,7 @@ async function apolloCompanySearch(params, page = 1) {
   }
   try {
     const { data } = await axios.post(
-      `${APOLLO_BASE}/mixed_companies/api_search`,
+      `${APOLLO_BASE}/organizations/search`,
       { page, per_page: 25, ...params },
       {
         headers: {
@@ -561,18 +561,39 @@ function organicToLead(result, profile) {
   };
 }
 
+// Apollo expects full country/region names, not ISO codes or abbreviations
+function regionToApolloLocation(region = '') {
+  const map = {
+    'usa': 'United States', 'us': 'United States', 'united states': 'United States', 'america': 'United States',
+    'uk': 'United Kingdom', 'united kingdom': 'United Kingdom', 'england': 'United Kingdom', 'britain': 'United Kingdom',
+    'india': 'India', 'canada': 'Canada', 'australia': 'Australia',
+    'germany': 'Germany', 'france': 'France', 'singapore': 'Singapore',
+    'uae': 'United Arab Emirates', 'dubai': 'United Arab Emirates', 'netherlands': 'Netherlands',
+    'brazil': 'Brazil', 'spain': 'Spain', 'italy': 'Italy',
+    'china': 'China', 'japan': 'Japan', 'south korea': 'South Korea', 'korea': 'South Korea',
+    'mexico': 'Mexico', 'argentina': 'Argentina', 'colombia': 'Colombia',
+    'south africa': 'South Africa', 'nigeria': 'Nigeria', 'kenya': 'Kenya',
+    'saudi arabia': 'Saudi Arabia', 'israel': 'Israel', 'turkey': 'Turkey',
+    'sweden': 'Sweden', 'norway': 'Norway', 'denmark': 'Denmark', 'finland': 'Finland',
+    'poland': 'Poland', 'switzerland': 'Switzerland', 'austria': 'Austria', 'belgium': 'Belgium',
+    'new zealand': 'New Zealand', 'indonesia': 'Indonesia', 'malaysia': 'Malaysia', 'philippines': 'Philippines',
+  };
+  return map[region.toLowerCase().trim()] || region;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STRATEGY A — Apollo search (software / digital products only)
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function runApolloSearch(profile, filters, tryAdd) {
   const { targetRegion = '', targetIndustry = '' } = filters;
-  const countryCode = targetRegion ? regionToCode(targetRegion) : null;
-  const ap          = profile.apolloProfile || {};
-  const titles      = (ap.buyerTitles   || []).slice(0, 6);
-  const keywords    = (ap.buyerKeywords || []).slice(0, 3);
-  const seniority   = ap.personSeniority || ['manager', 'director', 'vp', 'c_suite', 'owner'];
-  const maxPages    = TEST_MODE ? TEST_MAX_PAGES : 4;
+  // Apollo requires full location names ("United States"), not ISO codes ("US") or abbreviations ("USA")
+  const apolloLocation = targetRegion ? regionToApolloLocation(targetRegion) : null;
+  const ap             = profile.apolloProfile || {};
+  const titles         = (ap.buyerTitles   || []).slice(0, 6);
+  const keywords       = (ap.buyerKeywords || []).slice(0, 3);
+  const seniority      = ap.personSeniority || ['manager', 'director', 'vp', 'c_suite', 'owner'];
+  const maxPages       = TEST_MODE ? TEST_MAX_PAGES : 4;
 
   // Primary: people search by job title
   const titleGroups = chunkArray(titles, 3).filter(g => g.length > 0);
@@ -580,13 +601,14 @@ async function runApolloSearch(profile, filters, tryAdd) {
 
   for (const group of titleGroups) {
     const params = {
-      person_titles:    group,
-      person_seniority: seniority,
+      person_titles:          group,
+      person_seniority:       seniority,
+      include_similar_titles: true,   // match title variants ("HR Director", "Human Resources Manager", etc.)
     };
-    if (countryCode)    params.person_locations = [countryCode];
-    // q_keywords narrows to companies in relevant space
-    const kws = [...keywords, targetIndustry].filter(Boolean);
-    if (kws.length) params.q_keywords = kws.join(' ');
+    if (apolloLocation) params.person_locations = [apolloLocation];
+    // NOTE: q_keywords is intentionally omitted from people search —
+    // combining keyword + title + seniority + location over-constrains Apollo and returns 0 results.
+    // The title + seniority filters alone are specific enough.
 
     for (let page = 1; page <= maxPages; page++) {
       const { people, totalPages } = await apolloPeopleSearch(params, page);
@@ -605,7 +627,7 @@ async function runApolloSearch(profile, filters, tryAdd) {
   if (keywords.length > 0) {
     const kws = [...keywords, targetIndustry].filter(Boolean);
     const params = { q_keywords: kws.join(' OR ') };
-    if (countryCode) params.organization_locations = [countryCode];
+    if (apolloLocation) params.organization_locations = [apolloLocation];
 
     const companyPages = TEST_MODE ? 1 : 2;
     for (let page = 1; page <= companyPages; page++) {
