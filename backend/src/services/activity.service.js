@@ -435,7 +435,7 @@ class ActivityService {
         where,
         skip,
         take,
-        orderBy: { activityDate: "desc" },
+        orderBy: [{ activityDate: "desc" }, { createdAt: "desc" }],
         include: {
           user: { select: { id: true, name: true, email: true } },
           lead: { select: { id: true, companyName: true, contactName: true } },

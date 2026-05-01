@@ -61,7 +61,9 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
       activitiesApi.list({ leadId, opportunityId }).then((r) => r.data),
   });
 
-  const activities = (data?.data || []) as Activity[];
+  const activities = ([...(data?.data || [])] as Activity[]).sort(
+    (a, b) => new Date(b.createdAt ?? b.activityDate ?? 0).getTime() - new Date(a.createdAt ?? a.activityDate ?? 0).getTime()
+  );
 
   // Create activity mutation
   const createMutation = useMutation({
