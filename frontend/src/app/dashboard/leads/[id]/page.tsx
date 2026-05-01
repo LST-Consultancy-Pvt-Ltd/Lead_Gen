@@ -485,11 +485,11 @@ export default function LeadDetailPage() {
               <Edit2 size={14} /> Edit Lead
             </button>
           )}
-          <button className="btn-ghost" onClick={() => analyzeMutation.mutate()}
+          {/* <button className="btn-ghost" onClick={() => analyzeMutation.mutate()}
             disabled={analyzeMutation.isPending}>
             {analyzeMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Re-analyze
-          </button>
+          </button> */}
           <button className="btn-primary" onClick={() => generateEmailMutation.mutate()}
             disabled={generateEmailMutation.isPending}>
             {generateEmailMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
@@ -725,24 +725,6 @@ export default function LeadDetailPage() {
                           /* ── Inline edit row ── */
                           <div className="p-3 bg-blue-500/[0.04] space-y-2">
                             <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="label mb-1 block">Name</label>
-                                <input
-                                  className="input text-xs flex-1 h-8"
-                                  placeholder="Full name"
-                                  value={editContactData.name || ''}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, name: e.target.value }))}
-                                />
-                              </div>
-                              <div>
-                                <label className="label mb-1 block">Title</label>
-                                <input
-                                  className="input text-xs flex-1 h-8"
-                                  placeholder="Job title"
-                                  value={editContactData.title || ''}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, title: e.target.value }))}
-                                />
-                              </div>
                               <div>
                                 <label className="label mb-1 block">Email</label>
                                 <div className="flex items-center gap-1.5">
@@ -1095,14 +1077,14 @@ export default function LeadDetailPage() {
                         value={emailData.body}
                         onChange={e => setEmailData({ ...emailData, body: e.target.value })} />
                     </div>
-                    <button className="btn-primary w-full justify-center" onClick={handleSend}
+                    {/* <button className="btn-primary w-full justify-center" onClick={handleSend}
                       disabled={sendLoading || !lead.contactEmail}>
                       {sendLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
                       Send Email
                     </button>
                     {!lead.contactEmail && (
                       <p className="text-xs text-center text-slate-600">Find a contact email first</p>
-                    )}
+                    )} */}
                   </>
                 ) : (
                   <button className="btn-ghost w-full justify-center text-xs"

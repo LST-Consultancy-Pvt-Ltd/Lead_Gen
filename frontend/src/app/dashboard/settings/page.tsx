@@ -203,6 +203,17 @@ export default function SettingsPage() {
     enabled: permissions.canAccessSettings && permissions.isAdmin,
   });
 
+  useEffect(() => {
+    if (
+      permissions.canAccessSettings &&
+      permissions.isAdmin &&
+      Array.isArray(dropdownsData) &&
+      dropdownsData.length === 0
+    ) {
+      dropdownsApi.seed();
+    }
+  }, [dropdownsData, permissions.canAccessSettings, permissions.isAdmin]);
+
   const users = Array.isArray(usersData) ? usersData : [];
   const allDropdowns: any[] = Array.isArray(dropdownsData) ? dropdownsData : [];
 
@@ -366,16 +377,24 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ══ DROPDOWN CONFIG ══ */}
-      {mainTab === 'dropdowns' && permissions.isAdmin && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500">Changes apply to all users. Disabled values won&apos;t appear in dropdowns.</p>
-            <button className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}
-              title="Populate all categories with factory defaults (safe to run multiple times)">
+      {permissions.isAdmin && (
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center justify-between">
+            <div>
+              <h2 className="section-title">Dropdown Configuration</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Click a category to manage its values. Changes apply to all users in your workspace.</p>
+            </div>
+            {/* Seed Defaults button removed — auto-seeded on load
+            <button
+              className="btn-ghost text-xs flex items-center gap-1.5 flex-shrink-0"
+              onClick={() => seedMutation.mutate()}
+              disabled={seedMutation.isPending}
+              title="Populate all categories with factory default values (safe to run multiple times)"
+            >
               {seedMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
               Seed Defaults
             </button>
+            */}
           </div>
 
           {/* Sub-tab: Lead Discovery vs Leads */}

@@ -72,6 +72,7 @@ async function updateUser(req, res) {
     const updateData = {
       ...(role && { role, roleChangedAt: new Date() }),
       ...(isActive !== undefined && { isActive }),
+      ...(isActive === false && { refreshToken: null }),
       ...(name && { name }),
     };
 
