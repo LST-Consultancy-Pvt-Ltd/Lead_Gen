@@ -27,11 +27,10 @@ const createActivityValidation = [
       return true;
     }),
 
-  // outcome is required
+  // outcome is optional
   body('outcome')
+    .optional({ checkFalsy: true })
     .trim()
-    .notEmpty()
-    .withMessage('Outcome is required')
     .isLength({ max: 1000 })
     .withMessage('Outcome must be 1000 characters or less'),
 

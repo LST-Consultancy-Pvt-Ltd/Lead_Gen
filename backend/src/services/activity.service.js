@@ -115,13 +115,7 @@ class ActivityService {
       };
     }
 
-    if (!outcome || !outcome.trim()) {
-      return {
-        success: false,
-        statusCode: 400,
-        message: "Outcome is required",
-      };
-    }
+    // outcome is optional - removed required check
 
     if (
       !resolvedLinkedType ||
@@ -238,7 +232,7 @@ class ActivityService {
         linkedType: resolvedLinkedType,
         action: activityAction,
         description: description || "",
-        outcome: outcome.trim(),
+        outcome: outcome ? outcome.trim() : null,
         notes: notes || null,
         activityDate: resolvedDate,
         duration: duration ? parseInt(duration) : null,
