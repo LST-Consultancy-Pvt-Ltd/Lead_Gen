@@ -726,24 +726,6 @@ export default function LeadDetailPage() {
                           <div className="p-3 bg-blue-500/[0.04] space-y-2">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="label mb-1 block">Name</label>
-                                <input
-                                  className="input text-xs flex-1 h-8"
-                                  placeholder="Full name"
-                                  value={editContactData.name || ''}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, name: e.target.value }))}
-                                />
-                              </div>
-                              <div>
-                                <label className="label mb-1 block">Title</label>
-                                <input
-                                  className="input text-xs flex-1 h-8"
-                                  placeholder="Job title"
-                                  value={editContactData.title || ''}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, title: e.target.value }))}
-                                />
-                              </div>
-                              <div>
                                 <label className="label mb-1 block">Email</label>
                                 <div className="flex items-center gap-1.5">
                                   <Mail size={11} className="text-emerald-400 flex-shrink-0" />
