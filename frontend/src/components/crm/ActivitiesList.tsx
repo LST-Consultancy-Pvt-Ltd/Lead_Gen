@@ -101,12 +101,14 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-slate-800 dark:text-slate-200">Activity Timeline</h3>
-        <button
-          onClick={() => setIsAddingActivity(!isAddingActivity)}
-          className="btn-ghost text-xs"
-        >
-          {isAddingActivity ? "Cancel" : "+ Add Activity"}
-        </button>
+        {!isAddingActivity && (
+          <button
+            onClick={() => setIsAddingActivity(true)}
+            className="btn-ghost text-xs"
+          >
+            + Add Activity
+          </button>
+        )}
       </div>
 
       {/* Add Activity Form */}
