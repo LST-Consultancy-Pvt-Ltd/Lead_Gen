@@ -151,7 +151,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
             </div>
           </div>
 
-          <div>
+          {/* <div>
             <label className="label text-xs">Next Action Date</label>
             <input
               type="date"
@@ -163,7 +163,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
               className="input h-9 text-xs"
               required
             />
-          </div>
+          </div> */}
 
           <div>
             <label className="label text-xs">Description</label>
