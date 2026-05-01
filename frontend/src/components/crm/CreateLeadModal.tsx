@@ -89,7 +89,7 @@ const defaultValues: LeadFormData = {
   timeline: "",
   temperature: "prospect",
   disqualificationReason: "",
-  leadType: "",
+  leadType: undefined,
 };
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
