@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { leadsApi, usersApi } from '../../../lib/api';
+import { leadsApi, usersApi, dropdownsApi } from '../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner, EmptyState } from '../../../components/ui';
 import { CreateLeadModal } from '../../../components/crm/CreateLeadModal';
 import { RoleGuard } from '../../../components/common/RoleGuard';
@@ -66,6 +66,16 @@ export default function LeadsPage() {
     queryKey: ['lead-quota'],
     queryFn: () => leadsApi.quota().then(r => r.data?.data),
     staleTime: 60000,
+  });
+
+  const { data: leadStatusOptions } = useQuery({
+    queryKey: ['dropdowns-lead-status'],
+    queryFn: () => dropdownsApi.listByCategory('lead_status').then(r => {
+      const d = r.data;
+      if (Array.isArray(d)) return d;
+      if (Array.isArray(d?.data)) return d.data;
+      return [];
+    }),
   });
 
   const deleteMutation = useMutation({
@@ -245,12 +255,12 @@ export default function LeadsPage() {
         <select className="input h-9 text-xs w-auto" title="Filter by status" value={statusFilter}
           onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
           <option value="">All Status</option>
-          <option value="new">New</option>
-          <option value="contacted">Contacted</option>
-          <option value="replied">Replied</option>
-          <option value="meeting_booked">Meeting Booked</option>
-          <option value="qualified">Qualified</option>
-          <option value="disqualified">Disqualified</option>
+          {(Array.isArray(leadStatusOptions) ? leadStatusOptions : [])
+            .filter((opt: any) => opt.isActive !== false)
+            .map((opt: any) => (
+              <option key={opt.id} value={opt.value}>{opt.value}</option>
+            ))
+          }
         </select>
         <RoleGuard permission="canViewAllLeads">
           <select className="input h-9 text-xs w-auto" title="Filter by owner" value={ownerFilter}
