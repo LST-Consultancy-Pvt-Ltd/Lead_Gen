@@ -52,6 +52,17 @@ export default function SettingsPage() {
     enabled: permissions.canAccessSettings && permissions.isAdmin,
   });
 
+  useEffect(() => {
+    if (
+      permissions.canAccessSettings &&
+      permissions.isAdmin &&
+      Array.isArray(dropdownsData) &&
+      dropdownsData.length === 0
+    ) {
+      dropdownsApi.seed();
+    }
+  }, [dropdownsData, permissions.canAccessSettings, permissions.isAdmin]);
+
   const users = Array.isArray(usersData) ? usersData : [];
 
   const categories = [
@@ -271,6 +282,7 @@ export default function SettingsPage() {
               <h2 className="section-title">Dropdown Configuration</h2>
               <p className="text-xs text-slate-500 mt-0.5">Click a category to manage its values. Changes apply to all users in your workspace.</p>
             </div>
+            {/* Seed Defaults button removed — auto-seeded on load
             <button
               className="btn-ghost text-xs flex items-center gap-1.5 flex-shrink-0"
               onClick={() => seedMutation.mutate()}
@@ -280,6 +292,7 @@ export default function SettingsPage() {
               {seedMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
               Seed Defaults
             </button>
+            */}
           </div>
 
           <div className="divide-y divide-slate-200 dark:divide-white/[0.06]">
