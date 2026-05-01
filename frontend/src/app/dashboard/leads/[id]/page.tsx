@@ -705,22 +705,14 @@ export default function LeadDetailPage() {
                 )}
                 <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] overflow-hidden">
                   {/* Column headers */}
-                  <div className="grid grid-cols-4 divide-x divide-slate-200 dark:divide-white/[0.06] bg-slate-100 dark:bg-slate-900">
+                  <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] bg-slate-100 dark:bg-slate-900">
                     <div className="px-3 py-2 flex items-center gap-1.5">
-                      <User size={10} className="text-slate-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Name</span>
-                    </div>
-                    <div className="px-3 py-2 flex items-center gap-1.5">
-                      <ChevronRight size={10} className="text-slate-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Title</span>
+                      <Phone size={10} className="text-amber-400" />
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Phone</span>
                     </div>
                     <div className="px-3 py-2 flex items-center gap-1.5">
                       <Mail size={10} className="text-emerald-400" />
                       <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Email</span>
-                    </div>
-                    <div className="px-3 py-2 flex items-center gap-1.5">
-                      <Linkedin size={10} className="text-blue-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">LinkedIn</span>
                     </div>
                   </div>
 
@@ -797,21 +789,28 @@ export default function LeadDetailPage() {
                           </div>
                         ) : (
                           /* ── Read-only row ── */
-                          <div className="grid grid-cols-4 divide-x divide-slate-200 dark:divide-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                            {/* Name */}
-                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
-                              <User size={11} className="text-slate-400 flex-shrink-0" />
-                              <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
-                                {c.name || '—'}
-                              </span>
+                          <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                            {/* Phone */}
+                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
+                              <Phone size={11} className="text-amber-400 flex-shrink-0" />
+                              {(c.phone || c.contactPhone) ? (
+                                <>
+                                  <a href={`tel:${c.phone || c.contactPhone}`}
+                                    className="text-xs text-slate-700 dark:text-slate-300 hover:text-blue-400 truncate">
+                                    {c.phone || c.contactPhone}
+                                  </a>
+                                  <button
+                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
+                                    onClick={() => { navigator.clipboard.writeText(c.phone || c.contactPhone); toast.success('Copied!'); }}
+                                    title="Copy phone">
+                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
                             </div>
-                            {/* Title */}
-                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
-                              <span className="text-xs text-slate-500 truncate">
-                                {c.title || c.designation || '—'}
-                              </span>
-                            </div>
-                            {/* Email */}
+                            {/* Email + actions */}
                             <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
                               <Mail size={11} className="text-emerald-400 flex-shrink-0" />
                               {(c.email || c.contactEmail) ? (
@@ -824,27 +823,6 @@ export default function LeadDetailPage() {
                                     className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
                                     onClick={() => { navigator.clipboard.writeText(c.email || c.contactEmail); toast.success('Copied!'); }}
                                     title="Copy email">
-                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )}
-                            </div>
-                            {/* LinkedIn + actions */}
-                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
-                              {c.linkedin ? (
-                                <>
-                                  <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
-                                  <a href={c.linkedin.startsWith('http') ? c.linkedin : `https://${c.linkedin}`}
-                                    target="_blank" rel="noopener noreferrer"
-                                    className="text-xs text-blue-400 hover:text-blue-300 truncate">
-                                    Profile
-                                  </a>
-                                  <button
-                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
-                                    onClick={() => { navigator.clipboard.writeText(c.linkedin); toast.success('Copied!'); }}
-                                    title="Copy LinkedIn URL">
                                     <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
                                   </button>
                                 </>
