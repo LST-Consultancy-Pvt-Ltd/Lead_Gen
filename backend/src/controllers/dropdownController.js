@@ -8,19 +8,18 @@ const { success, error } = require("../utils/response");
 const logger = require("../utils/logger");
 
 const VALID_CATEGORIES = [
-  "industry",
-  "company_size",
-  "company_type",
-  "decision_maker",
-  "preferred_contact_channel",
-  "seniority_level",
-  "annual_revenue_range",
-  "lead_source",
-  "lead_status",
-  "pipeline_stage",
-  "loss_reason",
-  "job_title",
-  "location",
+  // Shared / Leads module
+  "lead_source", "lead_status", "pipeline_stage", "loss_reason", "job_title", "location",
+  // Legacy shared (kept for backward compat)
+  "industry", "company_size", "company_type", "decision_maker",
+  "preferred_contact_channel", "seniority_level", "annual_revenue_range",
+  // Lead Discovery — Resource mode (independent)
+  "resource_industry", "resource_company_size", "resource_company_type",
+  "resource_decision_maker", "resource_preferred_contact_channel", "resource_seniority_level",
+  // Lead Discovery — Product mode (independent)
+  "product_industry", "product_company_size", "product_company_type",
+  "product_annual_revenue_range", "product_decision_maker",
+  "product_preferred_contact_channel", "product_seniority_level",
 ];
 
 // Default values seeded for every new organisation
@@ -82,6 +81,75 @@ const DEFAULT_DROPDOWN_SEEDS = [
     'Any', 'Under $1M', '$1M – $5M', '$5M – $10M', '$10M – $25M',
     '$25M – $50M', '$50M – $100M', '$100M – $250M', '$250M – $500M',
     '$500M – $1B', 'Above $1B',
+  ]},
+  // ── Lead Discovery: Resource mode ────────────────────────────────────────
+  { category: 'resource_industry', values: [
+    'Any Industry', 'Information Technology (IT)', 'Software / SaaS',
+    'Banking & Financial Services (BFSI)', 'Healthcare & Pharmaceuticals',
+    'Manufacturing & Industrial', 'Retail & E-commerce', 'Education & EdTech',
+    'Logistics & Supply Chain', 'Real Estate & Construction', 'Media & Advertising',
+    'Telecommunications', 'Energy & Utilities', 'Automotive',
+    'Government & Public Sector', 'NGO / Non-profit', 'Hospitality & Travel',
+    'Agriculture & Food Processing', 'Legal & Compliance',
+    'Consulting & Professional Services',
+  ]},
+  { category: 'resource_company_size', values: [
+    'Any Size', '1-10 (Micro)', '11-50 (Small)', '51-200 (Mid-size)',
+    '201-500 (Growing)', '501-1000 (Large)', '1000-5000 (Enterprise)', '5000+ (Global Enterprise)',
+  ]},
+  { category: 'resource_company_type', values: [
+    'Any', 'Private Limited', 'Public Listed', 'Startup', 'MNC', 'SME',
+    'Government / PSU', 'NGO / Non-profit', 'Partnership Firm', 'LLP',
+    'Sole Proprietorship', 'Family Business',
+  ]},
+  { category: 'resource_decision_maker', values: [
+    'CEO / Founder', 'CTO / CIO', 'CFO', 'CMO', 'COO', 'MD / Director',
+    'VP Sales', 'VP Operations', 'Head of HR', 'Talent Acquisition Manager',
+    'Procurement Head', 'Operations Manager', 'Department Head', 'Board Member',
+  ]},
+  { category: 'resource_preferred_contact_channel', values: [
+    'Any', 'Email', 'LinkedIn', 'Phone / Call', 'WhatsApp', 'In-person / Visit',
+  ]},
+  { category: 'resource_seniority_level', values: [
+    'Any', 'C-suite', 'VP / SVP Level', 'Director Level', 'Manager Level',
+    'Team Lead', 'Individual Contributor', 'Board / Advisor Level',
+  ]},
+  // ── Lead Discovery: Product mode ─────────────────────────────────────────
+  { category: 'product_industry', values: [
+    'Any Industry', 'Information Technology (IT)', 'Software / SaaS',
+    'Banking & Financial Services (BFSI)', 'Healthcare & Pharmaceuticals',
+    'Manufacturing & Industrial', 'Retail & E-commerce', 'Education & EdTech',
+    'Logistics & Supply Chain', 'Real Estate & Construction', 'Media & Advertising',
+    'Telecommunications', 'Energy & Utilities', 'Automotive',
+    'Government & Public Sector', 'NGO / Non-profit', 'Hospitality & Travel',
+    'Agriculture & Food Processing', 'Legal & Compliance',
+    'Consulting & Professional Services',
+  ]},
+  { category: 'product_company_size', values: [
+    'Any Size', '1-10 (Micro)', '11-50 (Small)', '51-200 (Mid-size)',
+    '201-500 (Growing)', '501-1000 (Large)', '1000-5000 (Enterprise)', '5000+ (Global Enterprise)',
+  ]},
+  { category: 'product_company_type', values: [
+    'Any', 'Private Limited', 'Public Listed', 'Startup', 'MNC', 'SME',
+    'Government / PSU', 'NGO / Non-profit', 'Partnership Firm', 'LLP',
+    'Sole Proprietorship', 'Family Business',
+  ]},
+  { category: 'product_annual_revenue_range', values: [
+    'Any', 'Under $1M', '$1M – $5M', '$5M – $10M', '$10M – $25M',
+    '$25M – $50M', '$50M – $100M', '$100M – $250M', '$250M – $500M',
+    '$500M – $1B', 'Above $1B',
+  ]},
+  { category: 'product_decision_maker', values: [
+    'CEO / Founder', 'CTO / CIO', 'CFO', 'CMO', 'COO', 'MD / Director',
+    'VP Sales', 'VP Operations', 'Head of HR', 'Talent Acquisition Manager',
+    'Procurement Head', 'Operations Manager', 'Department Head', 'Board Member',
+  ]},
+  { category: 'product_preferred_contact_channel', values: [
+    'Any', 'Email', 'LinkedIn', 'Phone / Call', 'WhatsApp', 'In-person / Visit',
+  ]},
+  { category: 'product_seniority_level', values: [
+    'Any', 'C-suite', 'VP / SVP Level', 'Director Level', 'Manager Level',
+    'Team Lead', 'Individual Contributor', 'Board / Advisor Level',
   ]},
 ];
 
@@ -150,36 +218,78 @@ async function listActive(req, res) {
   }
 }
 
-// GET /api/dropdowns/discovery — all authenticated roles
-// Returns all discovery-scan categories grouped in one response.
-// Used by the lead discovery form so it only needs one API call.
-const DISCOVERY_CATEGORIES = [
-  'industry',
-  'company_size',
-  'company_type',
-  'decision_maker',
-  'preferred_contact_channel',
-  'seniority_level',
-  'annual_revenue_range',
+// GET /api/dropdowns/discovery?mode=resource|product — all authenticated roles
+// Returns mode-specific discovery categories. Falls back to legacy shared keys
+// if the prefixed rows haven't been seeded yet (backward compat).
+const RESOURCE_DISCOVERY_CATEGORIES = [
+  'resource_industry', 'resource_company_size', 'resource_company_type',
+  'resource_decision_maker', 'resource_preferred_contact_channel', 'resource_seniority_level',
+];
+const PRODUCT_DISCOVERY_CATEGORIES = [
+  'product_industry', 'product_company_size', 'product_company_type',
+  'product_annual_revenue_range', 'product_decision_maker',
+  'product_preferred_contact_channel', 'product_seniority_level',
+];
+// Legacy fallback — used when prefixed rows don't exist yet
+const LEGACY_DISCOVERY_CATEGORIES = [
+  'industry', 'company_size', 'company_type', 'decision_maker',
+  'preferred_contact_channel', 'seniority_level', 'annual_revenue_range',
 ];
 
 async function listDiscoveryDropdowns(req, res) {
   try {
+    const { mode } = req.query; // 'resource' | 'product' | undefined (legacy)
+
+    let targetCategories;
+    let stripPrefix = null;
+
+    if (mode === 'resource') {
+      targetCategories = RESOURCE_DISCOVERY_CATEGORIES;
+      stripPrefix = 'resource_';
+    } else if (mode === 'product') {
+      targetCategories = PRODUCT_DISCOVERY_CATEGORIES;
+      stripPrefix = 'product_';
+    } else {
+      targetCategories = LEGACY_DISCOVERY_CATEGORIES;
+    }
+
     const items = await prisma.dropdownConfig.findMany({
       where: {
         organizationId: req.user.organizationId,
-        category: { in: DISCOVERY_CATEGORIES },
+        category: { in: targetCategories },
         isActive: true,
       },
       orderBy: [{ category: 'asc' }, { displayOrder: 'asc' }],
       select: { id: true, category: true, value: true, displayOrder: true },
     });
 
-    // Group by category and preserve displayOrder sort
+    // If mode-specific rows don't exist yet, fall back to legacy shared rows
+    if ((mode === 'resource' || mode === 'product') && items.length === 0) {
+      const fallback = await prisma.dropdownConfig.findMany({
+        where: {
+          organizationId: req.user.organizationId,
+          category: { in: LEGACY_DISCOVERY_CATEGORIES },
+          isActive: true,
+        },
+        orderBy: [{ category: 'asc' }, { displayOrder: 'asc' }],
+        select: { id: true, category: true, value: true, displayOrder: true },
+      });
+      const grouped = {};
+      for (const cat of LEGACY_DISCOVERY_CATEGORIES) grouped[cat] = [];
+      for (const item of fallback) { if (grouped[item.category]) grouped[item.category].push(item); }
+      return success(res, grouped);
+    }
+
+    // Group by logical key (strip prefix so frontend receives 'industry', 'company_size', etc.)
+    const logicalCategories = stripPrefix
+      ? targetCategories.map(c => c.replace(stripPrefix, ''))
+      : targetCategories;
+
     const grouped = {};
-    for (const cat of DISCOVERY_CATEGORIES) grouped[cat] = [];
+    for (const logicalKey of logicalCategories) grouped[logicalKey] = [];
     for (const item of items) {
-      if (grouped[item.category]) grouped[item.category].push(item);
+      const logicalKey = stripPrefix ? item.category.replace(stripPrefix, '') : item.category;
+      if (grouped[logicalKey]) grouped[logicalKey].push(item);
     }
 
     return success(res, grouped);

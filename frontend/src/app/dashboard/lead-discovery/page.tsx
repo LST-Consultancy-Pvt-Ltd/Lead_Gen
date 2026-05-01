@@ -202,13 +202,20 @@ export default function LeadDiscoveryPage() {
     return items.map((d: any) => d.value);
   }
 
-  const industryOptions = getDropdownOptions('industry', DEFAULT_INDUSTRIES);
-  const companySizeOptions = getDropdownOptions('company_size', DEFAULT_COMPANY_SIZES);
-  const companyTypeOptions = getDropdownOptions('company_type', DEFAULT_COMPANY_TYPES);
-  const decisionMakerOptions = getDropdownOptions('decision_maker', DEFAULT_DECISION_MAKERS);
-  const contactChannelOptions = getDropdownOptions('preferred_contact_channel', DEFAULT_CONTACT_CHANNELS);
-  const seniorityOptions = getDropdownOptions('seniority_level', DEFAULT_SENIORITY_LEVELS);
-  const annualRevenueOptions = getDropdownOptions('annual_revenue_range', DEFAULT_ANNUAL_REVENUE);
+  const resourceIndustryOptions       = getDropdownOptions('resource_industry', DEFAULT_INDUSTRIES);
+  const resourceCompanySizeOptions    = getDropdownOptions('resource_company_size', DEFAULT_COMPANY_SIZES);
+  const resourceCompanyTypeOptions    = getDropdownOptions('resource_company_type', DEFAULT_COMPANY_TYPES);
+  const resourceDecisionMakerOptions  = getDropdownOptions('resource_decision_maker', DEFAULT_DECISION_MAKERS);
+  const resourceContactChannelOptions = getDropdownOptions('resource_preferred_contact_channel', DEFAULT_CONTACT_CHANNELS);
+  const resourceSeniorityOptions      = getDropdownOptions('resource_seniority_level', DEFAULT_SENIORITY_LEVELS);
+
+  const productIndustryOptions        = getDropdownOptions('product_industry', DEFAULT_INDUSTRIES);
+  const productCompanySizeOptions     = getDropdownOptions('product_company_size', DEFAULT_COMPANY_SIZES);
+  const productCompanyTypeOptions     = getDropdownOptions('product_company_type', DEFAULT_COMPANY_TYPES);
+  const productDecisionMakerOptions   = getDropdownOptions('product_decision_maker', DEFAULT_DECISION_MAKERS);
+  const productContactChannelOptions  = getDropdownOptions('product_preferred_contact_channel', DEFAULT_CONTACT_CHANNELS);
+  const productSeniorityOptions       = getDropdownOptions('product_seniority_level', DEFAULT_SENIORITY_LEVELS);
+  const productAnnualRevenueOptions   = getDropdownOptions('product_annual_revenue_range', DEFAULT_ANNUAL_REVENUE);
 
   // Server-side active scan restore
   const { data: serverActiveScan } = useQuery({
@@ -574,9 +581,9 @@ export default function LeadDiscoveryPage() {
               <div className="pt-4 space-y-4">
 
                 <div>
-                  <p className="label mb-1.5">Target Industry </p>
+                  <p className="label mb-1.5">Industry / Vertical</p>
                   <select aria-label="Industry" className="input text-sm" value={targetIndustry} onChange={e => setTargetIndustry(e.target.value)}>
-                    {industryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
+                    {resourceIndustryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
                   </select>
                 </div>
 
@@ -584,13 +591,13 @@ export default function LeadDiscoveryPage() {
                   <div>
                     <p className="label mb-1.5">Company Size</p>
                     <select aria-label="Company size" className="input text-sm" value={companySize} onChange={e => setCompanySize(e.target.value)}>
-                      {companySizeOptions.map(opt => <option key={opt} value={opt === 'Any Size' ? '' : opt}>{opt}</option>)}
+                      {resourceCompanySizeOptions.map(opt => <option key={opt} value={opt === 'Any Size' ? '' : opt}>{opt}</option>)}
                     </select>
                   </div>
                   <div>
                     <p className="label mb-1.5">Company Type</p>
                     <select aria-label="Company type" className="input text-sm" value={companyType} onChange={e => setCompanyType(e.target.value)}>
-                      {companyTypeOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                      {resourceCompanyTypeOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
                     </select>
                   </div>
                 </div>
@@ -598,7 +605,7 @@ export default function LeadDiscoveryPage() {
                 <div>
                   <p className="label mb-2">Who approves hiring? (Decision Maker)</p>
                   <ChipSelect
-                    options={decisionMakerOptions}
+                    options={resourceDecisionMakerOptions}
                     selected={selectedDecisionMakers}
                     onToggle={toggleDecisionMaker}
                     color="violet"
@@ -612,13 +619,13 @@ export default function LeadDiscoveryPage() {
                   <div>
                     <p className="label mb-1.5">Preferred Contact Channel</p>
                     <select aria-label="Contact channel" className="input text-sm" value={contactChannel} onChange={e => setContactChannel(e.target.value)}>
-                      {contactChannelOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                      {resourceContactChannelOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
                     </select>
                   </div>
                   <div>
                     <p className="label mb-1.5">Seniority Level</p>
                     <select aria-label="Seniority level" className="input text-sm" value={seniorityLevel} onChange={e => setSeniorityLevel(e.target.value)}>
-                      {seniorityOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                      {resourceSeniorityOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
                     </select>
                   </div>
                 </div>
@@ -812,10 +819,10 @@ export default function LeadDiscoveryPage() {
                 <div className="pt-4 space-y-4">
 
                   <div>
-                    <p className="label mb-1.5">Target Industry</p>
+                    <p className="label mb-1.5">Industry / Vertical</p>
                     <select aria-label="Industry" className="input text-sm" value={productIndustry}
                       onChange={e => { setProductIndustry(e.target.value); resetPrompt(); }}>
-                      {industryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
+                      {productIndustryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
                     </select>
                   </div>
 
@@ -823,13 +830,13 @@ export default function LeadDiscoveryPage() {
                     <div>
                       <p className="label mb-1.5">Company Size</p>
                       <select aria-label="Company size" className="input text-sm" value={productCompanySize} onChange={e => setProductCompanySize(e.target.value)}>
-                        {companySizeOptions.map(opt => <option key={opt} value={opt === 'Any Size' ? '' : opt}>{opt}</option>)}
+                        {productCompanySizeOptions.map(opt => <option key={opt} value={opt === 'Any Size' ? '' : opt}>{opt}</option>)}
                       </select>
                     </div>
                     <div>
                       <p className="label mb-1.5">Company Type</p>
                       <select aria-label="Company type" className="input text-sm" value={productCompanyType} onChange={e => setProductCompanyType(e.target.value)}>
-                        {companyTypeOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                        {productCompanyTypeOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
                       </select>
                     </div>
                   </div>
@@ -842,7 +849,7 @@ export default function LeadDiscoveryPage() {
                       value={annualRevenue}
                       onChange={e => setAnnualRevenue(e.target.value)}
                     >
-                      {annualRevenueOptions.map(opt => (
+                      {productAnnualRevenueOptions.map(opt => (
                         <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>
                       ))}
                     </select>
@@ -851,7 +858,7 @@ export default function LeadDiscoveryPage() {
                   <div>
                     <p className="label mb-2">Who makes the buying decision?</p>
                     <ChipSelect
-                      options={decisionMakerOptions}
+                      options={productDecisionMakerOptions}
                       selected={productDecisionMakers}
                       onToggle={toggleProductDecisionMaker}
                       color="violet"
@@ -862,13 +869,13 @@ export default function LeadDiscoveryPage() {
                     <div>
                       <p className="label mb-1.5">Preferred Contact Channel</p>
                       <select aria-label="Contact channel" className="input text-sm" value={productContactChannel} onChange={e => setProductContactChannel(e.target.value)}>
-                        {contactChannelOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                        {productContactChannelOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
                       </select>
                     </div>
                     <div>
                       <p className="label mb-1.5">Seniority Level</p>
                       <select aria-label="Seniority level" className="input text-sm" value={productSeniorityLevel} onChange={e => setProductSeniorityLevel(e.target.value)}>
-                        {seniorityOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
+                        {productSeniorityOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
                       </select>
                     </div>
                   </div>
