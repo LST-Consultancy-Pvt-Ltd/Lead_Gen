@@ -40,6 +40,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// Trust the first proxy (required when deployed behind Render / load balancers)
+app.set('trust proxy', 1);
+
 // ── Rate Limiting ─────────────────────────────────────────────────────────
 const limiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
