@@ -381,12 +381,10 @@ export default function LeadsPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      {l.subSource === 'product' ? (
+                      {l.leadType === 'product' ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20">Product</span>
-                      ) : l.subSource === 'position' ? (
+                      ) : l.leadType === 'position' ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Position</span>
-                      ) : l.subSource === 'created' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Created</span>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
