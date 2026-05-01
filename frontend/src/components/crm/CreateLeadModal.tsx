@@ -60,6 +60,7 @@ type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
   timeline?: string;
   temperature: string;
   disqualificationReason?: string;
+  leadType?: string;
 };
 
 const defaultValues: LeadFormData = {
@@ -88,6 +89,7 @@ const defaultValues: LeadFormData = {
   timeline: "",
   temperature: "prospect",
   disqualificationReason: "",
+  leadType: "",
 };
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
@@ -162,6 +164,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     utmMedium: yup.string().optional(),
     utmCampaign: yup.string().optional(),
     utmContent: yup.string().optional(),
+    leadType: yup.string().optional(),
   }), []);
 
   const {
@@ -731,6 +734,15 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             </div>
           )}
           ── End Disqualification Reason ── */}
+
+          <div>
+            <label className="label">Lead Type</label>
+            <select {...register("leadType")} title="Lead Type" className="input">
+              <option value="">Select lead type...</option>
+              <option value="position">Position Lead</option>
+              <option value="product">Product Lead</option>
+            </select>
+          </div>
 
           <div>
             <label className="label">Lead Source <span className="text-red-400">*</span></label>

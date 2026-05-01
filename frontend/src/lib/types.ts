@@ -164,6 +164,7 @@ export interface CreateLeadInput {
   utmMedium?: string;
   utmCampaign?: string;
   utmContent?: string;
+  leadType?: 'position' | 'product';
 }
 
 // ── Invitation Types ───────────────────────────────────────────────────────
