@@ -169,6 +169,37 @@ function isCompetitor(companyName, profile) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Parse a free-text region string into an array of SerpAPI-compatible locations.
+// Google Jobs only accepts ONE location per request, so we search each separately.
+// ─────────────────────────────────────────────────────────────────────────────
+const REGION_MAP = {
+  usa: 'United States', us: 'United States', 'united states': 'United States', america: 'United States',
+  uk: 'United Kingdom', gb: 'United Kingdom', 'great britain': 'United Kingdom', 'united kingdom': 'United Kingdom',
+  uae: 'United Arab Emirates', 'u.a.e': 'United Arab Emirates',
+  india: 'India', in: 'India',
+  canada: 'Canada', ca: 'Canada',
+  australia: 'Australia', au: 'Australia',
+  germany: 'Germany', de: 'Germany',
+  france: 'France', fr: 'France',
+  singapore: 'Singapore', sg: 'Singapore',
+  europe: 'Europe',
+  'south africa': 'South Africa', sa: 'South Africa',
+  brazil: 'Brazil', br: 'Brazil',
+  mexico: 'Mexico', mx: 'Mexico',
+  japan: 'Japan', jp: 'Japan',
+  china: 'China', cn: 'China',
+};
+
+function parseSerpLocations(region) {
+  if (!region) return [null];  // null = no location filter
+  return region
+    .split(/[,;|/\\]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => REGION_MAP[s.toLowerCase()] || s);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SerpAPI Google Jobs — fetches one page
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -185,7 +216,8 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
     hl:      'en',
   };
 
-  if (filters.targetRegion)          params.location = filters.targetRegion;
+  const serpLoc = filters._serpLocation !== undefined ? filters._serpLocation : null;
+  if (serpLoc)                        params.location = serpLoc;
   if (filters.workTypes?.includes('Remote')) params.ltype = 'Y';
   if (nextPageToken)                 params.next_page_token = nextPageToken;
 
@@ -280,14 +312,27 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
 }
 
 async function fetchAllJobPages(query, filters = {}, maxPages = 5) {
+  const locations = parseSerpLocations(filters.targetRegion);
+  const seen = new Set();
   const all = [];
-  let token = null;
-  for (let p = 0; p < maxPages; p++) {
-    const { jobs, nextToken } = await fetchJobsPage(query, filters, token);
-    all.push(...jobs);
-    token = nextToken;
-    if (!token || jobs.length === 0) break;
-    await sleep(600);
+
+  for (const loc of locations) {
+    const locFilters = { ...filters, _serpLocation: loc };
+    let token = null;
+    for (let p = 0; p < maxPages; p++) {
+      const { jobs, nextToken } = await fetchJobsPage(query, locFilters, token);
+      for (const job of jobs) {
+        const key = `${(job.company_name || '').toLowerCase()}|${(job.title || '').toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          all.push(job);
+        }
+      }
+      token = nextToken;
+      if (!token || jobs.length === 0) break;
+      await sleep(600);
+    }
+    if (locations.length > 1) await sleep(400); // brief pause between locations
   }
   return all;
 }

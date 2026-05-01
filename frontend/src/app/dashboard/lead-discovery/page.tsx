@@ -426,6 +426,24 @@ export default function LeadDiscoveryPage() {
   // const smartScanning = smartScanMutation.isPending ||
   //   (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
 
+  const smartScanMutation = useMutation({
+    mutationFn: () => {
+      if (!smartPrompt.trim()) throw new Error('Enter a prompt first');
+      return discoveryApi.smartScan(smartPrompt.trim());
+    },
+    onSuccess: res => {
+      const id = res.data.data.id ?? res.data.data.jobId;
+      setActiveScanId(id);
+      toast.success('Smart scan started!');
+      qc.invalidateQueries({ queryKey: ['scans'] });
+      startOptimisticProgress();
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to start smart scan'),
+  });
+
+  const smartScanning = smartScanMutation.isPending ||
+    (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
+
   return (
     <div className="space-y-5">
 

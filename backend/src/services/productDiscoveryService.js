@@ -284,7 +284,7 @@ function isCompetitor(lead, profile) {
 // Apollo API — used ONLY for digital/software products
 // ─────────────────────────────────────────────────────────────────────────────
 
-const APOLLO_BASE = 'https://api.apollo.io/v1';
+const APOLLO_BASE = 'https://api.apollo.io/api/v1';
 
 async function apolloPeopleSearch(params, page = 1) {
   if (!config.apollo?.apiKey) {
@@ -322,7 +322,7 @@ async function apolloCompanySearch(params, page = 1) {
   }
   try {
     const { data } = await axios.post(
-      `${APOLLO_BASE}/mixed_companies/api_search`,
+      `${APOLLO_BASE}/organizations/search`,
       { page, per_page: 25, ...params },
       {
         headers: {
@@ -420,6 +420,37 @@ function orgToLead(org, profile) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Parse a free-text region string into an array of SerpAPI-compatible locations.
+// Google Jobs only accepts ONE location per request, so we search each separately.
+// ─────────────────────────────────────────────────────────────────────────────
+const REGION_MAP = {
+  usa: 'United States', us: 'United States', 'united states': 'United States', america: 'United States',
+  uk: 'United Kingdom', gb: 'United Kingdom', 'great britain': 'United Kingdom', 'united kingdom': 'United Kingdom',
+  uae: 'United Arab Emirates', 'u.a.e': 'United Arab Emirates',
+  india: 'India', in: 'India',
+  canada: 'Canada', ca: 'Canada',
+  australia: 'Australia', au: 'Australia',
+  germany: 'Germany', de: 'Germany',
+  france: 'France', fr: 'France',
+  singapore: 'Singapore', sg: 'Singapore',
+  europe: 'Europe',
+  'south africa': 'South Africa', sa: 'South Africa',
+  brazil: 'Brazil', br: 'Brazil',
+  mexico: 'Mexico', mx: 'Mexico',
+  japan: 'Japan', jp: 'Japan',
+  china: 'China', cn: 'China',
+};
+
+function parseSerpLocations(region) {
+  if (!region) return [null];  // null = no location filter
+  return region
+    .split(/[,;|/\\]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => REGION_MAP[s.toLowerCase()] || s);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SerpAPI — used for physical products AND B2C products
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -435,7 +466,8 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
       q:       query,
       hl:      'en',
     };
-    if (filters.targetRegion) params.location = filters.targetRegion;
+    const serpLoc = filters._serpLocation !== undefined ? filters._serpLocation : null;
+    if (serpLoc)              params.location = serpLoc;
     if (nextPageToken)        params.next_page_token = nextPageToken;
 
     const { data } = await axios.get('https://serpapi.com/search', { params, timeout: 15000 });
@@ -450,14 +482,27 @@ async function fetchJobsPage(query, filters = {}, nextPageToken = null) {
 }
 
 async function fetchAllJobPages(query, filters = {}, maxPages = 3) {
+  const locations = parseSerpLocations(filters.targetRegion);
+  const seen = new Set();
   const all = [];
-  let token = null;
-  for (let p = 0; p < maxPages; p++) {
-    const { jobs, nextToken } = await fetchJobsPage(query, filters, token);
-    all.push(...jobs);
-    token = nextToken;
-    if (!token || jobs.length === 0) break;
-    await sleep(600);
+
+  for (const loc of locations) {
+    const locFilters = { ...filters, _serpLocation: loc };
+    let token = null;
+    for (let p = 0; p < maxPages; p++) {
+      const { jobs, nextToken } = await fetchJobsPage(query, locFilters, token);
+      for (const job of jobs) {
+        const key = `${(job.company_name || '').toLowerCase()}|${(job.title || '').toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          all.push(job);
+        }
+      }
+      token = nextToken;
+      if (!token || jobs.length === 0) break;
+      await sleep(600);
+    }
+    if (locations.length > 1) await sleep(400); // brief pause between locations
   }
   return all;
 }
@@ -561,66 +606,150 @@ function organicToLead(result, profile) {
   };
 }
 
+// Apollo expects full country/region names, not ISO codes or abbreviations
+function regionToApolloLocation(region = '') {
+  const map = {
+    'usa': 'United States', 'us': 'United States', 'united states': 'United States', 'america': 'United States',
+    'uk': 'United Kingdom', 'united kingdom': 'United Kingdom', 'england': 'United Kingdom', 'britain': 'United Kingdom',
+    'india': 'India', 'canada': 'Canada', 'australia': 'Australia',
+    'germany': 'Germany', 'france': 'France', 'singapore': 'Singapore',
+    'uae': 'United Arab Emirates', 'dubai': 'United Arab Emirates', 'netherlands': 'Netherlands',
+    'brazil': 'Brazil', 'spain': 'Spain', 'italy': 'Italy',
+    'china': 'China', 'japan': 'Japan', 'south korea': 'South Korea', 'korea': 'South Korea',
+    'mexico': 'Mexico', 'argentina': 'Argentina', 'colombia': 'Colombia',
+    'south africa': 'South Africa', 'nigeria': 'Nigeria', 'kenya': 'Kenya',
+    'saudi arabia': 'Saudi Arabia', 'israel': 'Israel', 'turkey': 'Turkey',
+    'sweden': 'Sweden', 'norway': 'Norway', 'denmark': 'Denmark', 'finland': 'Finland',
+    'poland': 'Poland', 'switzerland': 'Switzerland', 'austria': 'Austria', 'belgium': 'Belgium',
+    'new zealand': 'New Zealand', 'indonesia': 'Indonesia', 'malaysia': 'Malaysia', 'philippines': 'Philippines',
+  };
+  return map[region.toLowerCase().trim()] || region;
+}
+
+// Maps UI company size labels → Apollo organization_num_employees_ranges format ["min,max"]
+function companySizeToApolloRanges(size = '') {
+  const map = {
+    '1-10 (Micro)':              ['1,10'],
+    '11-50 (Small)':             ['11,50'],
+    '51-200 (Mid-size)':         ['51,200'],
+    '201-500 (Growing)':         ['201,500'],
+    '501-1000 (Large)':          ['501,1000'],
+    '1000-5000 (Enterprise)':    ['1000,5000'],
+    '5000+ (Global Enterprise)': ['5001,1000000'],
+  };
+  return map[size] || null;
+}
+
+// Maps UI seniority labels → Apollo person_seniority values
+function seniorityToApolloValues(level = '') {
+  const map = {
+    'C-suite':                ['c_suite', 'owner', 'founder', 'partner'],
+    'VP / SVP Level':         ['vp', 'head'],
+    'Director Level':         ['director'],
+    'Manager Level':          ['manager'],
+    'Team Lead':              ['manager', 'senior'],
+    'Individual Contributor': ['senior', 'entry'],
+    'Board / Advisor Level':  ['c_suite', 'owner', 'partner'],
+  };
+  return map[level] || null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STRATEGY A — Apollo search (software / digital products only)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function runApolloSearch(profile, filters, tryAdd) {
-  const { targetRegion = '', targetIndustry = '' } = filters;
-  const countryCode = targetRegion ? regionToCode(targetRegion) : null;
-  const ap          = profile.apolloProfile || {};
-  const titles      = (ap.buyerTitles   || []).slice(0, 6);
-  const keywords    = (ap.buyerKeywords || []).slice(0, 3);
-  const seniority   = ap.personSeniority || ['manager', 'director', 'vp', 'c_suite', 'owner'];
-  const maxPages    = TEST_MODE ? TEST_MAX_PAGES : 4;
+async function runApolloSearch(profile, filters, tryAdd, rawTarget = 125, rawLeads = []) {
+  const {
+    targetRegion = '', targetIndustry = '',
+    companySize = '', seniorityLevel = '',
+    decisionMakers = [],
+  } = filters;
+  // Apollo requires full location names ("United States"), not ISO codes ("US") or abbreviations ("USA")
+  const apolloLocation  = targetRegion   ? regionToApolloLocation(targetRegion) : null;
+  const employeeRanges  = companySizeToApolloRanges(companySize);   // null if "Any Size"
+  const userSeniority   = seniorityToApolloValues(seniorityLevel);  // null if "Any"
+  const ap              = profile.apolloProfile || {};
+  const aiTitles        = (ap.buyerTitles   || []).slice(0, 6);
+  const keywords        = (ap.buyerKeywords || []).slice(0, 3);
+
+  // User-selected decision makers supplement AI titles; deduplicate
+  const userTitles = (decisionMakers || []).filter(Boolean);
+  const titles     = userTitles.length > 0
+    ? [...new Set([...userTitles, ...aiTitles])].slice(0, 8)
+    : aiTitles;
+
+  // User seniority overrides AI seniority when explicitly selected
+  const seniority = userSeniority || ap.personSeniority || ['manager', 'director', 'vp', 'c_suite', 'owner'];
+  const maxPages  = TEST_MODE ? TEST_MAX_PAGES : Math.min(8, Math.max(1, Math.ceil(rawTarget / 20)));
+
+  logger.info('Apollo search filters', {
+    location:       apolloLocation  || 'any',
+    companySize:    companySize     || 'any',
+    employeeRanges: employeeRanges  || 'any',
+    seniority:      seniorityLevel  || 'ai-default',
+    userTitles:     userTitles.length,
+    aiTitles:       aiTitles.length,
+    totalTitles:    titles.length,
+    rawTarget,
+    maxPages,
+  });
 
   // Primary: people search by job title
   const titleGroups = chunkArray(titles, 3).filter(g => g.length > 0);
   if (TEST_MODE && titleGroups.length > 1) titleGroups.splice(1);
 
+  outer:
   for (const group of titleGroups) {
     const params = {
-      person_titles:    group,
-      person_seniority: seniority,
+      person_titles:          group,
+      person_seniority:       seniority,
+      include_similar_titles: true,   // match title variants ("HR Director", "Human Resources Manager", etc.)
     };
-    if (countryCode)    params.person_locations = [countryCode];
-    // q_keywords narrows to companies in relevant space
-    const kws = [...keywords, targetIndustry].filter(Boolean);
-    if (kws.length) params.q_keywords = kws.join(' ');
+    if (apolloLocation)  params.person_locations = [apolloLocation];
+    if (employeeRanges)  params.organization_num_employees_ranges = employeeRanges;
+    // NOTE: q_keywords is intentionally omitted from people search —
+    // combining keyword + title + seniority + location over-constrains Apollo and returns 0 results.
+    // The title + seniority filters alone are specific enough.
 
     for (let page = 1; page <= maxPages; page++) {
       const { people, totalPages } = await apolloPeopleSearch(params, page);
       logger.info('Apollo people page', { titles: group[0], page, found: people.length });
       for (const p of people) {
+        if (rawLeads.length >= rawTarget) break;  // stop per-item once buffer is full
         const lead = personToLead(p, profile);
         if (lead) tryAdd(lead);
       }
       if (page >= totalPages) break;
+      if (rawLeads.length >= rawTarget) break outer;  // have enough raw leads
       await sleep(400);
     }
+    if (rawLeads.length >= rawTarget) break;
     await sleep(300);
   }
 
-  // Secondary: company keyword search
-  if (keywords.length > 0) {
+  // Secondary: company keyword search (only if still below target)
+  if (keywords.length > 0 && rawLeads.length < rawTarget) {
     const kws = [...keywords, targetIndustry].filter(Boolean);
     const params = { q_keywords: kws.join(' OR ') };
-    if (countryCode) params.organization_locations = [countryCode];
+    if (apolloLocation) params.organization_locations = [apolloLocation];
+    if (employeeRanges) params.organization_num_employees_ranges = employeeRanges;
 
-    const companyPages = TEST_MODE ? 1 : 2;
+    const companyPages = TEST_MODE ? 1 : Math.min(4, Math.max(1, Math.ceil(rawTarget / 25)));
     for (let page = 1; page <= companyPages; page++) {
       const { organizations, totalPages } = await apolloCompanySearch(params, page);
       logger.info('Apollo company page', { keywords: kws, page, found: organizations.length });
       for (const org of organizations) {
+        if (rawLeads.length >= rawTarget) break;  // stop per-item once buffer is full
         const lead = orgToLead(org, profile);
         if (lead) tryAdd(lead);
       }
       if (page >= totalPages) break;
+      if (rawLeads.length >= rawTarget) break;
       await sleep(400);
     }
   }
 
-  logger.info('Apollo search done');
+  logger.info('Apollo search done', { rawCollected: rawLeads.length, rawTarget });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -633,25 +762,30 @@ async function runApolloSearch(profile, filters, tryAdd) {
 //   B3: Retailer/distributor search (only for B2C products)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function runSerpSearch(profile, filters, tryAdd) {
+async function runSerpSearch(profile, filters, tryAdd, rawTarget = 125, rawLeads = []) {
   const { targetRegion = '', targetIndustry = '' } = filters;
   const reg = targetRegion   ? ` ${targetRegion}`   : '';
   const ind = targetIndustry ? ` ${targetIndustry}` : '';
   const sp  = profile.serpProfile || {};
 
-  // B1: Google Jobs for buyer job titles
-  const jobTitles = (sp.jobTitleSearches || [])
-    .slice(0, TEST_MODE ? 2 : 4);
+  // Scale query counts based on target
+  const maxJobTitles   = TEST_MODE ? 2 : Math.min(6, Math.max(2, Math.ceil(rawTarget / 15)));
+  const maxBuyerQs     = TEST_MODE ? 2 : Math.min(8, Math.max(3, Math.ceil(rawTarget / 20)));
+  const maxJobsPages   = TEST_MODE ? TEST_MAX_PAGES : Math.min(5, Math.max(1, Math.ceil(rawTarget / 30)));
 
-  logger.info('SerpAPI Google Jobs search', { titles: jobTitles });
+  // B1: Google Jobs for buyer job titles
+  const jobTitles = (sp.jobTitleSearches || []).slice(0, maxJobTitles);
+
+  logger.info('SerpAPI Google Jobs search', { titles: jobTitles, rawTarget });
 
   for (const title of jobTitles) {
+    if (rawLeads.length >= rawTarget) break;
     const query = `${title}${ind}${reg}`;
-    const jobs  = await fetchAllJobPages(query, filters, TEST_MODE ? TEST_MAX_PAGES : 3);
+    const jobs  = await fetchAllJobPages(query, filters, maxJobsPages);
     logger.info('Jobs fetched', { title, count: jobs.length });
 
     for (const jr of jobs) {
-      if (TEST_MODE && /* approx */ jobTitles.indexOf(title) * 30 + jobs.indexOf(jr) >= TEST_MAX_LEADS) break;
+      if (rawLeads.length >= rawTarget) break;  // stop per-item once buffer is full
       const lead = jobToLead(jr, profile);
       if (lead) tryAdd(lead);
     }
@@ -660,14 +794,16 @@ async function runSerpSearch(profile, filters, tryAdd) {
 
   // B2: Buyer-intent organic queries
   const buyerQueries = (sp.buyerIntentQueries || [])
-    .slice(0, TEST_MODE ? 2 : 6)
+    .slice(0, maxBuyerQs)
     .map(q => `${q}${ind}${reg}`);
 
   logger.info('SerpAPI buyer-intent queries', { count: buyerQueries.length });
 
   for (const query of buyerQueries) {
+    if (rawLeads.length >= rawTarget) break;
     const results = await searchOrganic(query);
     for (const result of results) {
+      if (rawLeads.length >= rawTarget) break;
       const lead = organicToLead(result, profile);
       if (lead) tryAdd(lead);
     }
@@ -680,8 +816,10 @@ async function runSerpSearch(profile, filters, tryAdd) {
     .map(q => `${q}${ind}${reg}`);
 
   for (const query of rfpQueries) {
+    if (rawLeads.length >= rawTarget) break;
     const results = await searchOrganic(query);
     for (const result of results) {
+      if (rawLeads.length >= rawTarget) break;
       const lead = organicToLead(result, profile);
       if (lead) {
         lead.signalType     = 'procurement';
@@ -701,8 +839,10 @@ async function runSerpSearch(profile, filters, tryAdd) {
       .map(q => `${q}${reg}`);
 
     for (const query of retailQueries) {
+      if (rawLeads.length >= rawTarget) break;
       const results = await searchOrganic(query);
       for (const result of results) {
+        if (rawLeads.length >= rawTarget) break;
         const lead = organicToLead(result, profile);
         if (lead) {
           lead.source = 'Retailer / Distributor Search';
@@ -713,7 +853,7 @@ async function runSerpSearch(profile, filters, tryAdd) {
     }
   }
 
-  logger.info('SerpAPI search done');
+  logger.info('SerpAPI search done', { rawCollected: rawLeads.length, rawTarget });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -791,9 +931,12 @@ function chunkArray(arr, size) {
 // Main scan runner
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function runProductDiscoveryScan(job, productInput, filters = {}, progressCallback) {
-  logger.info('Product scan START', { jobId: job.id });
+async function runProductDiscoveryScan(job, productInput, filters = {}, progressCallback, maxLeads = 50) {
+  logger.info('Product scan START', { jobId: job.id, maxLeads });
   if (progressCallback) await progressCallback(3, 0);
+
+  // Fetch ~2.5× the requested leads as raw buffer to absorb AI scoring filter-outs (~30-40% filtered)
+  const rawTarget = Math.ceil(maxLeads * 2.5);
 
   // STEP 1: ONE AI call
   let profile;
@@ -833,32 +976,36 @@ async function runProductDiscoveryScan(job, productInput, filters = {}, progress
     return true;
   }
 
+  function hasEnoughRaw() { return rawLeads.length >= rawTarget; }
+
   const strategy = (profile.searchStrategy || 'BOTH').toUpperCase();
 
   // STEP 2: Run the right search strategy
   if (strategy === 'APOLLO') {
     // Software/digital products — Apollo is best
     logger.info('Running Apollo search (software/digital product)', { jobId: job.id });
-    await runApolloSearch(profile, filters, tryAdd);
+    await runApolloSearch(profile, filters, tryAdd, rawTarget, rawLeads);
     if (progressCallback) await progressCallback(75, rawLeads.length);
 
   } else if (strategy === 'SERP') {
     // Physical/industrial/B2C products — SerpAPI is best
     logger.info('Running SerpAPI search (physical/industrial product)', { jobId: job.id });
-    await runSerpSearch(profile, filters, tryAdd);
+    await runSerpSearch(profile, filters, tryAdd, rawTarget, rawLeads);
     if (progressCallback) await progressCallback(75, rawLeads.length);
 
   } else {
     // BOTH — run Apollo first then SerpAPI
     logger.info('Running BOTH searches', { jobId: job.id });
-    await runApolloSearch(profile, filters, tryAdd);
+    await runApolloSearch(profile, filters, tryAdd, rawTarget, rawLeads);
     if (progressCallback) await progressCallback(45, rawLeads.length);
-    await runSerpSearch(profile, filters, tryAdd);
+    if (!hasEnoughRaw()) {
+      await runSerpSearch(profile, filters, tryAdd, rawTarget, rawLeads);
+    }
     if (progressCallback) await progressCallback(75, rawLeads.length);
   }
 
   logger.info('Search complete', { jobId: job.id, raw: rawLeads.length, strategy });
-  if (progressCallback) await progressCallback(82, rawLeads.length);
+  if (progressCallback) await progressCallback(82, Math.min(rawLeads.length, maxLeads));
 
   // STEP 3: AI batch scoring — removes sellers, keeps only buyers
   logger.info('AI scoring START', { jobId: job.id, toScore: rawLeads.length });
@@ -870,15 +1017,18 @@ async function runProductDiscoveryScan(job, productInput, filters = {}, progress
     filtered: rawLeads.length - scoredLeads.length,
   });
 
-  if (progressCallback) await progressCallback(100, scoredLeads.length);
+  // Trim to exactly what the user requested — no more leads than maxLeads
+  const finalLeads = scoredLeads.slice(0, maxLeads);
+
+  if (progressCallback) await progressCallback(100, finalLeads.length);
 
   logger.info('Product scan DONE', {
     jobId:    job.id,
     strategy,
-    total:    scoredLeads.length,
+    total:    finalLeads.length,
   });
 
-  return { leads: scoredLeads, profile };
+  return { leads: finalLeads, profile };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
