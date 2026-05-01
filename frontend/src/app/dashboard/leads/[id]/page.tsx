@@ -1077,14 +1077,14 @@ export default function LeadDetailPage() {
                         value={emailData.body}
                         onChange={e => setEmailData({ ...emailData, body: e.target.value })} />
                     </div>
-                    <button className="btn-primary w-full justify-center" onClick={handleSend}
+                    {/* <button className="btn-primary w-full justify-center" onClick={handleSend}
                       disabled={sendLoading || !lead.contactEmail}>
                       {sendLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
                       Send Email
                     </button>
                     {!lead.contactEmail && (
                       <p className="text-xs text-center text-slate-600">Find a contact email first</p>
-                    )}
+                    )} */}
                   </>
                 ) : (
                   <button className="btn-ghost w-full justify-center text-xs"
