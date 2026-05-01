@@ -239,6 +239,8 @@ async function startProductScan(req, res) {
         targetRegion:  effectiveRegion,
         companySize, companyType, seniorityLevel,
         preferredContactChannel,
+        decisionMakers,   // user-selected buyer roles (e.g. "Head of HR", "CTO / CIO")
+        annualRevenue,    // user-selected revenue range
         numberOfLeads: Number(numberOfLeads) || 50,
       },
       Number(numberOfLeads) || 50,
@@ -459,6 +461,7 @@ async function processProductScan(jobId, orgId, productInput, filters = {}, maxL
           data:  { progress, leadsFound: count },
         });
       },
+      maxLeads,
     );
 
     const keywords = [profile?.productSummary || profile?.productName || productInput.productName || ''].filter(Boolean);
