@@ -240,4 +240,6 @@ export interface CreateActivityInput {
   outcome?: string;
   leadId?: string;
   opportunityId?: string;
+  activityDate?: string;
+  nextActionDate?: string;
 }

@@ -39,10 +39,17 @@ const activityColors: Record<string, string> = {
 export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   const queryClient = useQueryClient();
   const [isAddingActivity, setIsAddingActivity] = useState(false);
+  const getTomorrowDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  };
+
   const [newActivity, setNewActivity] = useState<CreateActivityInput>({
     type: "call",
     description: "",
     outcome: "",
+    nextActionDate: getTomorrowDate(),
     leadId,
     opportunityId,
   });
@@ -68,6 +75,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
         type: "call",
         description: "",
         outcome: "",
+        nextActionDate: getTomorrowDate(),
         leadId,
         opportunityId,
       });
@@ -83,7 +91,10 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
       toast.error("Description is required");
       return;
     }
-    createMutation.mutate(newActivity);
+    createMutation.mutate({
+      ...newActivity,
+      activityDate: new Date().toISOString(),
+    });
   };
 
   return (
@@ -136,6 +147,20 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 placeholder="Connected, Left VM..."
               />
             </div>
+          </div>
+
+          <div>
+            <label className="label text-xs">Next Action Date</label>
+            <input
+              type="date"
+              value={newActivity.nextActionDate || ""}
+              min={new Date().toISOString().split('T')[0]}
+              onChange={(e) =>
+                setNewActivity({ ...newActivity, nextActionDate: e.target.value })
+              }
+              className="input h-9 text-xs"
+              required
+            />
           </div>
 
           <div>
