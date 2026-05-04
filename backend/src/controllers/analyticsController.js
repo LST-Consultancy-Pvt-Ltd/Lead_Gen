@@ -451,37 +451,63 @@ async function getSalesDashboard(req, res) {
     const thirtyDaysAgo = new Date(_today());
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    const monthStart = new Date(_today());
+    monthStart.setDate(1);
+
     const [
       leadsToday,
       leadsThisWeek,
+      leadsThisMonth,
+      totalMyLeads,
       followUpsDueToday,
       overdueFollowUps,
       openOpportunitiesByStage,
       conversionRate,
+      myLeads,
+      statusGroups,
     ] = await Promise.all([
       _wLeadsToday(leadWhere),
       _wLeadsThisWeek(leadWhere),
+      prisma.lead.count({ where: { ...leadWhere, createdAt: { gte: monthStart } } }),
+      prisma.lead.count({ where: leadWhere }),
       _wFollowUpsDueToday(leadWhere, oppWhere),
       _wOverdueFollowUps(leadWhere, oppWhere),
       _wOpenOpportunitiesByStage(oppWhere),
       _wConversionRate(leadWhere, thirtyDaysAgo),
+      // myLeads[]: 10 most recent leads assigned to this exec
+      prisma.lead.findMany({
+        where: leadWhere,
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true, companyName: true, industry: true, location: true,
+          contactName: true, status: true, source: true, createdAt: true,
+        },
+      }),
+      prisma.lead.groupBy({ by: ['status'], where: leadWhere, _count: { _all: true } }),
     ]);
+
+    const statusBreakdown = Object.fromEntries(statusGroups.map((g) => [g.status, g._count._all]));
 
     return success(res, {
       leadsToday,
       leadsThisWeek,
+      leadsThisMonth,
+      totalMyLeads,
       followUpsDueToday,
       overdueFollowUps,
       openOpportunitiesByStage,
       conversionRateLast30Days: conversionRate,
+      myLeads,
+      statusBreakdown,
     });
   } catch (err) {
+    console.error('[getSalesDashboard]', err);
     return error(res, 'Failed to fetch sales dashboard', 500);
   }
 }
 
 /**
- * GET /api/analytics/dashboard/manager
  * Sales Manager — 8 widgets, full team scope, all filterable by date range.
  * Query params: ?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD&staleDays=7
  * Widgets: leadsByExecutive, conversionRateByExecutive, pipelineByStage,
@@ -490,9 +516,23 @@ async function getSalesDashboard(req, res) {
  */
 async function getManagerDashboard(req, res) {
   try {
-    const { orgId, userIds, leadWhere, oppWhere } = await _buildScope(req.user);
+    const { orgId, userIds: allUserIds, leadWhere: baseLead, oppWhere: baseOpp } = await _buildScope(req.user);
     const { from, to } = _parseDateRange(req.query);
     const staleDays = parseInt(req.query.staleDays, 10) || 7;
+
+    // Optional executive filter — must be a member of the manager's team
+    let userIds = allUserIds;
+    let leadWhere = baseLead;
+    let oppWhere = baseOpp;
+    if (req.query.executiveId) {
+      const execId = req.query.executiveId;
+      if (!allUserIds.includes(execId)) {
+        return error(res, 'Executive not in your team', 403);
+      }
+      userIds = [execId];
+      leadWhere = { ...baseLead, assignedToId: execId };
+      oppWhere = { ...baseOpp, assignedToId: execId };
+    }
 
     const [
       leadsByExecutive,
@@ -503,6 +543,7 @@ async function getManagerDashboard(req, res) {
       lossReasonBreakdown,
       revenueClosed,
       revenueForecast,
+      leadsCountByStatus,
     ] = await Promise.all([
       _wLeadsByExecutive(orgId, userIds, from, to),
       _wConversionRateByExecutive(orgId, userIds, from, to),
@@ -512,7 +553,14 @@ async function getManagerDashboard(req, res) {
       _wLossReasonBreakdown(oppWhere, from, to),
       _wRevenueClosed(oppWhere, from, to),
       _wRevenueForecast(oppWhere),
+      prisma.lead.groupBy({
+        by: ['status'],
+        where: { organizationId: orgId, assignedToId: { in: userIds }, createdAt: { gte: from, lte: to } },
+        _count: { _all: true },
+      }),
     ]);
+
+    const leadsStatusMap = Object.fromEntries(leadsCountByStatus.map((g) => [g.status, g._count._all]));
 
     return success(res, {
       leadsByExecutive,
@@ -523,8 +571,10 @@ async function getManagerDashboard(req, res) {
       lossReasonBreakdown,
       revenueClosed,
       revenueForecast,
+      leadsStatusMap,
     });
   } catch (err) {
+    console.error('[getManagerDashboard]', err);
     return error(res, 'Failed to fetch manager dashboard', 500);
   }
 }
@@ -538,9 +588,41 @@ async function getManagerDashboard(req, res) {
  */
 async function getCEODashboard(req, res) {
   try {
-    const { orgId, userIds, leadWhere, oppWhere } = await _buildScope(req.user);
+    const { orgId, userIds: allUserIds, leadWhere: baseLeadWhere, oppWhere: baseOppWhere } = await _buildScope(req.user);
     const { from, to } = _parseDateRange(req.query);
     const staleDays = parseInt(req.query.staleDays, 10) || 7;
+    const period = req.query.period || 'month'; // today | week | month | quarter
+
+    // Optional manager / executive filter — admin can scope the dashboard to a
+    // specific manager's team or a single executive within that team.
+    let userIds = allUserIds;
+    let leadWhere = baseLeadWhere;
+    let oppWhere = baseOppWhere;
+
+    if (req.query.managerId) {
+      const mgrId = req.query.managerId;
+      const teamMembers = await prisma.user.findMany({
+        where: { managerId: mgrId, organizationId: orgId },
+        select: { id: true },
+      });
+      const execIds = teamMembers.map((m) => m.id);
+      userIds = [mgrId, ...execIds];
+      leadWhere = { organizationId: orgId, assignedToId: { in: userIds } };
+      oppWhere = { organizationId: orgId, assignedToId: { in: userIds } };
+
+      if (req.query.executiveId) {
+        const execId = req.query.executiveId;
+        if (!execIds.includes(execId)) {
+          return error(res, "Executive not in this manager's team", 403);
+        }
+        userIds = [execId];
+        leadWhere = { organizationId: orgId, assignedToId: execId };
+        oppWhere = { organizationId: orgId, assignedToId: execId };
+      }
+    }
+
+    // Date-scoped where clause — used for KPIs and breakdowns
+    const leadWhereScoped = { ...leadWhere, createdAt: { gte: from, lte: to } };
 
     const [
       leadsByExecutive,
@@ -553,6 +635,9 @@ async function getCEODashboard(req, res) {
       revenueForecast,
       totalActiveUsers,
       recentAuditLogs,
+      totalLeads,
+      leadsPeriod,
+      leadSourceGroups,
     ] = await Promise.all([
       _wLeadsByExecutive(orgId, userIds, from, to),
       _wConversionRateByExecutive(orgId, userIds, from, to),
@@ -572,7 +657,83 @@ async function getCEODashboard(req, res) {
           changedBy: { select: { id: true, name: true, email: true } },
         },
       }),
+      // all-time total (scope only, no date filter) — for the "Total leads" KPI card
+      prisma.lead.count({ where: leadWhere }),
+      // period-scoped count — changes with the period dropdown
+      prisma.lead.count({ where: leadWhereScoped }),
+      // lead source breakdown scoped to the selected period
+      prisma.lead.groupBy({ by: ['source'], where: leadWhereScoped, _count: { _all: true } }),
     ]);
+
+    // ── leadsOverTime: granularity depends on the selected period ────────────
+    let leadsOverTime;
+    if (period === 'today') {
+      // 24 hourly buckets
+      leadsOverTime = await Promise.all(
+        Array.from({ length: 24 }, (_, h) => {
+          const start = new Date(from);
+          start.setHours(h, 0, 0, 0);
+          const end = new Date(from);
+          end.setHours(h + 1, 0, 0, 0);
+          return prisma.lead
+            .count({ where: { ...leadWhere, createdAt: { gte: start, lt: end } } })
+            .then((count) => ({ month: `${String(h).padStart(2, '0')}:00`, year: from.getFullYear(), count }));
+        })
+      );
+    } else if (period === 'week') {
+      // 7 daily buckets starting from `from`
+      leadsOverTime = await Promise.all(
+        Array.from({ length: 7 }, (_, i) => {
+          const start = new Date(from);
+          start.setDate(from.getDate() + i);
+          const end = new Date(start);
+          end.setDate(start.getDate() + 1);
+          return prisma.lead
+            .count({ where: { ...leadWhere, createdAt: { gte: start, lt: end } } })
+            .then((count) => ({
+              month: start.toLocaleString('default', { weekday: 'short' }),
+              year: start.getFullYear(),
+              count,
+            }));
+        })
+      );
+    } else if (period === 'quarter') {
+      // 3 monthly buckets for the quarter
+      leadsOverTime = await Promise.all(
+        Array.from({ length: 3 }, (_, i) => {
+          const start = new Date(from.getFullYear(), from.getMonth() + i, 1);
+          const end = new Date(from.getFullYear(), from.getMonth() + i + 1, 1);
+          return prisma.lead
+            .count({ where: { ...leadWhere, createdAt: { gte: start, lt: end } } })
+            .then((count) => ({
+              month: start.toLocaleString('default', { month: 'short' }),
+              year: start.getFullYear(),
+              count,
+            }));
+        })
+      );
+    } else {
+      // month (default): daily buckets for each day of the selected month
+      const daysInMonth = new Date(from.getFullYear(), from.getMonth() + 1, 0).getDate();
+      leadsOverTime = await Promise.all(
+        Array.from({ length: daysInMonth }, (_, i) => {
+          const start = new Date(from.getFullYear(), from.getMonth(), i + 1);
+          const end = new Date(from.getFullYear(), from.getMonth(), i + 2);
+          return prisma.lead
+            .count({ where: { ...leadWhere, createdAt: { gte: start, lt: end } } })
+            .then((count) => ({
+              month: String(i + 1),
+              year: start.getFullYear(),
+              count,
+            }));
+        })
+      );
+    }
+
+    const leadSourceBreakdown = leadSourceGroups.map((g) => ({
+      type: g.source || 'manual',
+      count: g._count._all,
+    }));
 
     return success(res, {
       leadsByExecutive,
@@ -583,6 +744,8 @@ async function getCEODashboard(req, res) {
       lossReasonBreakdown,
       revenueClosed,
       revenueForecast,
+      leadsOverTime,
+      kpis: { totalLeads, leadsPeriod, leadSourceBreakdown },
       admin: {
         totalActiveUsers,
         recentAuditLogs,
