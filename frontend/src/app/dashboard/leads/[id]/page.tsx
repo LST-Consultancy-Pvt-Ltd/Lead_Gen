@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { leadsApi, contactsApi } from '../../../../lib/api';
+import { leadsApi, contactsApi, dropdownsApi } from '../../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner } from '../../../../components/ui';
 import { ActivitiesList } from '../../../../components/crm/ActivitiesList';
 import { RoleGuard } from '../../../../components/common/RoleGuard';
@@ -191,7 +191,13 @@ export default function LeadDetailPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['lead', id],
     queryFn:  () => leadsApi.get(id).then(r => r.data.data),
-    staleTime: 30000,
+    staleTime: 0,
+  });
+
+  const { data: statusOptions } = useQuery({
+    queryKey: ['dropdowns', 'lead_status'],
+    queryFn: () => dropdownsApi.listByCategory('lead_status').then(r => r.data?.data || r.data || []),
+    staleTime: 0,
   });
 
   const lead: any = data;
@@ -280,7 +286,7 @@ export default function LeadDetailPage() {
       if (Array.isArray(d?.data)) return d.data;
       return [];
     }),
-    staleTime: 30000,
+    staleTime: 5000,
   });
   const savedContacts: any[] = contactsData ?? [];
 
@@ -516,12 +522,11 @@ export default function LeadDetailPage() {
                 value={editData.status || ''}
                 onChange={(e) => setEditData((d: any) => ({ ...d, status: e.target.value }))}
               >
-                <option value="new">New</option>
-                <option value="contacted">Contacted</option>
-                <option value="replied">Replied</option>
-                <option value="meeting_booked">Meeting Booked</option>
-                <option value="qualified">Qualified</option>
-                <option value="disqualified">Disqualified</option>
+                {(statusOptions && statusOptions.length > 0 ? statusOptions : []).map((opt: any) => (
+                  <option key={opt.id} value={opt.value.toLowerCase().replace(/\s+/g, '_')}>
+                    {opt.value}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
