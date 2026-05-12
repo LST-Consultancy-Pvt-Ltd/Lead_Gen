@@ -339,8 +339,11 @@ export default function LeadsPage() {
                     Product / Position
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Next Follow-up
+                    Source URL
                   </th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    Next Follow-up
+                  </th>                  
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Actions
                   </th>
@@ -395,6 +398,24 @@ export default function LeadsPage() {
                         <span className="text-xs text-slate-400">—</span>
                       )}
                     </td>
+
+                    {/* Source URL */}
+                    <td className="px-4 py-3">
+                      {l.sourceUrl ? (
+                        <a
+                          href={l.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline max-w-[140px] truncate"
+                          title={l.sourceUrl}
+                        >
+                          View Source
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+
                     <td className="px-4 py-3">
                       {(() => {
                         const info = getFollowUpInfo(l.followUpDate);

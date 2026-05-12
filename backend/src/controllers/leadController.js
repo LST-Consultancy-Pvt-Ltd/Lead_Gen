@@ -393,6 +393,7 @@ async function exportLeads(req, res) {
         status:       l.status,
         intentSignals: (l.intentSignals||[]).map(s=>s.text||s.type||JSON.stringify(s)).join('; '),
         source:       l.source || '',
+        sourceUrl:    l.sourceUrl || '',
         createdAt:    formatDate(l.createdAt),
       };
 
@@ -426,7 +427,7 @@ async function exportLeads(req, res) {
     const parser = new Parser({ fields: [
       'companyName','domainName','website','industry','location','companySize','companyPhone',
       'contactType','contactName','contactTitle','contactEmail','contactPhone','contactLinkedin',
-      'linkedinUrl','leadScore','intentLevel','status','intentSignals','source','createdAt',
+      'linkedinUrl','leadScore','intentLevel','status','intentSignals','source','sourceUrl','createdAt',
     ]});
     const csv = parser.parse(rows);
     res.setHeader('Content-Type','text/csv');
