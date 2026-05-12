@@ -296,9 +296,9 @@ export default function LeadsPage() {
             // }
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
                 <tr className="border-b border-slate-200 dark:border-white/[0.06]">
                   {permissions.canReassignLead && (
                     <th className="px-4 py-3 w-8">
