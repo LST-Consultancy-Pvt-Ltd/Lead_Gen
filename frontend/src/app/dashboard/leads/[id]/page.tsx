@@ -998,6 +998,13 @@ export default function LeadDetailPage() {
           <div className="card p-5">
             <h2 className="section-title mb-3">Status</h2>
             <Badge color={statusColors[lead.status] ?? 'gray'}>{lead.status?.replace('_', ' ')}</Badge>
+            {lead.assignedTo?.name && (
+              <div className="flex items-center gap-1.5 mt-2">
+                <UserCog size={12} className="text-slate-500 flex-shrink-0" />
+                <span className="text-xs text-slate-500">Assigned to:</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-200">{lead.assignedTo.name}</span>
+              </div>
+            )}
             {lead.source && (
               <p className="text-xs text-slate-600 mt-2">Source: {lead.source}</p>
             )}
