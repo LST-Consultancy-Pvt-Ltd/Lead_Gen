@@ -578,7 +578,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
                 type="text"
                 {...register("website")}
                 className="input"
-                placeholder="facebook.com"
+                placeholder="www.abc.com"
               />
               {errors.website && <p className="text-xs text-red-400 mt-1">{errors.website.message}</p>}
             </div>

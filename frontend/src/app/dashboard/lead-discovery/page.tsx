@@ -519,8 +519,8 @@ export default function LeadDiscoveryPage() {
             className="input text-sm pr-8 appearance-none cursor-pointer min-w-[300px] font-medium"
           >
             <option value="">Select discovery mode...</option>
-            <option value="service">Find Clients for Our Resources </option>
-            <option value="product">Find Customers for Our Product </option>
+            <option value="service">Find Clients for Services </option>
+            <option value="product">Find Customers for Product </option>
           </select>
           <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
         </div>
@@ -543,23 +543,31 @@ export default function LeadDiscoveryPage() {
 
             <SectionCard title="Position Details" subtitle="Mandatory fields — fill all to enable scanning">
               <div className="pt-4 space-y-4">
-                <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                {/* <p className="text-[10px] text-slate-500 flex items-center gap-1">
                   <span className="text-red-400 font-bold">*</span> Required fields
-                </p>
+                </p> */}
 
-                <div>
+                {/* <div>
                   <MandatoryLabel>Position Title / Job Profile</MandatoryLabel>
                   <input className="input text-sm"
                     placeholder="e.g. NetSuite Consultant, Salesforce Admin, SAP Developer"
                     value={positionTitle} onChange={e => setPositionTitle(e.target.value)} />
                   <p className="text-xs text-slate-600 mt-1.5">Be specific — "NetSuite Consultant" beats "ERP"</p>
+                </div> */}
+
+                <div>
+                  <MandatoryLabel>Description</MandatoryLabel>
+                  <textarea className="input text-sm resize-none w-full" rows={4}
+                    placeholder="Enter a detailed description for quality leads"
+                    value={description} onChange={e => setDescription(e.target.value)} />
                 </div>
 
                 <div>
                   <MandatoryLabel>Geography / Region</MandatoryLabel>
                   <input className="input text-sm" placeholder="e.g. USA, India, UK, Europe"
                     value={geography} onChange={e => setGeography(e.target.value)} />
-                </div>
+                </div>Company Information
+
 
                 <div>
                   <MandatoryLabel>Skills / Key Requirements</MandatoryLabel>
@@ -568,12 +576,7 @@ export default function LeadDiscoveryPage() {
                     value={skillsRequired} onChange={e => setSkillsRequired(e.target.value)} />
                 </div>
 
-                <div>
-                  <MandatoryLabel>Description</MandatoryLabel>
-                  <textarea className="input text-sm resize-none w-full" rows={4}
-                    placeholder="Please enter a detailed description"
-                    value={description} onChange={e => setDescription(e.target.value)} />
-                </div>
+                
               </div>
             </SectionCard>
 

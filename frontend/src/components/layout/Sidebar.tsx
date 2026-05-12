@@ -24,7 +24,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
     { href: '/dashboard/opportunities',  label: 'Opportunities',  icon: DollarSign,      show: true },
     { href: '/dashboard/activities',     label: 'Activities',     icon: CheckSquare,     show: true },
     { href: '/dashboard/leads',          label: 'Leads',      icon: Users,           show: true },
-    { href: '/dashboard/intent-signals', label: 'Intent Signals', icon: Zap,             show: canViewTeam },
+    // { href: '/dashboard/intent-signals', label: 'Intent Signals', icon: Zap,             show: canViewTeam },
     // { href: '/dashboard/campaigns',      label: 'Campaigns',      icon: Megaphone,       show: isAdmin },
     // { href: '/dashboard/analytics',      label: 'Analytics',      icon: BarChart3,       show: canViewTeam },
     { href: '/dashboard/team',           label: 'Team',           icon: UserCog,         show: canViewTeam },
