@@ -216,9 +216,15 @@ export default function LeadsPage() {
             </div>
           )}
 
-          {permissions.canReassignLead && selectedLeads.size > 0 && (
-            <button className="btn-ghost" onClick={() => setAssignOpen(true)}>
-              <UserCog size={14} /> Assign ({selectedLeads.size})
+          {permissions.canReassignLead && (
+            <button
+              className="btn-ghost"
+              onClick={() => selectedLeads.size > 0 && setAssignOpen(true)}
+              disabled={selectedLeads.size === 0}
+              title={selectedLeads.size === 0 ? 'Select leads to assign' : `Assign ${selectedLeads.size} lead(s)`}
+            >
+              <UserCog size={14} />
+              {selectedLeads.size > 0 ? `Assign (${selectedLeads.size})` : 'Assign'}
             </button>
           )}
           {total > 0 && (
