@@ -303,7 +303,6 @@ export default function LeadDiscoveryPage() {
   }
 
   const positionsMandatoryFilled =
-    positionTitle.trim().length > 0 &&
     description.trim().length > 0 &&
     geography.trim().length > 0 &&
     skillsRequired.trim().length > 0;
@@ -671,7 +670,6 @@ export default function LeadDiscoveryPage() {
                   <div className="w-full bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left space-y-1">
                     <p className="text-xs font-semibold text-amber-400 mb-1.5">Complete mandatory fields to scan:</p>
                     {!description.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Description</p>}
-                    {!positionTitle.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Position Title</p>}
                     {!geography.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Geography</p>}
                     {!skillsRequired.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Skills / Key Requirements</p>}
                   </div>
