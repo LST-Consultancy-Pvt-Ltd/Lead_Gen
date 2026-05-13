@@ -1,7 +1,8 @@
 'use client';
+import React from 'react';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { leadsApi, usersApi, dropdownsApi } from '../../../lib/api';
+import { leadsApi, usersApi, dropdownsApi, api } from '../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner, EmptyState } from '../../../components/ui';
 import { CreateLeadModal } from '../../../components/crm/CreateLeadModal';
 import { RoleGuard } from '../../../components/common/RoleGuard';
@@ -9,7 +10,7 @@ import { usePermissions } from '../../../lib/rbac';
 import { usePermissions as useAuthPermissions } from '../../../store/authStore';
 import { useAuthStore } from '../../../store/authStore';
 import { getInitials, downloadBlob, statusColors } from '../../../lib/utils';
-import { Users, Plus, Download, Search, Trash2, Edit2, UserCog, X, Loader2, Clock, CalendarDays, Lock } from 'lucide-react';
+import { Users, Plus, Download, Search, Trash2, Edit2, UserCog, X, Loader2, Clock, CalendarDays, Lock, Upload, CheckCircle2 } from 'lucide-react';
 import { isToday, isPast, isTomorrow, format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -24,6 +25,11 @@ export default function LeadsPage() {
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignToId, setAssignToId] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
 
   const permissions = usePermissions();
   const authPerms = useAuthPermissions();
@@ -112,7 +118,7 @@ export default function LeadsPage() {
     try {
       const ids = selectedLeads.size > 0 ? Array.from(selectedLeads) : undefined;
       const params: any = {};
-      
+
       // If specific leads are selected, export only those
       if (ids && ids.length > 0) {
         params.ids = ids.join(',');
@@ -120,7 +126,7 @@ export default function LeadsPage() {
         // Otherwise, export with current filters
         if (search) params.search = search;
         if (statusFilter) params.status = statusFilter;
-        
+
         // Apply role-based filters
         if (!permissions.canViewAllLeads) {
           params.assignedToMe = true;
@@ -130,13 +136,86 @@ export default function LeadsPage() {
           params.assignedTo = ownerFilter;
         }
       }
-      
+
       const resp = await leadsApi.export(params);
       downloadBlob(resp.data, 'leads.csv');
       toast.success('CSV exported');
     } catch {
       toast.error('Export failed');
     }
+  }
+
+  async function handleImport() {
+    if (!importFile) return;
+    setImporting(true);
+    setImportErrors([]);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      const resp = await api.post('/import/leads/excel', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success(
+        `${resp.data.successRows} lead${resp.data.successRows !== 1 ? 's' : ''} imported successfully`
+      );
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setImportOpen(false);
+      setImportFile(null);
+      setImportErrors([]);
+    } catch (err: any) {
+      const errData = err?.response?.data;
+      if (Array.isArray(errData?.errors) && errData.errors.length > 0) {
+        setImportErrors(errData.errors);
+      } else {
+        toast.error(errData?.message || 'Import failed');
+      }
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handleDownloadTemplate() {
+    try {
+      const resp = await api.get('/import/template/excel', { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([resp.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'crm-import-template.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to download template');
+    }
+  }
+
+  function handleFileDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls') {
+      toast.error('Only Excel files (.xlsx, .xls) are allowed');
+      return;
+    }
+    setImportFile(file);
+    setImportErrors([]);
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls') {
+      toast.error('Only Excel files (.xlsx, .xls) are allowed');
+      e.target.value = '';
+      return;
+    }
+    setImportFile(file);
+    setImportErrors([]);
   }
 
   function handleDelete(id: string) {
@@ -208,7 +287,7 @@ export default function LeadsPage() {
                     </span>
                 </div>
                 <div className="h-1.5 w-32 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div 
+                    <div
                         className={`h-full rounded-full transition-all duration-500 ${quota.used >= quota.quota ? 'bg-red-500' : 'bg-blue-500'}`}
                         style={{ width: `${Math.min(100, Math.max(0, (quota.used / quota.quota) * 100))}%` }}
                     />
@@ -234,9 +313,12 @@ export default function LeadsPage() {
               </button>
             </RoleGuard>
           )}
+          <button className="btn-ghost" onClick={() => setImportOpen(true)}>
+            <Upload size={14} /> Import Excel
+          </button>
           <RoleGuard permission="canCreateLead">
-            <button 
-                className="btn-primary" 
+            <button
+                className="btn-primary"
                 onClick={() => setIsCreateModalOpen(true)}
                 disabled={quota?.used >= quota?.quota}
                 title={quota?.used >= quota?.quota ? 'Lead quota limit reached' : ''}
@@ -290,8 +372,8 @@ export default function LeadsPage() {
           <EmptyState
             icon={Users}
             title="No leads found"
-            description={permissions.canViewAllLeads ? 
-              "No leads match your current filters" : 
+            description={permissions.canViewAllLeads ?
+              "No leads match your current filters" :
               "You don't have any leads assigned yet. Contact your manager."}
             // action={
             //   permissions.canCreateLead ? (
@@ -343,7 +425,7 @@ export default function LeadsPage() {
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Next Follow-up
-                  </th>                  
+                  </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Actions
                   </th>
@@ -525,6 +607,134 @@ export default function LeadsPage() {
                 Assign
               </button>
               <button className="btn-ghost" onClick={() => setAssignOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Excel Modal */}
+      {importOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => { setImportOpen(false); setImportFile(null); setImportErrors([]); }}
+          />
+          <div
+            className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  Import Leads from Excel
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Upload .xlsx or .xls file</p>
+              </div>
+              <button
+                type="button"
+                title="Close"
+                onClick={() => { setImportOpen(false); setImportFile(null); setImportErrors([]); }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-0.5"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Download Template */}
+            <button
+              type="button"
+              className="btn-ghost w-full mb-4"
+              onClick={handleDownloadTemplate}
+            >
+              <Download size={14} /> Download Excel Template
+            </button>
+
+            {/* Drag & Drop Zone */}
+            <div
+              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                isDragging
+                  ? 'border-blue-400 bg-blue-500/10'
+                  : importFile
+                  ? 'border-emerald-400 bg-emerald-500/10'
+                  : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'
+              }`}
+              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleFileDrop}
+              onClick={() => document.getElementById('excel-file-input')?.click()}
+            >
+              <input
+                id="excel-file-input"
+                type="file"
+                accept=".xlsx,.xls"
+                aria-label="Upload Excel file"
+                title="Upload Excel file"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              {importFile ? (
+                <>
+                  <CheckCircle2 size={28} className="mx-auto mb-2 text-emerald-400" />
+                  <p className="text-sm font-medium text-emerald-400 break-all">{importFile.name}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {(importFile.size / 1024).toFixed(0)} KB
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Upload size={28} className="mx-auto mb-2 text-slate-400" />
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Drag &amp; drop Excel file here
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">or click to browse</p>
+                </>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-500 mt-2 text-center">
+              Only .xlsx and .xls files accepted · Max 10MB
+            </p>
+
+            {/* Error list */}
+            {importErrors.length > 0 && (
+              <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 max-h-36 overflow-y-auto">
+                <p className="text-xs font-semibold text-red-400 mb-1.5">
+                  Import failed — fix these errors:
+                </p>
+                <ul className="space-y-0.5">
+                  {importErrors.map((msg, i) => (
+                    <li key={i} className="text-xs text-red-400">• {msg}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                className="btn-primary flex-1"
+                disabled={!importFile || importing}
+                onClick={handleImport}
+              >
+                {importing ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Importing...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={14} /> Import Leads
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => { setImportOpen(false); setImportFile(null); setImportErrors([]); }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

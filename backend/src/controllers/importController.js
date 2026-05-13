@@ -5,12 +5,15 @@
 
 const ExcelJS = require('exceljs');
 const { Readable } = require('stream');
+const path = require('path');
 const prisma = require('../utils/prisma');
 const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
 const { getTeamMemberIds } = require('../middleware/rbac');
 const dashboardEvents = require('../utils/dashboardEvents');
 const { checkLeadQuota, incrementLeadUsage } = require('../utils/leadQuota');
+const { validateExcelFile } = require('../services/excelValidationService');
+const { generateTemplate } = require('../services/excelTemplateService');
 
 const ALLOWED_MIME_TYPES = [
   'text/csv',
@@ -253,4 +256,127 @@ async function getImportLogs(req, res) {
   }
 }
 
-module.exports = { importLeads, getImportLogs };
+/**
+ * POST /api/import/leads/excel
+ * Upload a structured Excel file (.xlsx/.xls) and bulk-create leads.
+ * Columns: Company, Contact, Assign To, Score, Status, Product / Position,
+ *          Source URL, Next Follow-up
+ * Access: any authenticated user (no admin required)
+ */
+async function importLeadsFromExcel(req, res) {
+  if (!req.file) return error(res, 'No file uploaded', 400);
+
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  if (ext !== '.xlsx' && ext !== '.xls') {
+    return error(res, 'Only Excel files (.xlsx, .xls) are allowed', 400);
+  }
+
+  try {
+    const validation = await validateExcelFile(req.file.buffer);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Excel validation failed',
+        errors: validation.errors,
+      });
+    }
+
+    const { records } = validation;
+    const organizationId = req.user.organizationId;
+
+    // ── Assign To lookup — one query for all unique names ──────────────────
+    const uniqueAssignToValues = [
+      ...new Set(
+        records
+          .map(r => String(r['Assign To'] ?? '').trim())
+          .filter(v => v !== '')
+      ),
+    ];
+
+    const userMap = new Map();
+    if (uniqueAssignToValues.length > 0) {
+      const matchedUsers = await prisma.user.findMany({
+        where: {
+          name: { in: uniqueAssignToValues },
+          organizationId,
+        },
+        select: { id: true, name: true },
+      });
+      matchedUsers.forEach(u => userMap.set(u.name, u.id));
+    }
+
+    // ── Map records to Lead model objects ──────────────────────────────────
+    const leadsData = records.map(record => {
+      const followUpRaw = record['Next Follow-up'];
+      const followUpDate =
+        followUpRaw && !isNaN(new Date(followUpRaw))
+          ? new Date(followUpRaw)
+          : null;
+
+      return {
+        companyName:    String(record['Company']).trim(),
+        contactName:    record['Contact']?.toString().trim() || null,
+        assignedToId:   userMap.get(record['Assign To']?.toString().trim()) || null,
+        leadScore:      parseInt(record['Score'], 10) || 0,
+        status:         record['Status']?.toString().trim().toLowerCase() || 'new',
+        subSource:      record['Product / Position']?.toString().trim() || null,
+        sourceUrl:      record['Source URL']?.toString().trim() || null,
+        followUpDate,
+        organizationId,
+        createdById:    req.user.id,
+        source:         'Excel Import',
+      };
+    });
+
+    // ── Bulk insert ────────────────────────────────────────────────────────
+    const createResult = await prisma.lead.createMany({
+      data: leadsData,
+      skipDuplicates: false,
+    });
+
+    logger.info('Excel import completed', {
+      userId: req.user.id,
+      orgId: organizationId,
+      fileName: req.file.originalname,
+      total: leadsData.length,
+      inserted: createResult.count,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'File imported successfully',
+      totalRecords: records.length,
+      successRows: createResult.count,
+      failedRows: records.length - createResult.count,
+      data: [],
+    });
+  } catch (err) {
+    logger.error('importLeadsFromExcel error', { error: err.message, userId: req.user.id });
+    return error(res, 'Import failed', 500);
+  }
+}
+
+/**
+ * GET /api/import/template/excel
+ * Download the Excel import template with correct column headers and a sample row.
+ * Access: any authenticated user (no admin required)
+ */
+async function downloadExcelTemplate(req, res) {
+  try {
+    const buffer = generateTemplate();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="crm-import-template.xlsx"'
+    );
+    return res.send(buffer);
+  } catch (err) {
+    logger.error('downloadExcelTemplate error', { error: err.message, userId: req.user.id });
+    return error(res, 'Failed to generate template', 500);
+  }
+}
+
+module.exports = { importLeads, getImportLogs, importLeadsFromExcel, downloadExcelTemplate };
