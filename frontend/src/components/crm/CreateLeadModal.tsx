@@ -96,7 +96,6 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
   const { canReassignLead, canManageDropdowns } = usePermissions();
   const [utmOpen, setUtmOpen] = useState(false);
-
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
     payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: string };
@@ -164,7 +163,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     utmMedium: yup.string().optional(),
     utmCampaign: yup.string().optional(),
     utmContent: yup.string().optional(),
-    leadType: yup.string().optional(),
+    leadType: yup.string().required("Lead type is required"),
   }), []);
 
   const {
@@ -411,7 +410,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       const payload = response?.data?.data ?? response?.data ?? {};
       const possibleDuplicate = payload?.possibleDuplicate;
       if (possibleDuplicate) {
-        setDuplicateConfirm((prev) => prev ?? {
+        setDuplicateConfirm({
           payload: (pendingPayloadRef.current || {}) as any,
           companyName: possibleDuplicate.companyName || pendingPayloadRef.current?.companyName || "Unknown company",
           existingId: possibleDuplicate.id,
@@ -457,12 +456,6 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
     pendingPayloadRef.current = cleanedData;
 
-    // Preserve payload for duplicate confirmation follow-up.
-    setDuplicateConfirm({
-      payload: cleanedData,
-      companyName: formData.companyName,
-    });
-
     createMutation.mutate(cleanedData);
   };
 
@@ -472,6 +465,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       formErrors?.contactName?.message ||
       formErrors?.contactEmail?.message ||
       formErrors?.contactPhone?.message ||
+      formErrors?.leadType?.message ||
       formErrors?.status?.message ||
       formErrors?.requirementType?.message ||
       formErrors?.budgetRange?.message ||
@@ -519,12 +513,13 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
           </div>
 
           <div>
-            <label className="label">Lead Type</label>
+            <label className="label">Lead Type <span className="text-red-400">*</span></label>
             <select {...register("leadType")} title="Lead Type" className="input">
               <option value="">Select lead type...</option>
-              <option value="position">Position Lead</option>
-              <option value="product">Product Lead</option>
+              <option value="position">Services</option>
+              <option value="product">Product</option>
             </select>
+            {errors.leadType && <p className="text-xs text-red-400 mt-1">{errors.leadType.message}</p>}
           </div>
 
           <div>

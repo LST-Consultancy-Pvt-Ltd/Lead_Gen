@@ -346,6 +346,7 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       source:      dl.source,
       sourceUrl:   dl.sourceUrl,
       subSource:   dl.subSource || null,
+      leadType:    dl.leadType  || null,
     },
   });
 
@@ -403,6 +404,7 @@ async function processScan(jobId, orgId, services, filters = {}, decisionMakerRo
     for (const dl of discovered) {
       try {
         dl.subSource = 'position';
+        dl.leadType  = 'position';
         if (savedIds.length >= maxLeads) break;
         const id = await saveDiscoveredLead(orgId, dl, services);
         if (id) {
@@ -471,6 +473,7 @@ async function processProductScan(jobId, orgId, productInput, filters = {}, maxL
     for (const dl of discovered) {
       try {
         dl.subSource = 'product';
+        dl.leadType  = 'product';
         if (savedIds.length >= maxLeads) break;
         const id = await saveDiscoveredLead(orgId, dl, keywords);
         if (id) savedIds.push(id);

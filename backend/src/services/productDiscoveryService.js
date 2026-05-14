@@ -365,6 +365,13 @@ function empSize(n = 0) {
   return '';
 }
 
+function buildSourceUrl(org) {
+  if (org.website_url) return org.website_url;
+  if (org.primary_domain) return `https://${org.primary_domain}`;
+  if (org.linkedin_url)   return org.linkedin_url;
+  return '';
+}
+
 function personToLead(person, profile) {
   const org = person.organization || {};
   if (!org.name) return null;
@@ -388,7 +395,7 @@ function personToLead(person, profile) {
     contactLinkedin:   person.linkedin_url || null,
     companyLinkedinUrl: org.linkedin_url   || null,
     source:    'Apollo People Search',
-    sourceUrl: org.website_url || '',
+    sourceUrl: buildSourceUrl(org),
     _rawDescription: org.short_description || '',
   };
 }
@@ -414,7 +421,7 @@ function orgToLead(org, profile) {
     contactLinkedin:   null,
     companyLinkedinUrl: org.linkedin_url   || null,
     source:    'Apollo Company Search',
-    sourceUrl: org.website_url || '',
+    sourceUrl: buildSourceUrl(org),
     _rawDescription: org.short_description || '',
   };
 }

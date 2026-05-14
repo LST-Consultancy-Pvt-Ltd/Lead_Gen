@@ -418,7 +418,7 @@ export default function LeadsPage() {
                     Status
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Product / Position
+                    Product / Services
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Source URL
@@ -472,10 +472,10 @@ export default function LeadsPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      {l.leadType === 'product' ? (
+                      {(l.leadType === 'product' || l.subSource === 'product') ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20">Product</span>
-                      ) : l.leadType === 'position' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Position</span>
+                      ) : (l.leadType === 'position' || l.subSource === 'position') ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Services</span>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
@@ -483,19 +483,22 @@ export default function LeadsPage() {
 
                     {/* Source URL */}
                     <td className="px-4 py-3">
-                      {l.sourceUrl ? (
-                        <a
-                          href={l.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline max-w-[140px] truncate"
-                          title={l.sourceUrl}
-                        >
-                          View Source
-                        </a>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
+                      {(() => {
+                        const url = l.sourceUrl || (l.website ? (l.website.startsWith('http') ? l.website : `https://${l.website}`) : '');
+                        return url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline max-w-[140px] truncate"
+                            title={url}
+                          >
+                            View Source
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        );
+                      })()}
                     </td>
 
                     <td className="px-4 py-3">
