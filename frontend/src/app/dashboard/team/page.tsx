@@ -296,7 +296,7 @@ export default function TeamPage() {
               </colgroup>
               <thead>
                 <tr className="border-b border-slate-200 dark:border-white/[0.06]">
-                  {['User', 'Role', 'Status', 'Leads', 'Last Login', ...(isReadOnly ? [] : ['Actions'])].map(h => (
+                  {['User', 'Role', 'Status', /* 'Leads', */ 'Last Login', ...(isReadOnly ? [] : ['Actions'])].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -320,7 +320,7 @@ export default function TeamPage() {
                         <span className={`text-xs ${m.isActive ? 'text-emerald-400' : 'text-slate-500'}`}>{m.isActive ? 'Active' : 'Inactive'}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-400">{m._count?.assignedLeads ?? 0}</td>
+                    {/* <td className="px-4 py-3 text-sm text-slate-400">{m._count?.assignedLeads ?? 0}</td> */}
                     <td className="px-4 py-3 text-xs text-slate-500">{m.lastLoginAt ? timeAgo(m.lastLoginAt) : 'Never'}</td>
                     {!isReadOnly && (
                       <td className="px-4 py-3">
