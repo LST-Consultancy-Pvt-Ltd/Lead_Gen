@@ -575,8 +575,9 @@ async function upsertServices(req, res) {
     const created = await prisma.service.createMany({
       data: services.map(s => ({
         organizationId: req.user.organizationId,
-        name:     typeof s === 'string' ? s     : s.name,
-        keywords: typeof s === 'string' ? [s.toLowerCase()] : (s.keywords || [s.name.toLowerCase()]),
+        name:      typeof s === 'string' ? s          : s.name,
+        keywords:  typeof s === 'string' ? [s.toLowerCase()] : (s.keywords || [s.name.toLowerCase()]),
+        isActive:  true,
       })),
     });
     return success(res, { count: created.count }, 'Services updated');
