@@ -297,7 +297,7 @@ export default function LeadsPage() {
 
           {permissions.canReassignLead && (
             <button
-              className="btn-ghost"
+              className={`btn-ghost transition-opacity ${selectedLeads.size === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
               onClick={() => selectedLeads.size > 0 && setAssignOpen(true)}
               disabled={selectedLeads.size === 0}
               title={selectedLeads.size === 0 ? 'Select leads to assign' : `Assign ${selectedLeads.size} lead(s)`}
