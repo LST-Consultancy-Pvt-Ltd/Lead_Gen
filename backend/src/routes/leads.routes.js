@@ -36,9 +36,8 @@ const createLeadValidation = [
     .normalizeEmail(),
 
   body('companyName')
+    .optional({ checkFalsy: true })
     .trim()
-    .notEmpty()
-    .withMessage('Company name is required')
     .isLength({ min: 2, max: 200 })
     .withMessage('Company name must be between 2 and 200 characters'),
 

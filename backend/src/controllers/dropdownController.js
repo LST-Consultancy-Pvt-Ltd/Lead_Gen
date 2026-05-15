@@ -9,7 +9,7 @@ const logger = require("../utils/logger");
 
 const VALID_CATEGORIES = [
   // Shared / Leads module
-  "lead_source", "lead_status", "pipeline_stage", "loss_reason", "job_title", "location",
+  "lead_source", "lead_status", "lead_type", "pipeline_stage", "loss_reason", "job_title", "location",
   // Legacy shared (kept for backward compat)
   "industry", "company_size", "company_type", "decision_maker",
   "preferred_contact_channel", "seniority_level", "annual_revenue_range",
@@ -41,6 +41,7 @@ const DEFAULT_DROPDOWN_SEEDS = [
   { category: 'pipeline_stage', values: [
     'Lead', 'Qualified', 'Demo', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost',
   ]},
+  { category: 'lead_type', values: ['Services', 'Product'] },
   { category: 'loss_reason', values: [
     'Price too high', 'Chose competitor', 'No budget', 'No decision made',
     'Wrong fit', 'Timing not right', 'No response',
@@ -187,6 +188,7 @@ async function listByCategory(req, res) {
         value: true,
         displayOrder: true,
         isActive: true,
+        isDefault: true,
       },
     });
     return success(res, items);
@@ -210,6 +212,7 @@ async function listActive(req, res) {
         value: true,
         displayOrder: true,
         isActive: true,
+        isDefault: true,
       },
     });
     return success(res, items);
@@ -313,6 +316,7 @@ async function listAllCategories(req, res) {
         value: true,
         displayOrder: true,
         isActive: true,
+        isDefault: true,
         createdAt: true,
       },
     });
@@ -437,4 +441,33 @@ async function seedOrgDropdowns(req, res) {
   }
 }
 
-module.exports = { listByCategory, listActive, listDiscoveryDropdowns, listAllCategories, addValue, updateValue, deleteValue, seedDefaultDropdowns, seedOrgDropdowns };
+// PUT /dropdowns/:id/set-default
+async function setDefaultDropdown(req, res) {
+  try {
+    const { id } = req.params;
+    const orgId = req.user.organizationId;
+
+    const item = await prisma.dropdownConfig.findFirst({
+      where: { id, organizationId: orgId },
+    });
+    if (!item) return error(res, 'Dropdown value not found', 404);
+
+    await prisma.$transaction([
+      prisma.dropdownConfig.updateMany({
+        where: { organizationId: orgId, category: item.category },
+        data: { isDefault: false },
+      }),
+      prisma.dropdownConfig.update({
+        where: { id },
+        data: { isDefault: true },
+      }),
+    ]);
+
+    return success(res, { message: 'Default updated' });
+  } catch (err) {
+    logger.error('setDefaultDropdown error', { err: err.message });
+    return error(res, 'Failed to set default', 500);
+  }
+}
+
+module.exports = { listByCategory, listActive, listDiscoveryDropdowns, listAllCategories, addValue, updateValue, deleteValue, seedDefaultDropdowns, seedOrgDropdowns, setDefaultDropdown };

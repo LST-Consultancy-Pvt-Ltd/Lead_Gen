@@ -14,7 +14,8 @@ export function formatDate(date: string | Date, fmt = 'MMM d, yyyy') {
   return format(new Date(date), fmt);
 }
 
-export function getInitials(name: string) {
+export function getInitials(name: string | null | undefined) {
+  if (!name) return '?';
   return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 }
 

@@ -1,11 +1,11 @@
 "use client";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { leadsApi, usersApi, dropdownsApi } from "../../lib/api";
 import { Modal, Spinner, SearchableDropdown } from "../ui";
 import toast from "react-hot-toast";
 import type { CreateLeadInput } from "../../lib/types";
-import { PIPELINE_OPTIONS, LEAD_SOURCES } from "../../lib/types";
+import { LEAD_SOURCES } from "../../lib/types";
 import { usePermissions } from "../../lib/rbac";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -17,33 +17,7 @@ interface CreateLeadModalProps {
 }
 
 const STATIC_SOURCE_OPTIONS = [...LEAD_SOURCES];
-const STATIC_REQUIREMENT_TYPE_OPTIONS = [
-  "NetSuite Services",
-  "Salesforce Services",
-  "Custom Development",
-  "SaaS Product",
-  "Training",
-];
-
-const STATIC_BUDGET_RANGE_OPTIONS = [
-  "Less than $5,000",
-  "$5,000 - $20,000",
-  "$20,000 - $50,000",
-  "$50,000 - $1,00,000",
-  "Above $1,00,000",
-  "Not Disclosed",
-];
-
-const STATIC_TIMELINE_OPTIONS = [
-  "Immediate (within 1 month)",
-  "Short-term (1-3 months)",
-  "Mid-term (3-6 months)",
-  "Long-term (6+ months)",
-  "Exploring / No Timeline",
-];
-
 const STATIC_LEAD_STATUS_OPTIONS = ['hot', 'warm', 'cold', 'prospect', 'lost', 'won'];
-const STATIC_STATUS_OPTIONS = ['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified'];
 
 
 type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
@@ -61,6 +35,7 @@ type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
   temperature: string;
   disqualificationReason?: string;
   leadType?: string;
+  notes?: string;
 };
 
 const defaultValues: LeadFormData = {
@@ -74,7 +49,7 @@ const defaultValues: LeadFormData = {
   contactPhone: "",
   source: "",
   assignedToId: "",
-  status: "new",
+  status: "",
   pipeline: "",
   followUpDate: "",
   leadCost: "",
@@ -90,12 +65,12 @@ const defaultValues: LeadFormData = {
   temperature: "prospect",
   disqualificationReason: "",
   leadType: undefined,
+  notes: "",
 };
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
   const { canReassignLead, canManageDropdowns } = usePermissions();
-  const [utmOpen, setUtmOpen] = useState(false);
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
     payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: string };
@@ -104,7 +79,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   } | null>(null);
 
   const schema = useMemo(() => yup.object({
-    companyName: yup.string().trim().required("Company name is required"),
+    companyName: yup.string().trim().optional(),
     website: yup
       .string()
       .transform((value) => {
@@ -123,16 +98,16 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       .string()
       .trim()
       .email("Enter a valid email address")
-      .required("Email is required"),
+      .optional(),
     contactPhone: yup
       .string()
-      .transform((value) => (value ? value.trim() : value))
+      .transform((value) => (value && value.trim() !== '' ? value.trim() : undefined))
       .matches(
         /^[+]?[0-9\s\-().]{7,20}$/,
         "Enter a valid phone number (7–20 digits)"
       )
       .optional(),
-    source: yup.string().required("Source is required"),
+    source: yup.string().optional(),
     assignedToId: yup.string().optional(),
     status: yup.string().required("Status is required"),
     pipeline: yup.string().optional(),
@@ -164,6 +139,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     utmCampaign: yup.string().optional(),
     utmContent: yup.string().optional(),
     leadType: yup.string().required("Lead type is required"),
+    notes: yup.string().max(4000).optional(),
   }), []);
 
   const {
@@ -179,20 +155,49 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     mode: "onBlur",
   });
 
-  const status = watch("status");
-  const requirementType = watch("requirementType") || [];
-  const requirementDescription = watch("requirementDescription") || "";
   const industry = watch("industry") || "";
   const location = watch("location") || "";
 
-  // Fetch users for assignment dropdown — only when canReassign
+  // Fetch users for assignment dropdown
   const { data: usersData } = useQuery({
     queryKey: ["users"],
     queryFn: () => usersApi.list().then((r) => r.data),
-    enabled: isOpen && canReassignLead,
+    enabled: isOpen,
   });
 
   const users = usersData?.data || [];
+
+  // Fetch lead_type options from admin dropdowns
+  const { data: leadTypeRaw } = useQuery({
+    queryKey: ['dropdowns', 'lead_type'],
+    queryFn: () => dropdownsApi.listByCategory('lead_type').then((r) => r.data?.data || r.data || []),
+    enabled: isOpen,
+  });
+
+  const leadTypeOptions: any[] = useMemo(() => {
+    const items = Array.isArray(leadTypeRaw) ? leadTypeRaw : [];
+    return items.length > 0 ? items : [
+      { id: 'position', value: 'Services', isDefault: false },
+      { id: 'product',  value: 'Product',  isDefault: false },
+    ];
+  }, [leadTypeRaw]);
+
+  // Invalidate all dropdown caches when modal opens so defaults are always fresh
+  useEffect(() => {
+    if (isOpen) {
+      queryClient.invalidateQueries({ queryKey: ['dropdowns'] });
+    }
+  }, [isOpen]);
+
+  // Pre-fill default lead type when options load
+  useEffect(() => {
+    if (!isOpen || !leadTypeOptions.length) return;
+    const currentVal = watch('leadType');
+    if (!currentVal) {
+      const def = leadTypeOptions.find((o: any) => o.isDefault);
+      if (def) setValue('leadType', def.value);
+    }
+  }, [leadTypeOptions, isOpen]);
 
   // Fetch industry dropdown options
   const { data: industriesData, refetch: refetchIndustries } = useQuery({
@@ -230,34 +235,9 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       .filter(Boolean);
   };
 
-  const { data: requirementTypeRaw } = useQuery({
-    queryKey: ['dropdowns', 'requirement_type'],
-    queryFn: () => dropdownsApi.listByCategory('requirement_type').then((r) => r.data?.data || r.data || []),
-    enabled: isOpen,
-  });
-  const { data: pipelineRaw } = useQuery({
-    queryKey: ['dropdowns', 'pipeline'],
-    queryFn: () => dropdownsApi.listByCategory('pipeline').then((r) => r.data?.data || r.data || []),
-    enabled: isOpen,
-  });
-  const { data: budgetRangeRaw } = useQuery({
-    queryKey: ['dropdowns', 'budget_range'],
-    queryFn: () => dropdownsApi.listByCategory('budget_range').then((r) => r.data?.data || r.data || []),
-    enabled: isOpen,
-  });
-  const { data: timelineRaw } = useQuery({
-    queryKey: ['dropdowns', 'timeline'],
-    queryFn: () => dropdownsApi.listByCategory('timeline').then((r) => r.data?.data || r.data || []),
-    enabled: isOpen,
-  });
   const { data: leadStatusRaw } = useQuery({
     queryKey: ['dropdowns', 'lead_status'],
     queryFn: () => dropdownsApi.listByCategory('lead_status').then((r) => r.data?.data || r.data || []),
-    enabled: isOpen,
-  });
-  const { data: statusRaw } = useQuery({
-    queryKey: ['dropdowns', 'status'],
-    queryFn: () => dropdownsApi.listByCategory('status').then((r) => r.data?.data || r.data || []),
     enabled: isOpen,
   });
   const { data: sourceRaw } = useQuery({
@@ -266,42 +246,59 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     enabled: isOpen,
   });
 
-  const dynamicRequirementTypeOptions = useMemo(() => {
-    const vals = extractDropdownValues(requirementTypeRaw);
-    return vals.length > 0 ? vals : STATIC_REQUIREMENT_TYPE_OPTIONS;
-  }, [requirementTypeRaw]);
-
-  const dynamicPipelineOptions = useMemo(() => {
-    const vals = extractDropdownValues(pipelineRaw);
-    return vals.length > 0
-      ? vals.map((v) => ({ value: v, label: v }))
-      : PIPELINE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
-  }, [pipelineRaw]);
-
-  const dynamicBudgetRangeOptions = useMemo(() => {
-    const vals = extractDropdownValues(budgetRangeRaw);
-    return vals.length > 0 ? vals : STATIC_BUDGET_RANGE_OPTIONS;
-  }, [budgetRangeRaw]);
-
-  const dynamicTimelineOptions = useMemo(() => {
-    const vals = extractDropdownValues(timelineRaw);
-    return vals.length > 0 ? vals : STATIC_TIMELINE_OPTIONS;
-  }, [timelineRaw]);
-
   const dynamicLeadStatusOptions = useMemo(() => {
     const vals = extractDropdownValues(leadStatusRaw);
     return vals.length > 0 ? vals : STATIC_LEAD_STATUS_OPTIONS;
   }, [leadStatusRaw]);
 
-  const dynamicStatusOptions = useMemo(() => {
-    const vals = extractDropdownValues(statusRaw);
-    return vals.length > 0 ? vals : STATIC_STATUS_OPTIONS;
-  }, [statusRaw]);
+  // Pre-fill default lead status when options load
+  useEffect(() => {
+    const items = Array.isArray(leadStatusRaw) ? leadStatusRaw : [];
+    if (!items.length) return;
+    const currentVal = watch('status');
+    if (!currentVal) {
+      const def = items.find((o: any) => o.isDefault);
+      if (def) setValue('status', def.value);
+    }
+  }, [leadStatusRaw]);
 
   const dynamicSourceOptions = useMemo(() => {
     const vals = extractDropdownValues(sourceRaw);
     return vals.length > 0 ? vals : STATIC_SOURCE_OPTIONS;
   }, [sourceRaw]);
+
+  // Pre-fill default lead source when options load
+  useEffect(() => {
+    const items = Array.isArray(sourceRaw) ? sourceRaw : [];
+    if (!items.length) return;
+    const currentVal = watch('source');
+    if (!currentVal) {
+      const def = items.find((o: any) => o.isDefault);
+      if (def) setValue('source', def.value);
+    }
+  }, [sourceRaw]);
+
+  // Pre-fill default industry when options load
+  useEffect(() => {
+    const items = Array.isArray(industriesData) ? industriesData : [];
+    if (!items.length) return;
+    const currentVal = watch('industry');
+    if (!currentVal) {
+      const def = items.find((o: any) => o.isDefault);
+      if (def) setValue('industry', def.value, { shouldValidate: true });
+    }
+  }, [industriesData]);
+
+  // Pre-fill default location when options load
+  useEffect(() => {
+    const items = Array.isArray(locationsData) ? locationsData : [];
+    if (!items.length) return;
+    const currentVal = watch('location');
+    if (!currentVal) {
+      const def = items.find((o: any) => o.isDefault);
+      if (def) setValue('location', def.value, { shouldValidate: true });
+    }
+  }, [locationsData]);
 
   const formatOptionLabel = (value: string) =>
     value.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -406,17 +403,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
   const createMutation = useMutation({
     mutationFn: (data: CreateLeadInput) => leadsApi.create(data),
-    onSuccess: (response) => {
-      const payload = response?.data?.data ?? response?.data ?? {};
-      const possibleDuplicate = payload?.possibleDuplicate;
-      if (possibleDuplicate) {
-        setDuplicateConfirm({
-          payload: (pendingPayloadRef.current || {}) as any,
-          companyName: possibleDuplicate.companyName || pendingPayloadRef.current?.companyName || "Unknown company",
-          existingId: possibleDuplicate.id,
-        });
-        return;
-      }
+    onSuccess: () => {
       toast.success("Lead created successfully!");
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -424,7 +411,16 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       resetForm();
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || "Failed to create lead");
+      const responseData = error.response?.data;
+      if (error.response?.status === 409 && responseData?.possibleDuplicate) {
+        setDuplicateConfirm({
+          payload: (pendingPayloadRef.current || {}) as any,
+          companyName: responseData.possibleDuplicate.companyName || pendingPayloadRef.current?.companyName || "Unknown company",
+          existingId: responseData.possibleDuplicate.id,
+        });
+        return;
+      }
+      toast.error(responseData?.message || "Failed to create lead");
     },
   });
 
@@ -432,7 +428,6 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     reset(defaultValues);
     setDuplicateConfirm(null);
     pendingPayloadRef.current = null;
-    setUtmOpen(false);
   };
 
   const handleClose = () => {
@@ -480,14 +475,6 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     toast.error(namedFieldMessage || rootMessage || anyMessage || "Please review the form fields and try again.");
   };
 
-  const toggleRequirementType = (value: string) => {
-    const exists = requirementType.includes(value);
-    const next = exists
-      ? requirementType.filter((item) => item !== value)
-      : [...requirementType, value];
-    setValue("requirementType", next, { shouldValidate: true, shouldDirty: true });
-  };
-
   const handleContinueAfterDuplicate = () => {
     if (!duplicateConfirm?.payload) return;
     createMutation.mutate({ ...duplicateConfirm.payload, ignoreDuplicate: true } as any);
@@ -495,63 +482,58 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Create New Lead">
-      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-3">
 
-        {/* ── Mandatory fields (top 4) ──────────────────────────────── */}
-        <div className="space-y-3">
+        {/* Row 1: Company Name + Lead Type */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="label">
-              Company Name <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              {...register("companyName")}
-              className="input"
-              placeholder="Acme Inc."
-            />
+            <label className="label">Company Name</label>
+            <input type="text" {...register("companyName")} className="input" placeholder="Acme Inc." />
             {errors.companyName && <p className="text-xs text-red-400 mt-1">{errors.companyName.message}</p>}
           </div>
-
           <div>
             <label className="label">Lead Type <span className="text-red-400">*</span></label>
             <select {...register("leadType")} title="Lead Type" className="input">
               <option value="">Select lead type...</option>
-              <option value="position">Services</option>
-              <option value="product">Product</option>
+              {leadTypeOptions.map((opt: any) => (
+                <option key={opt.id || opt.value} value={opt.value}>{opt.value}</option>
+              ))}
             </select>
             {errors.leadType && <p className="text-xs text-red-400 mt-1">{errors.leadType.message}</p>}
           </div>
+        </div>
 
+        {/* Row 2: Contact Name + Job Title */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="label">
-              Contact Person Name <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              {...register("contactName")}
-              className="input"
-              placeholder="John Doe"
-            />
+            <label className="label">Contact Name <span className="text-red-400">*</span></label>
+            <input type="text" {...register("contactName")} className="input" placeholder="John Doe" />
             {errors.contactName && <p className="text-xs text-red-400 mt-1">{errors.contactName.message}</p>}
           </div>
-
           <div>
-            <label className="label">
-              Email <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="email"
-              {...register("contactEmail")}
-              className="input"
-              placeholder="john@example.com"
-            />
+            <label className="label">Job Title</label>
+            <input type="text" {...register("contactTitle")} className="input" placeholder="e.g. VP of Engineering" />
+          </div>
+        </div>
+
+        {/* Row 3: Email + Phone */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Email</label>
+            <input type="email" {...register("contactEmail")} className="input" placeholder="john@example.com" />
             {errors.contactEmail && <p className="text-xs text-red-400 mt-1">{errors.contactEmail.message}</p>}
           </div>
-
           <div>
-            <label className="label">
-              Lead Status <span className="text-red-400">*</span>
-            </label>
+            <label className="label">Phone</label>
+            <input type="tel" {...register("contactPhone")} className="input" placeholder="+91 9876543210" />
+            {errors.contactPhone && <p className="text-xs text-red-400 mt-1">{errors.contactPhone.message}</p>}
+          </div>
+        </div>
+
+        {/* Row 4: Lead Status + Lead Source */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Lead Status <span className="text-red-400">*</span></label>
             <select {...register("status")} title="Status" className="input">
               <option value="">Select status...</option>
               {dynamicLeadStatusOptions.map((opt) => (
@@ -560,123 +542,19 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             </select>
             {errors.status && <p className="text-xs text-red-400 mt-1">{errors.status.message}</p>}
           </div>
-        </div>
-
-        {/* ── Company Info ──────────────────────────────────────────── */}
-        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Company Information</h3>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Website</label>
-              <input
-                type="text"
-                {...register("website")}
-                className="input"
-                placeholder="www.abc.com"
-              />
-              {errors.website && <p className="text-xs text-red-400 mt-1">{errors.website.message}</p>}
-            </div>
-            <div>
-              <SearchableDropdown
-                label="Industry"
-                value={industry}
-                onChange={(value) => setValue("industry", value, { shouldValidate: true })}
-                options={industries}
-                onCreateNew={canManageDropdowns ? handleCreateIndustry : undefined}
-                onEdit={canManageDropdowns ? handleEditIndustry : undefined}
-                onDelete={canManageDropdowns ? handleDeleteIndustry : undefined}
-                placeholder="Select or search industry..."
-                error={errors.industry?.message}
-              />
-            </div>
-          </div>
-
           <div>
-            <SearchableDropdown
-              label="Location"
-              value={location}
-              onChange={(value) => setValue("location", value, { shouldValidate: true })}
-              options={locations}
-              onCreateNew={canManageDropdowns ? handleCreateLocation : undefined}
-              onEdit={canManageDropdowns ? handleEditLocation : undefined}
-              onDelete={canManageDropdowns ? handleDeleteLocation : undefined}
-              placeholder="Select or search location..."
-              error={errors.location?.message}
-            />
-          </div>
-        </div>
-
-        {/* ── Contact Info ──────────────────────────────────────────── */}
-        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-            Contact Information
-          </h3>
-
-          <div>
-            <label className="label">Job Title / Designation</label>
-            <input
-              type="text"
-              {...register("contactTitle")}
-              className="input"
-              placeholder="e.g. VP of Engineering"
-            />
-          </div>
-
-          <div>
-            <label className="label">Phone</label>
-            <input
-              type="tel"
-              {...register("contactPhone")}
-              className="input"
-              placeholder="+91 9876543210"
-            />
-            {errors.contactPhone && <p className="text-xs text-red-400 mt-1">{errors.contactPhone.message}</p>}
-          </div>
-        </div>
-
-        {/* ── Requirement Info (hidden) ─────────────────────────────
-        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Requirement</h3>
-          <div>
-            <label className="label mb-1.5 block">
-              Requirement Type <span className="text-red-400">*</span>
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {requirementTypeOptions.map((item) => (
-                <label key={item} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-white/10 px-2.5 py-2 text-xs text-slate-600 dark:text-slate-300">
-                  <input type="checkbox" checked={requirementType.includes(item)} onChange={() => toggleRequirementType(item)} className="w-4 h-4 rounded border-white/20 bg-slate-200 dark:bg-slate-800 text-blue-500" />
-                  {item}
-                </label>
-              ))}
-            </div>
-            {errors.requirementType && <p className="text-xs text-red-400 mt-1">{errors.requirementType.message as string}</p>}
-          </div>
-          <div>
-            <label className="label mb-1.5 block">Requirement Description</label>
-            <textarea {...register("requirementDescription")} className="input min-h-[88px]" maxLength={2000} placeholder="Describe scope, goals, and constraints..." />
-            <p className="text-[10px] text-slate-500 mt-1 text-right">{requirementDescription.length}/2000</p>
-          </div>
-        </div>
-        ── End Requirement Info ── */}
-
-        {/* Lead Details */}
-        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Lead Details</h3>
-
-          {/* Pipeline (hidden) ─────────────────────────────────────────
-          <div>
-            <label className="label">Pipeline <span className="text-red-400">*</span></label>
-            <select {...register("pipeline")} title="Pipeline" className="input">
-              <option value="">Select pipeline...</option>
-              {PIPELINE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <label className="label">Lead Source</label>
+            <select {...register("source")} title="Lead Source" className="input">
+              <option value="">Select source...</option>
+              {dynamicSourceOptions.map((source) => (
+                <option key={source} value={source}>{source}</option>
               ))}
             </select>
-            {errors.pipeline && <p className="text-xs text-red-400 mt-1">{errors.pipeline.message}</p>}
           </div>
-          ── End Pipeline ── */}
+        </div>
 
+        {/* Row 5: Follow-up Date + Assign To */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Follow-up Date</label>
             <input
@@ -694,85 +572,64 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             />
             {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
           </div>
-
-          {/* Budget Range + Timeline (hidden) ──────────────────────────
-          <div className="grid grid-cols-2 gap-3">
+          {canReassignLead && (
             <div>
-              <label className="label">Budget Range <span className="text-red-400">*</span></label>
-              <select {...register("budgetRange")} title="Budget Range" className="input">
-                <option value="">Select budget range...</option>
-                {budgetRangeOptions.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
+              <label className="label">Assign Lead To</label>
+              <select {...register("assignedToId")} title="Assign To" className="input">
+                <option value="">Select user...</option>
+                {users.map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
               </select>
-              {errors.budgetRange && <p className="text-xs text-red-400 mt-1">{errors.budgetRange.message}</p>}
-            </div>
-            <div>
-              <label className="label">Timeline</label>
-              <select {...register("timeline")} title="Timeline" className="input">
-                <option value="">Select timeline...</option>
-                {timelineOptions.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
-              </select>
-            </div>
-          </div>
-          ── End Budget Range + Timeline ── */}
-
-          {/* Intent Signal (hidden) ────────────────────────────────────
-          <div>
-            <label className="label">Intent Signal</label>
-            <select {...register("temperature")} title="Temperature" className="input">
-              <option value="hot">Hot</option>
-              <option value="warm">Warm</option>
-              <option value="cold">Cold</option>
-              <option value="prospect">Prospect</option>
-              <option value="lost">Lost</option>
-              <option value="won">Won</option>
-            </select>
-          </div>
-          ── End Intent Signal ── */}
-
-          {/* Disqualification Reason (hidden) ──────────────────────────
-          {status === "disqualified" && (
-            <div>
-              <label className="label">Disqualification Reason <span className="text-red-400">*</span></label>
-              <input type="text" {...register("disqualificationReason")} className="input" placeholder="Reason for disqualification" minLength={10} />
-              {errors.disqualificationReason && <p className="text-xs text-red-400 mt-1">{errors.disqualificationReason.message}</p>}
             </div>
           )}
-          ── End Disqualification Reason ── */}
+        </div>
 
-          <div>
-            <label className="label">Lead Source <span className="text-red-400">*</span></label>
-            <select {...register("source")} title="Lead Source" className="input">
-              <option value="">Select source...</option>
-              {dynamicSourceOptions.map((source) => (
-                <option key={source} value={source}>{source}</option>
-              ))}
-            </select>
-            {errors.source && <p className="text-xs text-red-400 mt-1">{errors.source.message}</p>}
-          </div>
-
-          {/* Sub-source + Lead Cost + Assign To (hidden) ───────────────
-          <div>
-            <label className="label">Sub-source / Ad Name</label>
-            <input type="text" {...register("subSource")} className="input" placeholder="Campaign or ad name" />
-          </div>
+        {/* Company Info */}
+        <div className="pt-2 border-t border-slate-200 dark:border-white/10">
+          <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Company Information</h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Lead Cost (optional)</label>
-              <input type="number" {...register("leadCost")} className="input" placeholder="0.00" min="0" step="0.01" />
+              <label className="label">Website</label>
+              <input type="text" {...register("website")} className="input" placeholder="www.abc.com" />
+              {errors.website && <p className="text-xs text-red-400 mt-1">{errors.website.message}</p>}
             </div>
-            {canReassignLead && (
-              <div>
-                <label className="label">Assign To</label>
-                <select {...register("assignedToId")} title="Assign To" className="input">
-                  <option value="">Select user...</option>
-                  {users.map((user: any) => (
-                    <option key={user.id} value={user.id}>{user.name} ({user.role})</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <SearchableDropdown
+              label="Industry"
+              value={industry}
+              onChange={(value) => setValue("industry", value, { shouldValidate: true })}
+              options={industries}
+              onCreateNew={canManageDropdowns ? handleCreateIndustry : undefined}
+              onEdit={canManageDropdowns ? handleEditIndustry : undefined}
+              onDelete={canManageDropdowns ? handleDeleteIndustry : undefined}
+              placeholder="Select or search industry..."
+              error={errors.industry?.message}
+            />
           </div>
-          ── End Sub-source + Lead Cost + Assign To ── */}
+          <div className="mt-3">
+            <SearchableDropdown
+              label="Location"
+              value={location}
+              onChange={(value) => setValue("location", value, { shouldValidate: true })}
+              options={locations}
+              onCreateNew={canManageDropdowns ? handleCreateLocation : undefined}
+              onEdit={canManageDropdowns ? handleEditLocation : undefined}
+              onDelete={canManageDropdowns ? handleDeleteLocation : undefined}
+              placeholder="Select or search location..."
+              error={errors.location?.message}
+            />
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div>
+          <label className="label">Description / Notes</label>
+          <textarea
+            {...register("notes")}
+            className="input min-h-[72px] resize-none"
+            placeholder="Add any notes or context about this lead..."
+            maxLength={2000}
+          />
         </div>
 
         {/* Actions */}

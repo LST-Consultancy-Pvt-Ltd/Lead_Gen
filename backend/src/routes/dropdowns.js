@@ -21,6 +21,9 @@ router.post('/seed', authenticate, requireAdmin, ctrl.seedOrgDropdowns);
 // POST /api/dropdowns — admin only
 router.post('/', authenticate, requireAdmin, ctrl.addValue);
 
+// PUT /api/dropdowns/:id/set-default — admin only
+router.put('/:id/set-default', authenticate, requireAdmin, ctrl.setDefaultDropdown);
+
 // PATCH /api/dropdowns/:id — admin only
 router.patch('/:id', authenticate, requireAdmin, ctrl.updateValue);
 

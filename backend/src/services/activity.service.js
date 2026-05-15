@@ -282,6 +282,71 @@ class ActivityService {
   }
 
   /**
+   * Update an existing activity.
+   * Cannot change leadId, opportunityId, or createdById.
+   * sales_user can only edit their own activities.
+   */
+  async updateActivity(id, data, user) {
+    const existing = await prisma.activityLog.findFirst({
+      where: { id, organizationId: user.organizationId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        lead: { select: { id: true, companyName: true } },
+      },
+    });
+    if (!existing) return { success: false, statusCode: 404, message: "Activity not found" };
+
+    if (user.role === "sales_user" && existing.userId !== user.id) {
+      return { success: false, statusCode: 403, message: "You can only edit activities you created" };
+    }
+
+    const { action, type, activityDate, duration, outcome, nextActionDate, notes, description } = data;
+
+    const rawAction = action || type;
+    const activityAction = rawAction ? rawAction.toLowerCase().replace(" ", "_") : null;
+    if (activityAction && !VALID_TYPES.includes(activityAction)) {
+      return { success: false, statusCode: 400, message: `Action must be one of: ${VALID_TYPES.join(", ")}` };
+    }
+
+    let resolvedDate = existing.activityDate;
+    if (activityDate !== undefined) {
+      resolvedDate = new Date(activityDate);
+      if (isNaN(resolvedDate.getTime())) return { success: false, statusCode: 400, message: "activityDate is not a valid date" };
+      if (resolvedDate > new Date()) return { success: false, statusCode: 400, message: "activityDate cannot be a future date" };
+    }
+
+    let resolvedNextActionDate = existing.nextActionDate;
+    if (nextActionDate !== undefined) {
+      resolvedNextActionDate = new Date(nextActionDate);
+      if (isNaN(resolvedNextActionDate.getTime())) return { success: false, statusCode: 400, message: "nextActionDate is not a valid date" };
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      if (resolvedNextActionDate < todayStart) return { success: false, statusCode: 400, message: "nextActionDate must be today or a future date" };
+    }
+
+    const updateData = {
+      ...(activityAction ? { action: activityAction } : {}),
+      activityDate: resolvedDate,
+      nextActionDate: resolvedNextActionDate,
+      ...(duration !== undefined ? { duration: duration ? parseInt(duration) : null } : {}),
+      ...(outcome !== undefined ? { outcome: outcome ? outcome.trim() : null } : {}),
+      ...(notes !== undefined ? { notes: notes || null } : {}),
+      ...(description !== undefined ? { description: description || "" } : {}),
+    };
+
+    const activity = await prisma.activityLog.update({
+      where: { id },
+      data: updateData,
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        lead: { select: { id: true, companyName: true } },
+      },
+    });
+
+    dashboardEvents.notifyOrg(user.organizationId, "activity");
+    return { success: true, activity };
+  }
+
+  /**
    * Get activities with role-scoped filtering + full UI filter support.
    *
    * Query params:

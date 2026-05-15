@@ -447,9 +447,9 @@ export default function LeadsPage() {
                     )}
                     <td className="px-4 py-3">
                       <Link href={`/dashboard/leads/${l.id}`} className="flex items-center gap-2.5">
-                        <Avatar initials={getInitials(l.companyName)} size="sm" />
+                        <Avatar initials={getInitials(l.companyName || l.contactName || '?')} size="sm" />
                         <div>
-                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{l.companyName}</p>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{l.companyName || l.contactName || '—'}</p>
                           <p className="text-xs text-slate-500">{l.industry || 'Unknown'}</p>
                         </div>
                       </Link>

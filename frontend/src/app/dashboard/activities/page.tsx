@@ -32,6 +32,7 @@ import {
   Info,
   ChevronLeft,
   ChevronRight,
+  Edit2,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -290,11 +291,13 @@ function ActivityRow({
   showLoggedBy,
   canDelete,
   onDelete,
+  onClick,
 }: {
   activity: any;
   showLoggedBy: boolean;
   canDelete: boolean;
   onDelete?: (activity: any) => void;
+  onClick?: (activity: any) => void;
 }) {
   const meta = getTypeMeta(activity.type);
   const Icon = meta.icon;
@@ -315,7 +318,10 @@ function ActivityRow({
     : "/dashboard/opportunities";
 
   return (
-    <div className="px-5 py-4 hover:bg-slate-200/30 dark:hover:bg-slate-800/30 transition-colors">
+    <div
+      className="px-5 py-4 hover:bg-slate-200/30 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
+      onClick={() => onClick?.(activity)}
+    >
       <div className="flex items-start gap-3">
         <div
           className={
@@ -337,6 +343,7 @@ function ActivityRow({
                   <span className="text-xs text-slate-600">linked to</span>
                   <a
                     href={linkedHref}
+                    onClick={(e) => e.stopPropagation()}
                     className="text-xs text-blue-400 hover:text-blue-300 font-medium truncate max-w-[180px]"
                   >
                     {linkedName}
@@ -390,7 +397,7 @@ function ActivityRow({
             )}
             {canDelete && onDelete && (
               <button
-                onClick={() => onDelete(activity)}
+                onClick={(e) => { e.stopPropagation(); onDelete(activity); }}
                 className="inline-flex items-center gap-1 text-[11px] bg-red-500/10 text-red-400 hover:bg-red-500/20 px-2 py-0.5 rounded-full transition-colors"
               >
                 <X size={10} /> Delete
@@ -455,6 +462,212 @@ function DeleteModal({
   );
 }
 
+// == View / Edit Modal ==
+const editActivitySchema = yup.object({
+  type: yup.string().required("Activity type is required"),
+  activityDate: yup.string().required("Activity date is required").test(
+    "not-future", "Activity date cannot be a future date",
+    (v) => !v || new Date(v) <= new Date(),
+  ),
+  duration: yup.string().default(""),
+  outcome: yup.string().default(""),
+  nextActionDate: yup.string().required("Next action date is required").test(
+    "today-or-future", "Next action date must be today or a future date",
+    (v) => { if (!v) return true; const t = new Date(); t.setHours(0,0,0,0); return new Date(v) >= t; },
+  ),
+  notes: yup.string().default(""),
+  description: yup.string().default(""),
+});
+
+function ViewEditModal({
+  activity,
+  canEdit,
+  onClose,
+  onSaved,
+}: {
+  activity: any;
+  canEdit: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [editMode, setEditMode] = useState(false);
+  const meta = getTypeMeta(activity.action || activity.type);
+  const Icon = meta.icon;
+
+  const toDateInput = (val: any) => {
+    if (!val) return "";
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0];
+  };
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    defaultValues: {
+      type: activity.action || activity.type || "call",
+      activityDate: toDateInput(activity.activityDate),
+      duration: activity.duration ? String(activity.duration) : "",
+      outcome: activity.outcome || "",
+      nextActionDate: toDateInput(activity.nextActionDate),
+      notes: activity.notes || "",
+      description: activity.description || "",
+    },
+    resolver: yupResolver(editActivitySchema) as any,
+    mode: "onBlur",
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => activitiesApi.update(activity.id, data),
+    onSuccess: () => {
+      toast.success("Activity updated");
+      onSaved();
+      onClose();
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message || "Failed to update activity"),
+  });
+
+  function onSubmit(values: any) {
+    const payload: any = {
+      type: values.type,
+      activityDate: values.activityDate,
+      outcome: values.outcome || undefined,
+      nextActionDate: values.nextActionDate,
+      notes: values.notes || undefined,
+      description: values.description || undefined,
+    };
+    if (values.duration) payload.duration = parseInt(values.duration, 10);
+    updateMutation.mutate(payload);
+  }
+
+  const linkedName = activity.lead?.companyName ?? activity.opportunity?.opportunityName ?? null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200 dark:border-white/[0.06]">
+          <div className={"w-9 h-9 rounded-xl " + meta.bg + " flex items-center justify-center flex-shrink-0"}>
+            <Icon size={16} className={meta.text} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={"text-sm font-semibold " + meta.text}>{meta.label}</p>
+            {linkedName && <p className="text-xs text-slate-500 truncate">linked to {linkedName}</p>}
+          </div>
+          {!editMode && canEdit && (
+            <button
+              onClick={() => setEditMode(true)}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-400 transition-colors px-2 py-1 rounded-lg hover:bg-blue-500/10"
+            >
+              <Edit2 size={13} /> Edit
+            </button>
+          )}
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 ml-1">
+            <X size={18} />
+          </button>
+        </div>
+
+        {editMode ? (
+          /* ── Edit form ── */
+          <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Activity Type</label>
+                <select {...register("type")} className="input">
+                  {ACTIVITY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                {errors.type && <p className="text-xs text-red-400 mt-1">{errors.type.message}</p>}
+              </div>
+              <div>
+                <label className="label">Activity Date</label>
+                <input type="date" {...register("activityDate")} className="input" max={new Date().toISOString().split("T")[0]} />
+                {errors.activityDate && <p className="text-xs text-red-400 mt-1">{errors.activityDate.message}</p>}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Duration (mins)</label>
+                <input type="number" min="1" {...register("duration")} className="input" placeholder="e.g. 30" />
+              </div>
+              <div>
+                <label className="label">Next Action Date <span className="text-red-400">*</span></label>
+                <input type="date" {...register("nextActionDate")} className="input" min={new Date().toISOString().split("T")[0]} />
+                {errors.nextActionDate && <p className="text-xs text-red-400 mt-1">{errors.nextActionDate.message}</p>}
+              </div>
+            </div>
+            <div>
+              <label className="label">Outcome</label>
+              <textarea {...register("outcome")} className="input resize-none" rows={2} placeholder="What happened?" />
+            </div>
+            <div>
+              <label className="label">Notes</label>
+              <textarea {...register("notes")} className="input resize-none" rows={2} placeholder="Internal notes…" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button type="button" className="btn-ghost flex-1" onClick={() => { setEditMode(false); reset(); }} disabled={updateMutation.isPending}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary flex-1" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          /* ── View mode ── */
+          <div className="p-5 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Date</p>
+                <p className="text-sm text-slate-800 dark:text-slate-200">
+                  {activity.activityDate ? formatActivityDate(activity.activityDate) : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Duration</p>
+                <p className="text-sm text-slate-800 dark:text-slate-200">
+                  {activity.duration ? activity.duration + " mins" : "—"}
+                </p>
+              </div>
+            </div>
+            {activity.outcome && (
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Outcome</p>
+                <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">{activity.outcome}</p>
+              </div>
+            )}
+            {activity.description && (
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Description</p>
+                <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">{activity.description}</p>
+              </div>
+            )}
+            {activity.notes && (
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Notes</p>
+                <p className="text-sm text-slate-500 leading-relaxed">{activity.notes}</p>
+              </div>
+            )}
+            {activity.nextActionDate && (
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Next Action Date</p>
+                <p className={"text-sm font-medium " + (isPastDate(toDateInput(activity.nextActionDate)) ? "text-red-400" : "text-emerald-400")}>
+                  {formatDate(toDateInput(activity.nextActionDate))}
+                  {isPastDate(toDateInput(activity.nextActionDate)) && " (overdue)"}
+                </p>
+              </div>
+            )}
+            {activity.user?.name && (
+              <div className="pt-1 border-t border-slate-200 dark:border-white/[0.06]">
+                <p className="text-xs text-slate-500">Logged by <span className="text-slate-700 dark:text-slate-300">{activity.user.name}</span></p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // == Page ==
 export default function ActivitiesPage() {
   const queryClient = useQueryClient();
@@ -488,6 +701,7 @@ export default function ActivitiesPage() {
   const linkedFilterRef = useRef<HTMLDivElement>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [selectedActivity, setSelectedActivity] = useState<any>(null);
   const [pageInput, setPageInput] = useState(String(page));
 
   useEffect(() => {
@@ -1183,6 +1397,7 @@ export default function ActivitiesPage() {
                 showLoggedBy={!isSalesUser}
                 canDelete={isAdmin}
                 onDelete={isAdmin ? setDeleteTarget : undefined}
+                onClick={setSelectedActivity}
               />
             ))}
           </div>
@@ -1207,6 +1422,7 @@ export default function ActivitiesPage() {
                       showLoggedBy={!isSalesUser}
                       canDelete={isAdmin}
                       onDelete={isAdmin ? setDeleteTarget : undefined}
+                      onClick={setSelectedActivity}
                     />
                   ))}
                 </div>
@@ -1600,6 +1816,16 @@ export default function ActivitiesPage() {
           isPending={deleteMutation.isPending}
           onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {/* 8. VIEW / EDIT MODAL */}
+      {selectedActivity && (
+        <ViewEditModal
+          activity={selectedActivity}
+          canEdit={isAdmin || isManager || selectedActivity.userId === currentUser?.id}
+          onClose={() => setSelectedActivity(null)}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ["activities"] })}
         />
       )}
     </div>

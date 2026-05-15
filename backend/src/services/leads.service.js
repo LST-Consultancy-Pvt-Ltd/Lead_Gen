@@ -308,8 +308,14 @@ class LeadsService {
       // Duplicate detection is non-fatal — continue with create
     }
 
+    // If duplicate found and caller hasn't confirmed, stop here (no lead created)
+    if (possibleDuplicate && !data.ignoreDuplicate) {
+      return { success: false, statusCode: 409, message: 'Similar lead already exists', possibleDuplicate };
+    }
+
     // Enforce ownership rules based on role
-    let assignedToId = data.assignedToId || user.id;
+    // sales_user always owns their own leads; other roles only assign if explicitly chosen
+    let assignedToId = data.assignedToId || null;
 
     if (user.role === 'sales_user') {
       assignedToId = user.id;
@@ -318,7 +324,7 @@ class LeadsService {
         where: { id: data.assignedToId, managerId: user.id, organizationId: user.organizationId },
         select: { id: true },
       });
-      if (!isTeamMember) assignedToId = user.id;
+      if (!isTeamMember) assignedToId = null;
     }
 
     // ── Normalise requirementType — always store as JSON array ──────────────
@@ -355,9 +361,19 @@ class LeadsService {
       intentLevel: data.intentLevel ? data.intentLevel.toLowerCase() : undefined,
     };
 
-    // Remove undefined values to avoid Prisma unknown-field errors
+    // Remove undefined values and non-schema fields to avoid Prisma errors
+    const PRISMA_LEAD_FIELDS = new Set([
+      'companyName','website','linkedinUrl','industry','companySize','location','description',
+      'contactName','contactTitle','contactEmail','contactPhone','contactLinkedin','companyPhone',
+      'techStack','intentSignals','funding','jobPostings','leadScore','intentScore','intentLevel',
+      'status','opportunity','aiSummary','aiPitch','notes','source','sourceUrl','pipeline',
+      'followUpDate','leadCost','utmSource','utmMedium','utmCampaign','utmContent','subSource',
+      'accountId','importBatchId','lastContactedAt','firstName','lastName','requirementType',
+      'requirementDescription','budgetRange','timeline','temperature','disqualificationReason',
+      'lastContactedDate','matchScore','leadType','assignedToId','organizationId','createdById',
+    ]);
     Object.keys(createData).forEach((k) => {
-      if (createData[k] === undefined) delete createData[k];
+      if (createData[k] === undefined || !PRISMA_LEAD_FIELDS.has(k)) delete createData[k];
     });
 
     // Create lead with proper ownership

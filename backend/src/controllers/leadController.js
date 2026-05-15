@@ -83,6 +83,17 @@ async function getLead(req, res) {
   }
 }
 
+const LEAD_ALLOWED_FIELDS = new Set([
+  'companyName','website','linkedinUrl','industry','companySize','location','description',
+  'contactName','contactTitle','contactEmail','contactPhone','contactLinkedin','companyPhone',
+  'techStack','intentSignals','funding','jobPostings','leadScore','intentScore','intentLevel',
+  'status','opportunity','aiSummary','aiPitch','notes','source','sourceUrl','pipeline',
+  'followUpDate','leadCost','utmSource','utmMedium','utmCampaign','utmContent','subSource',
+  'accountId','importBatchId','lastContactedAt','firstName','lastName','requirementType',
+  'requirementDescription','budgetRange','timeline','temperature','disqualificationReason',
+  'lastContactedDate','matchScore','leadType','assignedToId',
+]);
+
 async function createLead(req, res) {
   try {
     // Check lead quota
@@ -91,11 +102,16 @@ async function createLead(req, res) {
       return error(res, `Lead limit reached (${quota.quota}). You have used all your available leads. Please upgrade your plan to add more.`, 403);
     }
 
+    // Strip fields not in the Prisma schema (e.g. ignoreDuplicate) to prevent Prisma errors
+    const filtered = Object.fromEntries(
+      Object.entries(req.body).filter(([k]) => LEAD_ALLOWED_FIELDS.has(k))
+    );
+
     const data = {
-      ...req.body,
+      ...filtered,
       organizationId: req.user.organizationId,
       createdById: req.user.id,
-      subSource: req.body.subSource || 'created',
+      subSource: filtered.subSource || 'created',
     };
     const lead = await prisma.lead.create({ data });
     await prisma.activityLog.create({ data: { organizationId: req.user.organizationId, userId: req.user.id,
@@ -107,6 +123,7 @@ async function createLead(req, res) {
     dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, lead, 'Lead created', 201);
   } catch (err) {
+    logger.error('createLead error', { err: err.message, stack: err.stack });
     return error(res, 'Failed to create lead', 500);
   }
 }

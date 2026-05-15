@@ -48,6 +48,7 @@ const PRODUCT_DISCOVERY_CATEGORIES = [
 const LEADS_CATEGORIES = [
   { key: 'lead_status',    label: 'Lead Status' },
   { key: 'lead_source',    label: 'Lead Source' },
+  { key: 'lead_type',      label: 'Lead Type' },
   { key: 'job_title',      label: 'Job Title' },
   { key: 'pipeline_stage', label: 'Pipeline Stage' },
   { key: 'loss_reason',    label: 'Loss Reason' },
@@ -66,7 +67,7 @@ function CategoryAccordion({
   cat, dropdownsData, openCategory, setOpenCategory,
   editingId, setEditingId, editingValue, setEditingValue,
   deletingId, setDeletingId, newValues, setNewValues,
-  addMutation, editMutation, toggleMutation, deleteMutation,
+  addMutation, editMutation, toggleMutation, deleteMutation, setDefaultMutation,
 }: any) {
   const items = getCategoryValues(dropdownsData, cat.key);
   const isOpen = openCategory === cat.key;
@@ -122,7 +123,16 @@ function CategoryAccordion({
                     <span className={`text-sm flex-1 min-w-0 truncate pr-2 ${!item.isActive ? 'opacity-50 line-through text-gray-400' : 'text-slate-700 dark:text-slate-300'}`}>
                       {item.value}
                     </span>
+                    {item.isDefault && (
+                      <span className="text-[10px] font-semibold text-blue-500 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-0.5 mr-2">Default</span>
+                    )}
                     <div className="flex items-center gap-1">
+                      <button
+                        title={item.isDefault ? 'Already default' : 'Set as default'}
+                        className={`p-1.5 rounded-lg transition-all active:scale-95 text-xs font-medium ${item.isDefault ? 'text-blue-400 cursor-default' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-500/20'}`}
+                        onClick={() => { if (!item.isDefault && item.id) setDefaultMutation.mutate(item.id); }}
+                        disabled={item.isDefault || setDefaultMutation.isPending}
+                      >★</button>
                       <button aria-label="Edit" className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-500/20 active:scale-95 transition-all"
                         onClick={() => { setEditingId(item.id); setEditingValue(item.value); }}><Pencil size={13} /></button>
                       <button title={item.isActive ? 'Disable' : 'Enable'}
@@ -264,6 +274,12 @@ export default function SettingsPage() {
     onError: (e: any) => { toast.error(e?.response?.data?.message || 'Failed to delete value'); setDeletingId(null); },
   });
 
+  const setDefaultMutation = useMutation({
+    mutationFn: (id: string) => dropdownsApi.setDefault(id),
+    onSuccess: () => { invalidateDropdowns(); toast.success('Default value updated'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update default'),
+  });
+
   const seedMutation = useMutation({
     mutationFn: () => dropdownsApi.seed(),
     onSuccess: () => { invalidateDropdowns(); toast.success('Default values seeded successfully'); },
@@ -289,7 +305,7 @@ export default function SettingsPage() {
     dropdownsData: allDropdowns, openCategory, setOpenCategory,
     editingId, setEditingId, editingValue, setEditingValue,
     deletingId, setDeletingId, newValues, setNewValues,
-    addMutation, editMutation, toggleMutation, deleteMutation,
+    addMutation, editMutation, toggleMutation, deleteMutation, setDefaultMutation,
   };
 
   const discoveryCategories = discoverySubTab === 'product'

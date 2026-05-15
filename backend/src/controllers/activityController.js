@@ -155,6 +155,22 @@ async function getActivityById(req, res) {
 } 
 
 /**
+ * PUT /api/activities/:id
+ * Update an activity. sales_user can only edit their own.
+ */
+async function updateActivity(req, res) {
+  try {
+    const result = await activityService.updateActivity(req.params.id, req.body, req.user);
+    if (!result.success) return error(res, result.message, result.statusCode || 400);
+    logger.info('Activity updated', { activityId: req.params.id, userId: req.user.id });
+    return success(res, result.activity, 'Activity updated');
+  } catch (err) {
+    logger.error('updateActivity error', { error: err.message, id: req.params.id });
+    return error(res, 'Failed to update activity', 500);
+  }
+}
+
+/**
  * DELETE /api/activities/:id
  * Delete an activity. Admin/CEO only. Audit-logged.
  */
@@ -172,6 +188,7 @@ async function deleteActivity(req, res) {
 module.exports = {
   getActivityStats,
   createActivity,
+  updateActivity,
   getActivities,
   getAllActivities,
   getMyActivities,

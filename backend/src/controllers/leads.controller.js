@@ -74,8 +74,11 @@ async function getLeadById(req, res) {
 async function createLead(req, res) {
   try {
     const result = await leadsService.createLead(req.body, req.user);
-    
+
     if (!result.success) {
+      if (result.statusCode === 409 && result.possibleDuplicate) {
+        return res.status(409).json({ success: false, message: result.message, possibleDuplicate: result.possibleDuplicate });
+      }
       return error(res, result.message, result.statusCode || 400);
     }
 
@@ -90,7 +93,7 @@ async function createLead(req, res) {
 
     return success(res, result.lead, 'Lead created successfully', 201);
   } catch (err) {
-    logger.error('createLead error', { error: err.message, userId: req.user.id });
+    logger.error('createLead error', { error: err.message, stack: err.stack, userId: req.user.id });
     return error(res, 'Failed to create lead', 500);
   }
 }

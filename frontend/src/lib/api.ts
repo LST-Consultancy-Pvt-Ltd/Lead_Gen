@@ -255,7 +255,7 @@ export const leadsApi = {
 export const activitiesApi = {
   list: (params?: any) => api.get('/activities', { params }),
   create: (data: any) => api.post('/activities', data),
-  update: (id: string, data: any) => api.patch(`/activities/${id}`, data),
+  update: (id: string, data: any) => api.put(`/activities/${id}`, data),
   delete: (id: string) => api.delete(`/activities/${id}`),
 };
 
@@ -370,6 +370,7 @@ export const dropdownsApi = {
   update: (id: string, data: any) => api.patch(`/dropdowns/${id}`, data),
   delete: (id: string) => api.delete(`/dropdowns/${id}`),
   seed: () => api.post('/dropdowns/seed'),
+  setDefault: (id: string) => api.put(`/dropdowns/${id}/set-default`),
 };
 
 export const settingsApi = {

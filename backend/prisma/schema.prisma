@@ -163,7 +163,7 @@ model Lead {
   organizationId String
   assignedToId   String?
   createdById    String?
-  companyName String
+  companyName String?
   website     String?
   linkedinUrl String?
   industry    String?
@@ -532,6 +532,7 @@ model DropdownConfig {
   value          String
   displayOrder   Int      @default(0)
   isActive       Boolean  @default(true)
+  isDefault      Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])

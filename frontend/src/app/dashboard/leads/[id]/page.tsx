@@ -817,7 +817,7 @@ export default function LeadDetailPage() {
                                 <span className="text-xs text-slate-400">—</span>
                               )}
                               {canEditThisLead && (
-                                <div className="opacity-0 group-hover:opacity-100 transition-all ml-auto flex items-center gap-1 flex-shrink-0">
+                                <div className="ml-auto flex items-center gap-1 flex-shrink-0">
                                   <button
                                     onClick={() => startEditContact(c)}
                                     className="btn-ghost text-[10px] py-0.5 px-1.5 text-slate-400"

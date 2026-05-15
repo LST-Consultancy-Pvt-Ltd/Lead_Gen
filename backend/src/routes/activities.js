@@ -190,6 +190,15 @@ router.get(
   activityController.getActivityById
 );
 
+// PUT /api/activities/:id — update activity (ownership enforced in service)
+router.put(
+  '/:id',
+  authenticate,
+  [param('id').isUUID().withMessage('Activity ID must be a valid UUID')],
+  validate,
+  activityController.updateActivity
+);
+
 // DELETE /api/activities/:id — admin/CEO only, audit-logged
 router.delete(
   '/:id',
