@@ -471,31 +471,6 @@ export default function LeadDetailPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {canEditThisLead && (
-            <button
-              className="btn-ghost"
-              onClick={() => {
-                setIsEditing(true);
-                setEditData({
-                  status: lead.status,
-                  followUpDate: lead.followUpDate ? lead.followUpDate.split('T')[0] : '',
-                  disqualificationReason: lead.disqualificationReason || '',
-                  contactName: lead.contactName || '',
-                  contactEmail: lead.contactEmail || '',
-                  contactPhone: lead.contactPhone || '',
-                  contactTitle: lead.contactTitle || '',
-                  notes: lead.notes || '',
-                });
-              }}
-            >
-              <Edit2 size={14} /> Edit Lead
-            </button>
-          )}
-          {/* <button className="btn-ghost" onClick={() => analyzeMutation.mutate()}
-            disabled={analyzeMutation.isPending}>
-            {analyzeMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Re-analyze
-          </button> */}
           <button className="btn-primary" onClick={() => generateEmailMutation.mutate()}
             disabled={generateEmailMutation.isPending}>
             {generateEmailMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
@@ -503,6 +478,77 @@ export default function LeadDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* ── View Mode Details ────────────────────────────────────────────── */}
+      {!isEditing && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title">Lead Details</h2>
+            {canEditThisLead && (
+              <button
+                className="btn-ghost text-xs py-1 px-2"
+                onClick={() => {
+                  setIsEditing(true);
+                  setEditData({
+                    status: lead.status,
+                    followUpDate: lead.followUpDate ? lead.followUpDate.split('T')[0] : '',
+                    disqualificationReason: lead.disqualificationReason || '',
+                    contactName: lead.contactName || '',
+                    contactEmail: lead.contactEmail || '',
+                    contactPhone: lead.contactPhone || '',
+                    contactTitle: lead.contactTitle || '',
+                    notes: lead.notes || '',
+                  });
+                }}
+              >
+                <Edit2 size={13} /> Edit
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Status</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.status?.replace(/_/g, ' ') || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Follow-up Date</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">
+                {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Name</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactName || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Email</p>
+              {lead.contactEmail ? (
+                <a href={`mailto:${lead.contactEmail}`} className="text-sm text-blue-400 hover:underline">{lead.contactEmail}</a>
+              ) : (
+                <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Phone</p>
+              {lead.contactPhone ? (
+                <a href={`tel:${lead.contactPhone}`} className="text-sm text-blue-400 hover:underline">{lead.contactPhone}</a>
+              ) : (
+                <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Title</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
+            </div>
+            {lead.notes && (
+              <div className="sm:col-span-2">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
+                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{lead.notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Inline Edit Form ─────────────────────────────────────────────── */}
       {isEditing && (
