@@ -256,11 +256,18 @@ async function getImportLogs(req, res) {
   }
 }
 
+function normaliseLeadType(raw) {
+  if (!raw) return null;
+  const v = raw.toString().trim().toLowerCase();
+  if (v === 'product') return 'product';
+  if (v === 'service' || v === 'services') return 'service';
+  return v || null;
+}
+
 /**
  * POST /api/import/leads/excel
  * Upload a structured Excel file (.xlsx/.xls) and bulk-create leads.
- * Columns: Company, Contact, Assign To, Score, Status, Product / Position,
- *          Source URL, Next Follow-up
+ * Columns: Company, Contact, Assign To, Score, Status, Product / Service, Source URL
  * Access: any authenticated user (no admin required)
  */
 async function importLeadsFromExcel(req, res) {
@@ -297,12 +304,15 @@ async function importLeadsFromExcel(req, res) {
     if (uniqueAssignToValues.length > 0) {
       const matchedUsers = await prisma.user.findMany({
         where: {
-          name: { in: uniqueAssignToValues },
           organizationId,
+          isActive: true,
+          OR: uniqueAssignToValues.map(name => ({
+            name: { equals: name, mode: 'insensitive' },
+          })),
         },
         select: { id: true, name: true },
       });
-      matchedUsers.forEach(u => userMap.set(u.name, u.id));
+      matchedUsers.forEach(u => userMap.set(u.name.toLowerCase(), u.id));
     }
 
     // ── Map records to Lead model objects ──────────────────────────────────
@@ -314,17 +324,17 @@ async function importLeadsFromExcel(req, res) {
           : null;
 
       return {
-        companyName:    String(record['Company']).trim(),
-        contactName:    record['Contact']?.toString().trim() || null,
-        assignedToId:   userMap.get(record['Assign To']?.toString().trim()) || null,
-        leadScore:      parseInt(record['Score'], 10) || 0,
-        status:         record['Status']?.toString().trim().toLowerCase() || 'new',
-        subSource:      record['Product / Position']?.toString().trim() || null,
-        sourceUrl:      record['Source URL']?.toString().trim() || null,
+        companyName:  String(record['Company']).trim(),
+        contactName:  record['Contact']?.toString().trim() || null,
+        assignedToId: userMap.get(record['Assign To']?.toString().trim().toLowerCase()) || null,
+        leadScore:    parseInt(record['Score'], 10) || 0,
+        status:       record['Status']?.toString().trim().toLowerCase() || 'new',
+        leadType:     normaliseLeadType(record['Product / Service']),
+        sourceUrl:    record['Source URL']?.toString().trim() || null,
         followUpDate,
         organizationId,
-        createdById:    req.user.id,
-        source:         'Excel Import',
+        createdById:  req.user.id,
+        source:       'Excel Import',
       };
     });
 

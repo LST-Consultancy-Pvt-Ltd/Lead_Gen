@@ -200,6 +200,12 @@ export default function LeadDetailPage() {
     staleTime: 0,
   });
 
+  const { data: leadTypeOptions = [] } = useQuery({
+    queryKey: ['dropdowns', 'lead_type'],
+    queryFn: () => dropdownsApi.listByCategory('lead_type').then(r => r.data?.data || r.data || []),
+    staleTime: 0,
+  });
+
   const lead: any = data;
   const isOwnLead = lead?.assignedTo?.id === user?.id;
   const canEditThisLead = permissions.canEditAllLeads || (permissions.canEditOwnLeads && isOwnLead);
@@ -216,6 +222,8 @@ export default function LeadDetailPage() {
         contactPhone: lead.contactPhone || '',
         contactTitle: lead.contactTitle || '',
         notes: lead.notes || '',
+        leadType: lead.leadType || '',
+        sourceUrl: lead.sourceUrl || '',
       });
     }
   }, [isEditing, lead]);
@@ -498,6 +506,8 @@ export default function LeadDetailPage() {
                     contactPhone: lead.contactPhone || '',
                     contactTitle: lead.contactTitle || '',
                     notes: lead.notes || '',
+                    leadType: lead.leadType || '',
+                    sourceUrl: lead.sourceUrl || '',
                   });
                 }}
               >
@@ -539,6 +549,21 @@ export default function LeadDetailPage() {
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Title</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Product / Service</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">
+                {lead.leadType ? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1) : '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source URL</p>
+              {lead.sourceUrl ? (
+                <a href={lead.sourceUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-blue-400 hover:underline break-all">{lead.sourceUrl}</a>
+              ) : (
+                <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
+              )}
             </div>
             <div className="sm:col-span-2">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
@@ -629,6 +654,32 @@ export default function LeadDetailPage() {
                 value={editData.contactTitle || ''}
                 onChange={(e) => setEditData((d: any) => ({ ...d, contactTitle: e.target.value }))}
                 placeholder="e.g. CEO, CTO"
+              />
+            </div>
+            <div>
+              <label className="label">Product / Service</label>
+              <select
+                className="input"
+                title="Product or Service type"
+                value={editData.leadType || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, leadType: e.target.value }))}
+              >
+                <option value="">— Select —</option>
+                {(leadTypeOptions as any[]).map((opt: any) => (
+                  <option key={opt.id} value={opt.value.toLowerCase()}>
+                    {opt.value}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Source URL</label>
+              <input
+                className="input"
+                type="url"
+                value={editData.sourceUrl || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, sourceUrl: e.target.value }))}
+                placeholder="https://..."
               />
             </div>
             <div>

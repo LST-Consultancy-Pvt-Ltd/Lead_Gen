@@ -1,15 +1,17 @@
 const XLSX = require('xlsx');
 
-const ALLOWED_COLUMNS = [
+const REQUIRED_COLUMNS = [
   'Company',
   'Contact',
   'Assign To',
   'Score',
   'Status',
-  'Product / Position',
+  'Product / Service',
   'Source URL',
   'Next Follow-up',
 ];
+
+const ALLOWED_COLUMNS = REQUIRED_COLUMNS;
 
 async function validateExcelFile(buffer) {
   let workbook;
@@ -54,16 +56,18 @@ async function validateExcelFile(buffer) {
 
   const headerErrors = [];
 
-  // Reject any column not in the allowed list
-  for (const header of headers) {
-    if (!ALLOWED_COLUMNS.includes(header)) {
-      headerErrors.push(`Invalid column found: ${header}`);
+  // All required columns must be present in the file
+  for (const col of REQUIRED_COLUMNS) {
+    if (!headers.includes(col)) {
+      headerErrors.push(`Missing required column: "${col}"`);
     }
   }
 
-  // Company column must be present
-  if (!headers.includes('Company')) {
-    headerErrors.push('Company column is required');
+  // Reject any column not in the allowed list
+  for (const header of headers) {
+    if (!ALLOWED_COLUMNS.includes(header)) {
+      headerErrors.push(`Invalid column found: "${header}"`);
+    }
   }
 
   if (headerErrors.length > 0) {
@@ -96,10 +100,15 @@ async function validateExcelFile(buffer) {
       record[header] = value;
     }
 
-    // Company value must be non-empty
-    const company = String(record['Company'] ?? '').trim();
-    if (!company) {
-      rowErrors.push(`Company is required at row ${rowNum}`);
+    // All required columns must have a non-empty value in every data row
+    const emptyColumns = REQUIRED_COLUMNS.filter(
+      col => String(record[col] ?? '').trim() === ''
+    );
+
+    if (emptyColumns.length > 0) {
+      rowErrors.push(
+        `Row ${rowNum}: missing required value(s) for: ${emptyColumns.map(c => `"${c}"`).join(', ')}`
+      );
       continue;
     }
 
