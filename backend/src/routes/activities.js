@@ -199,11 +199,10 @@ router.put(
   activityController.updateActivity
 );
 
-// DELETE /api/activities/:id — admin/CEO only, audit-logged
+// DELETE /api/activities/:id — creator or admin only, audit-logged
 router.delete(
   '/:id',
   authenticate,
-  requireAdmin,
   [param('id').isUUID().withMessage('Activity ID must be a valid UUID')],
   validate,
   activityController.deleteActivity

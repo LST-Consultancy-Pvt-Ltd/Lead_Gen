@@ -793,20 +793,20 @@ class ActivityService {
    * Delete an activity. Admin/CEO only. Audit-logged.
    */
   async deleteActivity(id, user) {
-    if (!ADMIN_ROLES.includes(user.role)) {
-      return {
-        success: false,
-        statusCode: 403,
-        message: "Only admins can delete activities",
-      };
-    }
-
     const activity = await prisma.activityLog.findFirst({
       where: { id, organizationId: user.organizationId },
       include: { user: { select: { id: true, name: true } } },
     });
     if (!activity)
       return { success: false, statusCode: 404, message: "Activity not found" };
+
+    if (!ADMIN_ROLES.includes(user.role) && activity.userId !== user.id) {
+      return {
+        success: false,
+        statusCode: 403,
+        message: "You can only delete activities you created",
+      };
+    }
 
     await prisma.activityLog.delete({ where: { id } });
 
