@@ -576,12 +576,12 @@ function ViewEditModal({
                 <select {...register("type")} className="input">
                   {ACTIVITY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
-                {errors.type && <p className="text-xs text-red-400 mt-1">{errors.type.message}</p>}
+                {errors.type && <p className="text-xs text-red-400 mt-1">{errors.type.message as string}</p>}
               </div>
               <div>
                 <label className="label">Activity Date</label>
                 <input type="date" {...register("activityDate")} className="input" max={new Date().toISOString().split("T")[0]} />
-                {errors.activityDate && <p className="text-xs text-red-400 mt-1">{errors.activityDate.message}</p>}
+                {errors.activityDate && <p className="text-xs text-red-400 mt-1">{errors.activityDate.message as string}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -592,7 +592,7 @@ function ViewEditModal({
               <div>
                 <label className="label">Next Action Date <span className="text-red-400">*</span></label>
                 <input type="date" {...register("nextActionDate")} className="input" min={new Date().toISOString().split("T")[0]} />
-                {errors.nextActionDate && <p className="text-xs text-red-400 mt-1">{errors.nextActionDate.message}</p>}
+                {errors.nextActionDate && <p className="text-xs text-red-400 mt-1">{errors.nextActionDate.message as string}</p>}
               </div>
             </div>
             <div>
@@ -1574,7 +1574,7 @@ export default function ActivitiesPage() {
                     </select>
                     {errors.type && (
                       <p className="text-xs text-red-400 mt-1">
-                        {errors.type.message}
+                        {errors.type.message as string}
                       </p>
                     )}
                   </div>
@@ -1698,7 +1698,7 @@ export default function ActivitiesPage() {
                     />
                     {errors.activityDate && (
                       <p className="text-xs text-red-400 mt-1">
-                        {errors.activityDate.message}
+                        {errors.activityDate.message as string}
                       </p>
                     )}
                   </div>
@@ -1731,7 +1731,7 @@ export default function ActivitiesPage() {
                   </p>
                   {errors.outcome && (
                     <p className="text-xs text-red-400 mt-1">
-                      {errors.outcome.message}
+                      {errors.outcome.message as string}
                     </p>
                   )}
                 </div>
@@ -1750,7 +1750,7 @@ export default function ActivitiesPage() {
                     />
                     {errors.nextActionDate && (
                       <p className="text-xs text-red-400 mt-1">
-                        {errors.nextActionDate.message}
+                        {errors.nextActionDate.message as string}
                       </p>
                     )}
                   </div>
