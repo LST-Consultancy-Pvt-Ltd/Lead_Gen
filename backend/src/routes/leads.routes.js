@@ -61,9 +61,7 @@ const createLeadValidation = [
 
   body('status')
     .optional({ checkFalsy: true })
-    .customSanitizer((val) => (val ? val.toLowerCase() : val))
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
-    .withMessage('Invalid status'),
+    .customSanitizer((val) => (val ? val.toLowerCase() : val)),
 
   body('followUpDate')
     .optional({ checkFalsy: true })
@@ -175,8 +173,7 @@ const updateLeadValidation = [
   
   body('status')
     .optional()
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
-    .withMessage('Invalid status'),
+    .customSanitizer((val) => (val ? val.toLowerCase() : val)),
 
   // Spec: disqualificationReason required when setting status to disqualified
   body('disqualificationReason')
@@ -231,8 +228,7 @@ const getLeadsValidation = [
   
   query('status')
     .optional()
-    .isIn(['new', 'contacted', 'replied', 'meeting_booked', 'qualified', 'disqualified', 'closed_won', 'closed_lost', 'warm', 'hot', 'proposal_sent', 'negotiation', 'won', 'lost', 'on_hold', 'unqualified'])
-    .withMessage('Invalid status'),
+    .customSanitizer((val) => (val ? val.toLowerCase() : val)),
   
   query('intent')
     .optional()

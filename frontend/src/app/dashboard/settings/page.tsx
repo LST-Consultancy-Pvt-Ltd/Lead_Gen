@@ -46,12 +46,13 @@ const PRODUCT_DISCOVERY_CATEGORIES = [
 ];
 
 const LEADS_CATEGORIES = [
-  { key: 'lead_status',    label: 'Lead Status' },
-  { key: 'lead_source',    label: 'Lead Source' },
-  { key: 'lead_type',      label: 'Lead Type' },
-  { key: 'job_title',      label: 'Job Title' },
-  { key: 'pipeline_stage', label: 'Pipeline Stage' },
-  { key: 'loss_reason',    label: 'Loss Reason' },
+  { key: 'lead_status',               label: 'Lead Status' },
+  { key: 'lead_source',               label: 'Lead Source' },
+  { key: 'lead_type',                 label: 'Lead Type' },
+  { key: 'job_title',                 label: 'Job Title' },
+  { key: 'pipeline_stage',            label: 'Pipeline Stage' },
+  { key: 'loss_reason',               label: 'Loss Reason' },
+  { key: 'opportunity_business_line', label: 'Opportunity Business Line' },
 ];
 
 function getCategoryValues(data: any[], categoryKey: string) {

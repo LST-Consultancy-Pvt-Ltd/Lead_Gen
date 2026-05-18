@@ -20,6 +20,8 @@ const VALID_CATEGORIES = [
   "product_industry", "product_company_size", "product_company_type",
   "product_annual_revenue_range", "product_decision_maker",
   "product_preferred_contact_channel", "product_seniority_level",
+  // Opportunities module
+  "opportunity_business_line",
 ];
 
 // Default values seeded for every new organisation
@@ -151,6 +153,13 @@ const DEFAULT_DROPDOWN_SEEDS = [
   { category: 'product_seniority_level', values: [
     'Any', 'C-suite', 'VP / SVP Level', 'Director Level', 'Manager Level',
     'Team Lead', 'Individual Contributor', 'Board / Advisor Level',
+  ]},
+  { category: 'opportunity_business_line', values: [
+    'NetSuite Services',
+    'Salesforce Services',
+    'Custom Development',
+    'SaaS Product',
+    'Training',
   ]},
 ];
 
