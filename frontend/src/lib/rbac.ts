@@ -170,7 +170,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canUseAI: false,
     canLogActivity: true,
     canImportData: false,
-    canExportData: false,
+    canExportData: true,
     canBulkDelete: false,
     canManageUsers: false,
     canChangeUserRoles: false,
