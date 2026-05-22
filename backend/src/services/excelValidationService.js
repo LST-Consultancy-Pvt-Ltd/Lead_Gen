@@ -3,7 +3,6 @@ const XLSX = require('xlsx');
 const REQUIRED_COLUMNS = [
   'Company',
   'Contact',
-  'Assign To',
   'Score',
   'Status',
   'Product / Service',

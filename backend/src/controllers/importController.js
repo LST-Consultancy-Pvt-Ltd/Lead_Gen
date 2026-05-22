@@ -327,9 +327,11 @@ async function importLeadsFromExcel(req, res) {
           ? new Date(followUpRaw)
           : null;
 
-      const resolvedAssignedToId =
-        userMap.get(record['Assign To']?.toString().trim().toLowerCase()) ||
-        (isSalesUser ? req.user.id : null);
+      // Sales users always own their own imported leads;
+      // admins/managers use the "Assign To" column (falls back to null if unspecified).
+      const resolvedAssignedToId = isSalesUser
+        ? req.user.id
+        : (userMap.get(record['Assign To']?.toString().trim().toLowerCase()) || null);
 
       return {
         companyName:  String(record['Company']).trim(),
