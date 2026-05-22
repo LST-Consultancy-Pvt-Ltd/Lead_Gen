@@ -316,6 +316,10 @@ async function importLeadsFromExcel(req, res) {
     }
 
     // ── Map records to Lead model objects ──────────────────────────────────
+    // For sales_user: if no "Assign To" is specified, assign to themselves so
+    // the lead appears in their filtered view (which scopes to assignedToId = user.id).
+    const isSalesUser = req.user.role === 'sales_user';
+
     const leadsData = records.map(record => {
       const followUpRaw = record['Next Follow-up'];
       const followUpDate =
@@ -323,10 +327,14 @@ async function importLeadsFromExcel(req, res) {
           ? new Date(followUpRaw)
           : null;
 
+      const resolvedAssignedToId =
+        userMap.get(record['Assign To']?.toString().trim().toLowerCase()) ||
+        (isSalesUser ? req.user.id : null);
+
       return {
         companyName:  String(record['Company']).trim(),
         contactName:  record['Contact']?.toString().trim() || null,
-        assignedToId: userMap.get(record['Assign To']?.toString().trim().toLowerCase()) || null,
+        assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
         status:       record['Status']?.toString().trim().toLowerCase() || 'new',
         leadType:     normaliseLeadType(record['Product / Service']),

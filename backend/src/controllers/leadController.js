@@ -350,7 +350,12 @@ async function sendOutreach(req, res) {
 async function exportLeads(req, res) {
   try {
     const where = { organizationId: req.user.organizationId };
-    
+
+    // Sales users can only export their own assigned leads
+    if (req.user.role === 'sales_user') {
+      where.assignedToId = req.user.id;
+    }
+
     // Handle selected leads export
     if (req.query.ids) {
       where.id = { in: req.query.ids.split(',') };
@@ -366,14 +371,16 @@ async function exportLeads(req, res) {
       if (req.query.status) {
         where.status = req.query.status;
       }
-      if (req.query.assignedTo) {
-        where.assignedToId = req.query.assignedTo;
-      }
-      if (req.query.unassigned === 'true') {
-        where.assignedToId = null;
-      }
-      if (req.query.assignedToMe === 'true') {
-        where.assignedToId = req.user.userId;
+      if (req.user.role !== 'sales_user') {
+        if (req.query.assignedTo) {
+          where.assignedToId = req.query.assignedTo;
+        }
+        if (req.query.unassigned === 'true') {
+          where.assignedToId = null;
+        }
+        if (req.query.assignedToMe === 'true') {
+          where.assignedToId = req.user.id;
+        }
       }
     }
     

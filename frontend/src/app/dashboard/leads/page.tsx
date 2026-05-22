@@ -388,7 +388,7 @@ export default function LeadsPage() {
             <table className="w-full">
               <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
                 <tr className="border-b border-slate-200 dark:border-white/[0.06]">
-                  {permissions.canReassignLead && (
+                  {(permissions.canReassignLead || permissions.canExportData) && (
                     <th className="px-4 py-3 w-8">
                       <input
                         type="checkbox"
@@ -434,7 +434,7 @@ export default function LeadsPage() {
               <tbody>
                 {leads.map((l: any) => (
                   <tr key={l.id} className={`border-b border-slate-200 dark:border-white/[0.04] hover:bg-slate-200/30 dark:hover:bg-slate-800/30 transition-colors ${selectedLeads.has(l.id) ? 'bg-blue-500/5' : ''}`}>
-                    {permissions.canReassignLead && (
+                    {(permissions.canReassignLead || permissions.canExportData) && (
                       <td className="px-4 py-3 w-8">
                         <input
                           type="checkbox"
