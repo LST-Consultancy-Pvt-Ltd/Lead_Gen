@@ -390,11 +390,6 @@ function ActivityRow({
                 Next action: {nextAction.label}
               </span>
             )}
-            {showLoggedBy && activity.createdBy?.name && (
-              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full">
-                <User size={10} /> {activity.createdBy.name}
-              </span>
-            )}
             {canDelete && onDelete && (
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(activity); }}
@@ -699,6 +694,14 @@ export default function ActivitiesPage() {
   const [linkedDisplay, setLinkedDisplay] = useState("");
   const linkedSearchRef = useRef<HTMLDivElement>(null);
   const linkedFilterRef = useRef<HTMLDivElement>(null);
+  const [lsLeadsAll, setLsLeadsAll] = useState<any[]>([]);
+  const [lsLeadsPage, setLsLeadsPage] = useState(1);
+  const [lsLeadsHasMore, setLsLeadsHasMore] = useState(false);
+  const LS_PAGE_SIZE = 50;
+  const [flLeadsAll, setFlLeadsAll] = useState<any[]>([]);
+  const [flLeadsPage, setFlLeadsPage] = useState(1);
+  const [flLeadsHasMore, setFlLeadsHasMore] = useState(false);
+  const FL_PAGE_SIZE = 50;
 
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [selectedActivity, setSelectedActivity] = useState<any>(null);
@@ -720,6 +723,28 @@ export default function ActivitiesPage() {
     const t = setTimeout(() => setDebouncedLTFQ(linkedToFilterQuery), 300);
     return () => clearTimeout(t);
   }, [linkedToFilterQuery]);
+
+  // Full reset only when search changes
+  useEffect(() => {
+    setLsLeadsAll([]);
+    setLsLeadsPage(1);
+    setLsLeadsHasMore(false);
+  }, [debouncedLS]);
+
+  // On close, reset page to 1 so re-open always starts fresh from page 1
+  useEffect(() => {
+    if (!linkedDropOpen) setLsLeadsPage(1);
+  }, [linkedDropOpen]);
+
+  useEffect(() => {
+    setFlLeadsAll([]);
+    setFlLeadsPage(1);
+    setFlLeadsHasMore(false);
+  }, [debouncedLTFQ]);
+
+  useEffect(() => {
+    if (!showLinkedFilter) setFlLeadsPage(1);
+  }, [showLinkedFilter]);
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -838,39 +863,67 @@ export default function ActivitiesPage() {
   });
   const teamMembers = Array.isArray(usersRaw) ? usersRaw : [];
 
-  // Linked-to search for form
-  const { data: lsLeadsRaw } = useQuery({
-    queryKey: ["ls-leads", debouncedLS],
+  // Linked-to search for form — paginated, role-scoped via baseParams
+  const { data: lsLeadsRaw, isFetching: lsLeadsFetching } = useQuery({
+    queryKey: ["ls-leads", debouncedLS, lsLeadsPage, baseParams],
     queryFn: () =>
       leadsApi
-        .list({ search: debouncedLS, limit: 5, ...baseParams })
+        .list({
+          ...(debouncedLS ? { search: debouncedLS } : {}),
+          limit: LS_PAGE_SIZE,
+          page: lsLeadsPage,
+          ...baseParams,
+        })
         .then((r) => r.data?.data ?? []),
-    enabled: debouncedLS.length >= 1,
+    enabled: linkedDropOpen,
     staleTime: 10_000,
   });
+  // Accumulate pages into lsLeadsAll; also fires on re-open to repopulate from cache
+  useEffect(() => {
+    if (!Array.isArray(lsLeadsRaw) || !linkedDropOpen) return;
+    setLsLeadsAll((prev) =>
+      lsLeadsPage === 1
+        ? lsLeadsRaw
+        : [...prev, ...lsLeadsRaw.filter((l: any) => !prev.some((p: any) => p.id === l.id))]
+    );
+    setLsLeadsHasMore(lsLeadsRaw.length >= LS_PAGE_SIZE);
+  }, [lsLeadsRaw, linkedDropOpen]);
+
   const { data: lsOppsRaw } = useQuery({
-    queryKey: ["ls-opps", debouncedLS],
+    queryKey: ["ls-opps", debouncedLS, baseParams],
     queryFn: () =>
       opportunitiesApi
         .list({ search: debouncedLS, limit: 5, ...baseParams })
         .then((r) => r.data?.data ?? r.data ?? []),
-    enabled: debouncedLS.length >= 1,
+    enabled: linkedDropOpen && debouncedLS.length >= 1,
     staleTime: 10_000,
   });
-  const lsLeads = Array.isArray(lsLeadsRaw) ? lsLeadsRaw : [];
   const lsOpps = Array.isArray(lsOppsRaw) ? lsOppsRaw : [];
 
   // Linked-to filter search (admin)
-  const { data: flLeadsRaw } = useQuery({
-    queryKey: ["fl-leads", debouncedLTFQ],
+  const { data: flLeadsRaw, isFetching: flLeadsFetching } = useQuery({
+    queryKey: ["fl-leads", debouncedLTFQ, flLeadsPage, baseParams],
     queryFn: () =>
       leadsApi
-        .list({ search: debouncedLTFQ, limit: 6, ...baseParams })
+        .list({
+          ...(debouncedLTFQ ? { search: debouncedLTFQ } : {}),
+          limit: FL_PAGE_SIZE,
+          page: flLeadsPage,
+          ...baseParams,
+        })
         .then((r) => r.data?.data ?? []),
-    enabled: debouncedLTFQ.length >= 1 && showLinkedFilter && isAdmin,
+    enabled: showLinkedFilter && isAdmin,
     staleTime: 10_000,
   });
-  const flLeads = Array.isArray(flLeadsRaw) ? flLeadsRaw : [];
+  useEffect(() => {
+    if (!Array.isArray(flLeadsRaw) || !showLinkedFilter) return;
+    setFlLeadsAll((prev) =>
+      flLeadsPage === 1
+        ? flLeadsRaw
+        : [...prev, ...flLeadsRaw.filter((l: any) => !prev.some((p: any) => p.id === l.id))]
+    );
+    setFlLeadsHasMore(flLeadsRaw.length >= FL_PAGE_SIZE);
+  }, [flLeadsRaw, showLinkedFilter]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -977,7 +1030,7 @@ export default function ActivitiesPage() {
     ? "Log and track every interaction with your leads and opportunities"
     : isManager
       ? "All interactions logged by your team \u2014 leads and opportunities"
-      : "Organisation-wide activity log \u2014 all executives, all records";
+      : "";
 
   const statCards = useMemo(() => {
     if (isSalesUser)
@@ -1067,27 +1120,6 @@ export default function ActivitiesPage() {
 
   return (
     <div className="space-y-5">
-      {/* Role badge */}
-      <div className="flex items-center gap-2">
-        <span
-          className={
-            "text-[11px] font-semibold px-2.5 py-1 rounded-full " +
-            (isSalesUser
-              ? "bg-emerald-500/15 text-emerald-400"
-              : isManager
-                ? "bg-amber-500/15 text-amber-400"
-                : "bg-blue-500/15 text-blue-400")
-          }
-        >
-          {"\u25CF"}{" "}
-          {isSalesUser
-            ? "Sales Executive \u2014 own records only"
-            : isManager
-              ? "Sales Manager \u2014 full team visibility"
-              : "Admin / CEO \u2014 system-wide access"}
-        </span>
-      </div>
-
       {/* 1. PAGE HEADER */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
@@ -1096,7 +1128,7 @@ export default function ActivitiesPage() {
         </div>
         {permissions.canLogActivity && (
           <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>
-            <Plus size={14} /> Log Activity
+            <Plus size={14} /> Add Activity
           </button>
         )}
       </div>
@@ -1273,12 +1305,24 @@ export default function ActivitiesPage() {
                   <input
                     autoFocus
                     className="input h-8 text-xs w-full"
-                    placeholder="Search lead\u2026"
+                    placeholder="Search lead"
                     value={linkedToFilterQuery}
                     onChange={(e) => setLinkedToFilterQuery(e.target.value)}
                   />
-                  <div className="mt-1 max-h-40 overflow-y-auto">
-                    {flLeads.map((l: any) => (
+                  <div
+                    className="mt-1 max-h-52 overflow-y-auto"
+                    onScroll={(e) => {
+                      const el = e.currentTarget;
+                      if (
+                        flLeadsHasMore &&
+                        !flLeadsFetching &&
+                        el.scrollHeight - el.scrollTop <= el.clientHeight + 80
+                      ) {
+                        setFlLeadsPage((p) => p + 1);
+                      }
+                    }}
+                  >
+                    {flLeadsAll.map((l: any) => (
                       <button
                         key={l.id}
                         className="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-600 dark:text-slate-300"
@@ -1292,12 +1336,15 @@ export default function ActivitiesPage() {
                         {l.companyName}
                       </button>
                     ))}
-                    {linkedToFilterQuery.length >= 1 &&
-                      flLeads.length === 0 && (
-                        <p className="text-xs text-slate-600 px-2 py-2">
-                          No leads found
-                        </p>
-                      )}
+                    {flLeadsAll.length === 0 && flLeadsFetching && (
+                      <p className="text-xs text-slate-500 px-2 py-2">Loading\u2026</p>
+                    )}
+                    {flLeadsAll.length > 0 && flLeadsFetching && (
+                      <p className="text-xs text-slate-500 px-2 py-1 text-center">Loading more\u2026</p>
+                    )}
+                    {!flLeadsFetching && flLeadsAll.length === 0 && (
+                      <p className="text-xs text-slate-500 px-2 py-2">No leads found</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -1382,7 +1429,7 @@ export default function ActivitiesPage() {
                     className="btn-primary text-xs"
                     onClick={() => setIsCreateOpen(true)}
                   >
-                    <Plus size={13} /> Log Activity
+                    <Plus size={13} /> Add Activity
                   </button>
                 ) : undefined
               }
@@ -1538,7 +1585,7 @@ export default function ActivitiesPage() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-xl shadow-2xl max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-white/[0.06]">
               <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Log Activity
+                Add Activity
               </h3>
               <button
                 title="Close"
@@ -1584,8 +1631,8 @@ export default function ActivitiesPage() {
                     </label>
                     <div className="relative" ref={linkedSearchRef}>
                       <input
-                        className="input pr-7 text-sm"
-                        placeholder="Search lead or opportunity\u2026"
+                        className="input pr-14 text-sm"
+                        placeholder="Search leads\u2026"
                         autoComplete="off"
                         value={linkedDisplay || linkedSearch}
                         onChange={(e) => {
@@ -1595,86 +1642,117 @@ export default function ActivitiesPage() {
                           setValue("opportunityId", "");
                           setLinkedDropOpen(true);
                         }}
-                        onFocus={() => {
-                          if (!linkedDisplay) setLinkedDropOpen(true);
-                        }}
+                        onClick={() => setLinkedDropOpen((p) => !p)}
                       />
-                      {(linkedDisplay || linkedSearch) && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {linkedDisplay && (
+                          <button
+                            type="button"
+                            title="Clear"
+                            className="text-slate-400 hover:text-slate-200"
+                            onClick={() => {
+                              setLinkedDisplay("");
+                              setLinkedSearch("");
+                              setValue("leadId", "");
+                              setValue("opportunityId", "");
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
                         <button
                           type="button"
-                          title="Clear linked record"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-500 dark:hover:text-slate-300"
-                          onClick={() => {
-                            setLinkedDisplay("");
-                            setLinkedSearch("");
-                            setValue("leadId", "");
-                            setValue("opportunityId", "");
+                          className="text-slate-400 hover:text-slate-200"
+                          onClick={() => setLinkedDropOpen((p) => !p)}
+                        >
+                          <ChevronDown
+                            size={14}
+                            className={`transition-transform duration-150 ${linkedDropOpen ? "rotate-180" : ""}`}
+                          />
+                        </button>
+                      </div>
+                      {linkedDropOpen && (lsLeadsAll.length > 0 || lsOpps.length > 0 || lsLeadsFetching) && (
+                        <div
+                          className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto"
+                          onScroll={(e) => {
+                            const el = e.currentTarget;
+                            if (
+                              lsLeadsHasMore &&
+                              !lsLeadsFetching &&
+                              el.scrollHeight - el.scrollTop <= el.clientHeight + 80
+                            ) {
+                              setLsLeadsPage((p) => p + 1);
+                            }
                           }}
                         >
-                          <X size={12} />
-                        </button>
+                          {lsLeadsAll.length > 0 && (
+                            <>
+                              <p className="px-3 pt-2 pb-1 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                                Leads
+                              </p>
+                              {lsLeadsAll.map((l: any) => (
+                                <button
+                                  key={l.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200"
+                                  onClick={() =>
+                                    selectLinked("lead", l.id, l.companyName)
+                                  }
+                                >
+                                  <span className="font-medium">
+                                    {l.companyName}
+                                  </span>
+                                  {l.contactName && (
+                                    <span className="text-slate-500 ml-1">
+                                      {"\u00B7"} {l.contactName}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                              {lsLeadsFetching && (
+                                <p className="px-3 py-2 text-[10px] text-slate-400 text-center">
+                                  Loading more\u2026
+                                </p>
+                              )}
+                            </>
+                          )}
+                          {lsLeadsAll.length === 0 && lsLeadsFetching && (
+                            <p className="px-3 py-3 text-xs text-slate-400 text-center">
+                              Loading\u2026
+                            </p>
+                          )}
+                          {lsOpps.length > 0 && (
+                            <>
+                              <p className="px-3 pt-2 pb-1 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                                Opportunities
+                              </p>
+                              {lsOpps.map((o: any) => (
+                                <button
+                                  key={o.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200"
+                                  onClick={() =>
+                                    selectLinked(
+                                      "opportunity",
+                                      o.id,
+                                      o.opportunityName ?? o.title,
+                                    )
+                                  }
+                                >
+                                  <span className="font-medium">
+                                    {o.opportunityName ?? o.title}
+                                  </span>
+                                  {o.businessLine && (
+                                    <span className="text-slate-500 ml-1">
+                                      {"\u00B7"} {o.businessLine}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                            </>
+                          )}
+                        </div>
                       )}
-                      {linkedDropOpen &&
-                        (lsLeads.length > 0 || lsOpps.length > 0) && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
-                            {lsLeads.length > 0 && (
-                              <>
-                                <p className="px-3 pt-2 pb-1 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
-                                  Leads
-                                </p>
-                                {lsLeads.map((l: any) => (
-                                  <button
-                                    key={l.id}
-                                    type="button"
-                                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-700 text-slate-800 dark:text-slate-200"
-                                    onClick={() =>
-                                      selectLinked("lead", l.id, l.companyName)
-                                    }
-                                  >
-                                    <span className="font-medium">
-                                      {l.companyName}
-                                    </span>
-                                    {l.contactName && (
-                                      <span className="text-slate-500 ml-1">
-                                        {"\u00B7"} {l.contactName}
-                                      </span>
-                                    )}
-                                  </button>
-                                ))}
-                              </>
-                            )}
-                            {lsOpps.length > 0 && (
-                              <>
-                                <p className="px-3 pt-2 pb-1 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
-                                  Opportunities
-                                </p>
-                                {lsOpps.map((o: any) => (
-                                  <button
-                                    key={o.id}
-                                    type="button"
-                                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-700 text-slate-800 dark:text-slate-200"
-                                    onClick={() =>
-                                      selectLinked(
-                                        "opportunity",
-                                        o.id,
-                                        o.opportunityName ?? o.title,
-                                      )
-                                    }
-                                  >
-                                    <span className="font-medium">
-                                      {o.opportunityName ?? o.title}
-                                    </span>
-                                    {o.businessLine && (
-                                      <span className="text-slate-500 ml-1">
-                                        {"\u00B7"} {o.businessLine}
-                                      </span>
-                                    )}
-                                  </button>
-                                ))}
-                              </>
-                            )}
-                          </div>
-                        )}
                     </div>
                     {linkedToError && (
                       <p className="text-xs text-red-400 mt-1">
@@ -1687,14 +1765,15 @@ export default function ActivitiesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label mb-1 block">
-                      Date &amp; Time <span className="text-red-400">*</span>
+                      Date <span className="text-red-400">*</span>
                     </label>
                     <input
                       className="input"
-                      type="datetime-local"
-                      max={new Date().toISOString().slice(0, 16)}
+                      type="date"
+                      max={new Date().toISOString().split("T")[0]}
                       {...register("activityDate")}
-                      title="Activity date and time"
+                      title="Activity date"
+                      onKeyDown={(e) => e.preventDefault()}
                     />
                     {errors.activityDate && (
                       <p className="text-xs text-red-400 mt-1">
@@ -1747,6 +1826,7 @@ export default function ActivitiesPage() {
                       min={new Date().toISOString().split("T")[0]}
                       {...register("nextActionDate")}
                       title="Next action date"
+                      onKeyDown={(e) => e.preventDefault()}
                     />
                     {errors.nextActionDate && (
                       <p className="text-xs text-red-400 mt-1">
@@ -1766,17 +1846,8 @@ export default function ActivitiesPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="label mb-1 block">Logged By</label>
-                  <div className="input flex items-center gap-2 opacity-60 cursor-not-allowed">
-                    <User size={13} className="text-slate-500 flex-shrink-0" />
-                    <span className="text-sm text-slate-400">
-                      {currentUser?.name ?? "You"}
-                    </span>
-                  </div>
-                </div>
 
-                <p className="text-[11px] text-slate-600 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2 leading-relaxed">
+                {/* <p className="text-[11px] text-slate-600 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2 leading-relaxed">
                   On save {"\u2014"} system auto-updates parent
                   lead/opportunity:{" "}
                   <span className="text-slate-500">
@@ -1784,7 +1855,7 @@ export default function ActivitiesPage() {
                     date.
                   </span>{" "}
                   No second save needed.
-                </p>
+                </p> */}
               </form>
             </div>
 

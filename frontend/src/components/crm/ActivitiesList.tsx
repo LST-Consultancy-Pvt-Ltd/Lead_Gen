@@ -430,11 +430,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                           <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{activity.description || '—'}</p>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Logged By</p>
-                          <p className="text-sm text-slate-700 dark:text-slate-300">{activity.createdBy?.name || '—'}</p>
-                        </div>
+                      <div className="grid grid-cols-1 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
                         <div>
                           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Time</p>
                           <p className="text-sm text-slate-700 dark:text-slate-300">{timeAgo(activity.createdAt)}</p>
