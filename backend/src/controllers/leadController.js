@@ -349,18 +349,18 @@ async function sendOutreach(req, res) {
 
 async function exportLeads(req, res) {
   try {
+    const isSalesUser = req.user.role === 'sales_user';
     const where = { organizationId: req.user.organizationId };
 
-    // Sales users can only export their own assigned leads
-    if (req.user.role === 'sales_user') {
+    // ALWAYS enforce ownership for sales users — no query param can override this
+    if (isSalesUser) {
       where.assignedToId = req.user.id;
     }
 
-    // Handle selected leads export
     if (req.query.ids) {
+      // Prisma ANDs this with assignedToId above, so sales_user can only export their own
       where.id = { in: req.query.ids.split(',') };
     } else {
-      // Apply filters when no specific IDs are selected
       if (req.query.search) {
         where.OR = [
           { companyName: { contains: req.query.search, mode: 'insensitive' } },
@@ -371,7 +371,8 @@ async function exportLeads(req, res) {
       if (req.query.status) {
         where.status = req.query.status;
       }
-      if (req.user.role !== 'sales_user') {
+      // Only non-sales roles can change which user's leads are exported
+      if (!isSalesUser) {
         if (req.query.assignedTo) {
           where.assignedToId = req.query.assignedTo;
         }

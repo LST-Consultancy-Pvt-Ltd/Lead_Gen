@@ -10,7 +10,7 @@ const REQUIRED_COLUMNS = [
   'Next Follow-up',
 ];
 
-const ALLOWED_COLUMNS = REQUIRED_COLUMNS;
+const ALLOWED_COLUMNS = [...REQUIRED_COLUMNS, 'Assign To'];
 
 async function validateExcelFile(buffer) {
   let workbook;

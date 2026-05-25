@@ -160,6 +160,7 @@ export default function LeadsPage() {
       );
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      await queryClient.refetchQueries({ queryKey: ['leads'] });
       setImportOpen(false);
       setImportFile(null);
       setImportErrors([]);

@@ -256,6 +256,7 @@ async function getImportLogs(req, res) {
   }
 }
 
+
 function normaliseLeadType(raw) {
   if (!raw) return null;
   const v = raw.toString().trim().toLowerCase();
@@ -315,6 +316,14 @@ async function importLeadsFromExcel(req, res) {
       matchedUsers.forEach(u => userMap.set(u.name.toLowerCase(), u.id));
     }
 
+    // ── Load valid statuses from org's dropdown config ─────────────────────
+    const statusRows = await prisma.dropdownConfig.findMany({
+      where: { organizationId, category: 'lead_status', isActive: true },
+      select: { value: true, isDefault: true },
+    });
+    const validStatuses = new Set(statusRows.map(r => r.value.toLowerCase()));
+    const defaultStatus = (statusRows.find(r => r.isDefault)?.value ?? statusRows[0]?.value ?? 'new').toLowerCase();
+
     // ── Map records to Lead model objects ──────────────────────────────────
     // For sales_user: if no "Assign To" is specified, assign to themselves so
     // the lead appears in their filtered view (which scopes to assignedToId = user.id).
@@ -338,7 +347,7 @@ async function importLeadsFromExcel(req, res) {
         contactName:  record['Contact']?.toString().trim() || null,
         assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
-        status:       record['Status']?.toString().trim().toLowerCase() || 'new',
+        status:       (() => { const s = record['Status']?.toString().trim().toLowerCase() || defaultStatus; return validStatuses.has(s) ? s : defaultStatus; })(),
         leadType:     normaliseLeadType(record['Product / Service']),
         sourceUrl:    record['Source URL']?.toString().trim() || null,
         followUpDate,
@@ -351,7 +360,7 @@ async function importLeadsFromExcel(req, res) {
     // ── Bulk insert ────────────────────────────────────────────────────────
     const createResult = await prisma.lead.createMany({
       data: leadsData,
-      skipDuplicates: false,
+      skipDuplicates: true,
     });
 
     logger.info('Excel import completed', {
