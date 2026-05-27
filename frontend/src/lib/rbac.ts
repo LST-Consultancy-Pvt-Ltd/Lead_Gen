@@ -157,7 +157,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canSendEmails: true,
     canCreateOpportunities: true,
     canViewAllOpportunities: true,
-    canDeleteOpportunities: false,
+    canDeleteOpportunities: true,
     canEditOwnLeads: true,
   },
   sales_user: {
@@ -188,7 +188,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canSendEmails: true,
     canCreateOpportunities: true,
     canViewAllOpportunities: false,
-    canDeleteOpportunities: false,
+    canDeleteOpportunities: true,
     canEditOwnLeads: true,
   },
 };

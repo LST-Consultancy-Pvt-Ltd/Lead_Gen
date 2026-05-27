@@ -344,10 +344,18 @@ async function importLeadsFromExcel(req, res) {
 
     const leadsData = records.map(record => {
       const followUpRaw = record['Next Follow-up'];
-      const followUpDate =
-        followUpRaw && !isNaN(new Date(followUpRaw))
-          ? new Date(followUpRaw)
-          : null;
+      let followUpDate = null;
+      if (followUpRaw) {
+        if (followUpRaw instanceof Date) {
+          followUpDate = isNaN(followUpRaw.getTime()) ? null : followUpRaw;
+        } else if (typeof followUpRaw === 'number') {
+          // Excel serial number (days since Dec 30, 1899); convert to JS timestamp
+          followUpDate = new Date((followUpRaw - 25569) * 86400 * 1000);
+        } else {
+          const parsed = new Date(followUpRaw);
+          followUpDate = isNaN(parsed.getTime()) ? null : parsed;
+        }
+      }
 
       // Sales users always own their own imported leads;
       // admins/managers use the "Assign To" column (falls back to null if unspecified).

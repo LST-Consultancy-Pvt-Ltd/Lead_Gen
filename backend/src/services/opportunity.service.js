@@ -148,7 +148,7 @@ class OpportunityService {
         contactId,
         organizationId: user.organizationId,
         createdById: user.id,
-        assignedToId: data.assignedToId || user.id,
+        assignedToId: user.role === 'sales_user' ? user.id : (data.assignedToId || null),
       },
       include: {
         lead: { select: { id: true, companyName: true, contactName: true } },
@@ -270,6 +270,10 @@ class OpportunityService {
       where: { id, organizationId: user.organizationId },
     });
     if (!existing) return { success: false, message: 'Opportunity not found', statusCode: 404 };
+
+    if (user.role === 'sales_user' && existing.assignedToId !== user.id) {
+      return { success: false, message: 'You can only delete your own opportunities', statusCode: 403 };
+    }
 
     await prisma.opportunity.delete({ where: { id } });
     dashboardEvents.notifyOrg(user.organizationId, 'opportunity');

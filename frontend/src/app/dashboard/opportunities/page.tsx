@@ -64,11 +64,11 @@ function toDateInput(d?: string | null) {
 // ── Create schema ─────────────────────────────────────────────────────────────
 
 const createSchema = yup.object({
-  opportunityName:   yup.string().trim().optional(),
+  opportunityName:   yup.string().trim().required('Opportunity Name is required'),
   stage:             yup.mixed<string>().oneOf(STAGES.map(s => s.id)).optional(),
   dealValue:         yup.string().optional(),
   expectedCloseDate: yup.string().optional(),
-  leadId:            yup.string().optional(),
+  leadId:            yup.string().required('Please select a lead'),
   assignedToId:      yup.string().optional(),
   notes:             yup.string().optional(),
 });
@@ -672,16 +672,17 @@ export default function OpportunitiesPage() {
               {/* Row 1: Linked Lead | Opportunity Name */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label mb-1 block">Linked Lead</label>
-                  <select className="input" {...register('leadId')}>
+                  <label className="label mb-1 block">Linked Lead <span className="text-red-400">*</span></label>
+                  <select className={`input ${errors.leadId ? 'border-red-500' : ''}`} {...register('leadId')}>
                     <option value="">Select a lead</option>
                     {leads.map((l: any) => <option key={l.id} value={l.id}>{l.companyName}</option>)}
                   </select>
                   {errors.leadId && <p className="text-xs text-red-400 mt-1">{errors.leadId.message as string}</p>}
                 </div>
                 <div>
-                  <label className="label mb-1 block">Opportunity Name</label>
-                  <input className="input" placeholder="e.g. Website Proposal – ABC Corp" {...register('opportunityName')} />
+                  <label className="label mb-1 block">Opportunity Name <span className="text-red-400">*</span></label>
+                  <input className={`input ${errors.opportunityName ? 'border-red-500' : ''}`} placeholder="e.g. Website Proposal – ABC Corp" {...register('opportunityName')} />
+                  {errors.opportunityName && <p className="text-xs text-red-400 mt-1">{errors.opportunityName.message as string}</p>}
                 </div>
               </div>
 
