@@ -6,7 +6,7 @@ import { leadsApi, opportunitiesApi, usersApi } from '../../../lib/api';
 import { usePermissions } from '../../../lib/rbac';
 import { Spinner } from '../../../components/ui';
 import {
-  Plus, Trash2, X, AlertTriangle, Calendar, User, Hash,
+  Plus, Trash2, X, AlertTriangle, Calendar, User,
   Eye, Pencil, Save, Loader2, Briefcase,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -221,11 +221,6 @@ function OppCard({
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">
                 {opp.opportunityName || opp.title}
               </p>
-              {opp.opportunityId && (
-                <p className="text-[10px] font-mono text-slate-400 flex items-center gap-0.5">
-                  <Hash size={8} />{opp.opportunityId}
-                </p>
-              )}
             </div>
           </div>
           <button className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors flex-shrink-0"
@@ -367,11 +362,6 @@ function OppCard({
             ) : (
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 leading-tight truncate">
                 {opp.opportunityName || opp.title}
-              </p>
-            )}
-            {opp.opportunityId && (
-              <p className="text-[10px] font-mono text-slate-400 flex items-center gap-0.5 mt-0.5">
-                <Hash size={8} />{opp.opportunityId}
               </p>
             )}
           </div>
