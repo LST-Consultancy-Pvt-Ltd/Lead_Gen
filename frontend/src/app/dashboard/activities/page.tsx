@@ -823,7 +823,7 @@ export default function ActivitiesPage() {
   const listParams: any = { page, limit: 20, ...baseParams };
   if (debouncedSearch) listParams.search = debouncedSearch;
   if (typeFilter) listParams.type = typeFilter;
-  if (loggedByFilter) listParams.createdById = loggedByFilter;
+  if (loggedByFilter) listParams.executiveId = loggedByFilter;
   if (linkedToFilterId) listParams.leadId = linkedToFilterId;
   if (dateFilter) {
     const now = new Date();
