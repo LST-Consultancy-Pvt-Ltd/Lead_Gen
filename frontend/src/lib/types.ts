@@ -62,9 +62,12 @@ export interface Lead {
 // ── Activity Types ─────────────────────────────────────────────────────────
 export interface Activity {
   id: string;
-  type: 'call' | 'meeting' | 'note' | 'email' | 'whatsapp';
+  type: 'call' | 'meeting' | 'note' | 'email' | 'whatsapp' | 'follow_up' | 'demo' | 'linkedin';
   description: string;
   outcome?: string;
+  activityDate?: string;
+  duration?: number;
+  nextActionDate?: string;
   leadId?: string;
   opportunityId?: string;
   createdBy: User;

@@ -823,7 +823,7 @@ export default function ActivitiesPage() {
   const listParams: any = { page, limit: 20, ...baseParams };
   if (debouncedSearch) listParams.search = debouncedSearch;
   if (typeFilter) listParams.type = typeFilter;
-  if (loggedByFilter) listParams.createdById = loggedByFilter;
+  if (loggedByFilter) listParams.executiveId = loggedByFilter;
   if (linkedToFilterId) listParams.leadId = linkedToFilterId;
   if (dateFilter) {
     const now = new Date();
@@ -1025,7 +1025,7 @@ export default function ActivitiesPage() {
     ? "Activities"
     : isManager
       ? "Team activities"
-      : "All activities";
+      : "All Activities";
   const pageDesc = isSalesUser
     ? "Log and track every interaction with your leads and opportunities"
     : isManager
@@ -1632,7 +1632,7 @@ export default function ActivitiesPage() {
                     <div className="relative" ref={linkedSearchRef}>
                       <input
                         className="input pr-14 text-sm"
-                        placeholder="Search leads\u2026"
+                        placeholder="Search leads"
                         autoComplete="off"
                         value={linkedDisplay || linkedSearch}
                         onChange={(e) => {
@@ -1801,7 +1801,7 @@ export default function ActivitiesPage() {
                   </label>
                   <textarea
                     className="input min-h-[96px]"
-                    placeholder="What happened? e.g. Client interested, wants proposal by Friday\u2026"
+                    placeholder="What happened? e.g. Client interested, wants proposal"
                     maxLength={1000}
                     {...register("outcome")}
                   />

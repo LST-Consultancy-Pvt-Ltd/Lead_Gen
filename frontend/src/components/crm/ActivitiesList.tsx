@@ -78,6 +78,8 @@ const emptyForm = (leadId?: string, opportunityId?: string) => ({
   type: "call",
   outcome: "",
   description: "",
+  activityDate: getToday(),
+  duration: "",
   nextActionDate: getTomorrow(),
   leadId,
   opportunityId,
@@ -92,8 +94,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   const [form, setForm] = useState(emptyForm(leadId, opportunityId));
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ type: string; outcome: string; description: string; nextActionDate: string }>({
-    type: 'call', outcome: '', description: '', nextActionDate: getTomorrow(),
+  const [editForm, setEditForm] = useState<{ type: string; outcome: string; description: string; activityDate: string; duration: string; nextActionDate: string }>({
+    type: 'call', outcome: '', description: '', activityDate: getToday(), duration: '', nextActionDate: getTomorrow(),
   });
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -150,7 +152,9 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
       type: activity.type,
       outcome: activity.outcome || '',
       description: activity.description || '',
-      nextActionDate: getTomorrow(),
+      activityDate: activity.activityDate ? new Date(activity.activityDate).toISOString().split('T')[0] : getToday(),
+      duration: activity.duration != null ? String(activity.duration) : '',
+      nextActionDate: activity.nextActionDate ? new Date(activity.nextActionDate).toISOString().split('T')[0] : getTomorrow(),
     });
   }
 
@@ -165,6 +169,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
         type: editForm.type,
         outcome: editForm.outcome || undefined,
         description: editForm.description || editForm.outcome,
+        activityDate: editForm.activityDate ? new Date(editForm.activityDate).toISOString() : undefined,
+        duration: editForm.duration ? parseInt(editForm.duration, 10) : undefined,
         nextActionDate: editForm.nextActionDate,
       },
     });
@@ -184,7 +190,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
       type: form.type,
       outcome: form.outcome || undefined,
       description: form.description || form.outcome,
-      activityDate: new Date().toISOString(),
+      activityDate: form.activityDate ? new Date(form.activityDate).toISOString() : new Date().toISOString(),
+      duration: form.duration ? parseInt(form.duration, 10) : undefined,
       nextActionDate: form.nextActionDate,
       leadId: form.leadId,
       opportunityId: form.opportunityId,
@@ -230,8 +237,19 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
             </button>
           </div>
 
-          {/* Row 1: Type + Next Action Date */}
+          {/* Row 1: Duration + Activity Type */}
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label text-xs">Duration (mins)</label>
+              <input
+                type="number"
+                min="1"
+                className="input h-9 text-xs"
+                placeholder="e.g. 30"
+                value={form.duration}
+                onChange={(e) => field("duration", e.target.value)}
+              />
+            </div>
             <div>
               <label className="label text-xs">Activity Type</label>
               <select
@@ -246,6 +264,10 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Row 2: Next Action Date + Activity Date */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label text-xs">
                 Next Action Date <span className="text-red-400">*</span>
@@ -259,11 +281,21 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 required
               />
             </div>
+            <div>
+              <label className="label text-xs">Activity Date <span className="text-red-400">*</span></label>
+              <input
+                type="date"
+                className="input h-9 text-xs"
+                value={form.activityDate}
+                max={getToday()}
+                onChange={(e) => field("activityDate", e.target.value)}
+              />
+            </div>
           </div>
 
           {/* Row 2: Outcome */}
           <div>
-            <label className="label text-xs">Outcome</label>
+            <label className="label text-xs">Outcome <span className="text-red-400">*</span></label>
             <input
               type="text"
               value={form.outcome}
@@ -275,7 +307,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
 
           {/* Row 3: Notes / Description */}
           <div>
-            <label className="label text-xs">Notes</label>
+            <label className="label text-xs">Notes/Description <span className="text-red-400">*</span></label>
             <textarea
               value={form.description}
               onChange={(e) => field("description", e.target.value)}
@@ -341,7 +373,19 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 {isEditingThis ? (
                   /* ── Inline edit form ── */
                   <div className="space-y-3">
+                    {/* Row 1: Duration + Activity Type */}
                     <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label text-xs">Duration (mins)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          className="input h-9 text-xs"
+                          placeholder="e.g. 30"
+                          value={editForm.duration}
+                          onChange={(e) => setEditForm((f) => ({ ...f, duration: e.target.value }))}
+                        />
+                      </div>
                       <div>
                         <label className="label text-xs">Activity Type</label>
                         <select
@@ -354,8 +398,11 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                           ))}
                         </select>
                       </div>
+                    </div>
+                    {/* Row 2: Next Action Date + Activity Date */}
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="label text-xs">Next Action Date</label>
+                        <label className="label text-xs">Next Action Date <span className="text-red-400">*</span></label>
                         <input
                           type="date"
                           value={editForm.nextActionDate}
@@ -364,26 +411,37 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                           className="input h-9 text-xs"
                         />
                       </div>
+                      <div>
+                        <label className="label text-xs">Activity Date <span className="text-red-400">*</span></label>
+                        <input
+                          type="date"
+                          value={editForm.activityDate}
+                          max={getToday()}
+                          onChange={(e) => setEditForm((f) => ({ ...f, activityDate: e.target.value }))}
+                          className="input h-9 text-xs"
+                        />
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label text-xs">Outcome</label>
-                        <textarea
-                          value={editForm.outcome}
-                          onChange={(e) => setEditForm((f) => ({ ...f, outcome: e.target.value }))}
-                          className="input min-h-[72px] text-xs resize-none"
-                          placeholder="e.g. Connected, Left voicemail…"
-                        />
-                      </div>
-                      <div>
-                        <label className="label text-xs">Notes</label>
-                        <textarea
-                          value={editForm.description}
-                          onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                          className="input min-h-[72px] text-xs resize-none"
-                          placeholder="What happened during this activity?"
-                        />
-                      </div>
+                    {/* Row 3: Outcome */}
+                    <div>
+                      <label className="label text-xs">Outcome <span className="text-red-400">*</span></label>
+                      <input
+                        type="text"
+                        value={editForm.outcome}
+                        onChange={(e) => setEditForm((f) => ({ ...f, outcome: e.target.value }))}
+                        className="input h-9 text-xs"
+                        placeholder="e.g. Connected, Left voicemail…"
+                      />
+                    </div>
+                    {/* Row 4: Notes */}
+                    <div>
+                      <label className="label text-xs">Notes/Description <span className="text-red-400">*</span></label>
+                      <textarea
+                        value={editForm.description}
+                        onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                        className="input min-h-[72px] text-xs resize-none"
+                        placeholder="What happened during this activity?"
+                      />
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -422,6 +480,26 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                     <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
+                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Duration (mins)</p>
+                          <p className="text-sm text-slate-800 dark:text-slate-200">{activity.duration ?? '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Activity Type</p>
+                          <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{activity.type?.replace(/_/g, " ") || '—'}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
+                        <div>
+                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Next Action Date</p>
+                          <p className="text-sm text-slate-700 dark:text-slate-300">{activity.nextActionDate ? new Date(activity.nextActionDate).toLocaleDateString() : '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Activity Date</p>
+                          <p className="text-sm text-slate-700 dark:text-slate-300">{activity.activityDate ? new Date(activity.activityDate).toLocaleDateString() : '—'}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
+                        <div>
                           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Outcome</p>
                           <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">{activity.outcome || '—'}</p>
                         </div>
@@ -430,11 +508,20 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                           <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{activity.description || '—'}</p>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
                         <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Time</p>
+                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Logged</p>
                           <p className="text-sm text-slate-700 dark:text-slate-300">{timeAgo(activity.createdAt)}</p>
                         </div>
+                        {activity.createdBy?.name && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Created By</p>
+                            <div className="flex items-center gap-1.5">
+                              <Avatar initials={getInitials(activity.createdBy.name)} size="xs" />
+                              <span className="text-sm text-slate-700 dark:text-slate-300">{activity.createdBy.name}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button className="btn-ghost w-full h-8 text-xs" onClick={() => setViewingId(null)}>
@@ -494,14 +581,26 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                         )}
                       </div>
                     </div>
-                    {/* Outcome + Notes + creator */}
+                    {/* All fields */}
                     <div className="mt-2 space-y-1">
                       <div className="flex gap-2">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[56px] flex-shrink-0 pt-px">Outcome</span>
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Activity Date</span>
+                        <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0">{activity.activityDate ? new Date(activity.activityDate).toLocaleDateString() : '—'}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Duration</span>
+                        <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0">{activity.duration != null ? `${activity.duration} mins` : '—'}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Next Action</span>
+                        <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0">{activity.nextActionDate ? new Date(activity.nextActionDate).toLocaleDateString() : '—'}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Outcome</span>
                         <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0">{activity.outcome || '—'}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[56px] flex-shrink-0 pt-px">Notes</span>
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Notes</span>
                         <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0 whitespace-pre-wrap">{activity.description || '—'}</span>
                       </div>
                       {activity.createdBy?.name && (
