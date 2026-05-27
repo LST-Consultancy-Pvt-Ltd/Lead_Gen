@@ -1025,7 +1025,7 @@ export default function ActivitiesPage() {
     ? "Activities"
     : isManager
       ? "Team activities"
-      : "All activities";
+      : "All Activities";
   const pageDesc = isSalesUser
     ? "Log and track every interaction with your leads and opportunities"
     : isManager
