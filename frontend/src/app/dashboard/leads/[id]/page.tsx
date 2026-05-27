@@ -460,6 +460,12 @@ export default function LeadDetailPage() {
 
   function handleCreateOpp() {
     setOppCreateError('');
+
+    if (!oppCreateForm.opportunityName?.trim()) {
+      setOppCreateError('Opportunity Name is required.');
+      return;
+    }
+
     createOppMutation.mutate({
       leadId:            id,
       opportunityName:   oppCreateForm.opportunityName || undefined,
@@ -1277,7 +1283,7 @@ export default function LeadDetailPage() {
 
                 {/* Opportunity Name (full row) */}
                 <div>
-                  <label className="label mb-1 block">Opportunity Name</label>
+                  <label className="label mb-1 block">Opportunity Name <span className="text-red-400">*</span></label>
                   <input className="input" placeholder="e.g. ERP Implementation Proposal"
                     value={oppCreateForm.opportunityName}
                     onChange={e => setOppCreateForm((f: any) => ({ ...f, opportunityName: e.target.value }))} />
