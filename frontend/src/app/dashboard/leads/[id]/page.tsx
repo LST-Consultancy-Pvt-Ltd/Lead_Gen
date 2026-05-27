@@ -180,14 +180,7 @@ export default function LeadDetailPage() {
     { id: 'closed_won',  label: 'Closed Won' },
     { id: 'closed_lost', label: 'Closed Lost' },
   ];
-  const OPP_BIZ_LINES = [
-    { value: 'netsuite',   label: 'NetSuite Services' },
-    { value: 'salesforce', label: 'Salesforce Services' },
-    { value: 'dev',        label: 'Custom Development' },
-    { value: 'saas',       label: 'SaaS Product' },
-    { value: 'training',   label: 'Training' },
-  ];
-  const emptyOppForm = { opportunityName: '', businessLine: 'netsuite', stage: 'qualified', dealValue: 0, expectedCloseDate: '', assignedToId: '', notes: '' };
+  const emptyOppForm = { opportunityName: '', stage: 'qualified', dealValue: 0, expectedCloseDate: '', assignedToId: '', notes: '' };
   const [oppDeleteConfirmId, setOppDeleteConfirmId] = useState<string | null>(null);
   const [oppCreateOpen,  setOppCreateOpen]  = useState(false);
   const [oppCreateForm,  setOppCreateForm]  = useState<any>(emptyOppForm);
@@ -433,7 +426,6 @@ export default function LeadDetailPage() {
   function openOppEdit(opp: any) {
     setOppEditForm({
       opportunityName:   opp.opportunityName || opp.title || '',
-      businessLine:      opp.businessLine    || 'netsuite',
       stage:             opp.stage           || 'qualified',
       dealValue:         opp.dealValue       ?? 0,
       expectedCloseDate: opp.expectedCloseDate ? new Date(opp.expectedCloseDate).toISOString().split('T')[0] : '',
@@ -448,7 +440,6 @@ export default function LeadDetailPage() {
     if (!oppEditModal) return;
     const payload: any = {
       opportunityName:   oppEditForm.opportunityName,
-      businessLine:      oppEditForm.businessLine,
       stage:             oppEditForm.stage,
       dealValue:         Number(oppEditForm.dealValue),
       expectedCloseDate: oppEditForm.expectedCloseDate || undefined,
@@ -469,7 +460,6 @@ export default function LeadDetailPage() {
     createOppMutation.mutate({
       leadId:            id,
       opportunityName:   oppCreateForm.opportunityName || undefined,
-      businessLine:      oppCreateForm.businessLine,
       stage:             oppCreateForm.stage,
       dealValue:         Number(oppCreateForm.dealValue),
       expectedCloseDate: oppCreateForm.expectedCloseDate || undefined,
@@ -1706,7 +1696,6 @@ export default function LeadDetailPage() {
               {[
                 { label: 'Linked Lead',     value: lead.companyName },
                 { label: 'Contact Person',  value: oppViewModal.contact?.name || lead.contactName },
-                { label: 'Business Line',   value: OPP_BIZ_LINES.find(b => b.value === oppViewModal.businessLine)?.label || oppViewModal.businessLine },
                 { label: 'Stage / Status',  value: OPP_STAGES.find(s => s.id === oppViewModal.stage)?.label || oppViewModal.stage },
                 { label: 'Deal Value',      value: fmtUSD(oppViewModal.dealValue) },
                 { label: 'Expected Close',  value: fmtDate(oppViewModal.expectedCloseDate) },
