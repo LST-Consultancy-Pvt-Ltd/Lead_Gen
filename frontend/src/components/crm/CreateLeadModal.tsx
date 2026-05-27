@@ -449,6 +449,14 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       (cleanedData as any).leadCost = parseFloat((cleanedData as any).leadCost);
     }
 
+    // Phone OR Email required so duplicate detection can work
+    const hasEmail = !!((cleanedData as any).contactEmail?.trim());
+    const hasPhone = !!((cleanedData as any).contactPhone?.trim());
+    if (!hasEmail && !hasPhone) {
+      toast.error("Please provide at least a Contact Email or Phone number.");
+      return;
+    }
+
     pendingPayloadRef.current = cleanedData;
 
     createMutation.mutate(cleanedData);

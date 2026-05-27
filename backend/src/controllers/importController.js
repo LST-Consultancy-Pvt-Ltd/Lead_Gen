@@ -134,16 +134,29 @@ async function importLeads(req, res) {
           }
         }
 
-        const duplicate = await prisma.lead.findFirst({
-          where: {
-            organizationId: req.user.organizationId,
-            companyName: { equals: companyName, mode: 'insensitive' },
-            ...(contactEmail ? { contactEmail: { equals: contactEmail, mode: 'insensitive' } } : {}),
-          },
-        });
-        if (duplicate) {
-          importErrors.push({ row: i + 2, error: `Duplicate: lead with companyName "${companyName}" already exists`, duplicateId: duplicate.id });
-          continue;
+        // Duplicate check: Phone OR Email (not companyName)
+        const contactPhone = String(row.contactPhone || row['Contact Phone'] || row.phone || '').trim() || null;
+
+        const dupOrConditions = [];
+        if (contactEmail) dupOrConditions.push({ contactEmail: { equals: contactEmail, mode: 'insensitive' } });
+        if (contactPhone) dupOrConditions.push({ contactPhone: { equals: contactPhone, mode: 'insensitive' } });
+
+        if (dupOrConditions.length > 0) {
+          const duplicate = await prisma.lead.findFirst({
+            where: {
+              organizationId: req.user.organizationId,
+              OR: dupOrConditions,
+            },
+            select: { id: true, companyName: true },
+          });
+          if (duplicate) {
+            importErrors.push({
+              row: i + 2,
+              error: `Duplicate: a lead already exists with the same email or phone (existing lead: "${duplicate.companyName}", id: ${duplicate.id})`,
+              duplicateId: duplicate.id,
+            });
+            continue;
+          }
         }
 
         const lead = await prisma.lead.create({
@@ -357,26 +370,63 @@ async function importLeadsFromExcel(req, res) {
       };
     });
 
-    // ── Bulk insert ────────────────────────────────────────────────────────
-    const createResult = await prisma.lead.createMany({
-      data: leadsData,
-      skipDuplicates: true,
-    });
+    // ── Row-by-row insert with Phone OR Email duplicate check ─────────────
+    let insertedCount = 0;
+    const excelImportErrors = [];
+
+    for (let i = 0; i < leadsData.length; i++) {
+      const leadData = leadsData[i];
+      const record = records[i];
+
+      try {
+        const rawPhone = String(record['Phone'] || record['Contact Phone'] || record['phone'] || '').trim() || null;
+        const rawEmail = String(record['Email'] || record['Contact Email'] || record['email'] || '').trim().toLowerCase() || null;
+
+        const dupOrConditions = [];
+        if (rawEmail) dupOrConditions.push({ contactEmail: { equals: rawEmail, mode: 'insensitive' } });
+        if (rawPhone) dupOrConditions.push({ contactPhone: { equals: rawPhone, mode: 'insensitive' } });
+
+        if (dupOrConditions.length > 0) {
+          const duplicate = await prisma.lead.findFirst({
+            where: {
+              organizationId,
+              OR: dupOrConditions,
+            },
+            select: { id: true, companyName: true },
+          });
+          if (duplicate) {
+            excelImportErrors.push({
+              row: i + 2,
+              error: `Duplicate: a lead already exists with the same email or phone (existing lead: "${duplicate.companyName}", id: ${duplicate.id})`,
+              duplicateId: duplicate.id,
+            });
+            continue;
+          }
+        }
+
+        await prisma.lead.create({ data: leadData });
+        insertedCount++;
+      } catch (rowErr) {
+        excelImportErrors.push({ row: i + 2, error: rowErr.message });
+      }
+    }
 
     logger.info('Excel import completed', {
       userId: req.user.id,
       orgId: organizationId,
       fileName: req.file.originalname,
       total: leadsData.length,
-      inserted: createResult.count,
+      inserted: insertedCount,
+      skipped: excelImportErrors.length,
     });
 
     return res.status(201).json({
       success: true,
-      message: 'File imported successfully',
+      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped (duplicates or errors)`,
       totalRecords: records.length,
-      successRows: createResult.count,
-      failedRows: records.length - createResult.count,
+      successRows: insertedCount,
+      failedRows: excelImportErrors.length,
+      errors: excelImportErrors.slice(0, 50),
       data: [],
     });
   } catch (err) {

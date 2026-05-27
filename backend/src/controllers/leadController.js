@@ -96,7 +96,7 @@ const LEAD_ALLOWED_FIELDS = new Set([
 
 async function createLead(req, res) {
   try {
-    // Check lead quota
+    // Check lead quota (unchanged)
     const quota = await checkLeadQuota(req.user.organizationId);
     if (!quota.allowed) {
       return error(res, `Lead limit reached (${quota.quota}). You have used all your available leads. Please upgrade your plan to add more.`, 403);
@@ -106,6 +106,45 @@ async function createLead(req, res) {
     const filtered = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => LEAD_ALLOWED_FIELDS.has(k))
     );
+
+    // ── Duplicate check (Phone OR Email) ──────────────────────────────────
+    const ignoreDuplicate = req.body.ignoreDuplicate === true || req.body.ignoreDuplicate === 'true';
+
+    if (!ignoreDuplicate) {
+      const incomingEmail = filtered.contactEmail?.trim().toLowerCase() || null;
+      const incomingPhone = filtered.contactPhone?.trim() || null;
+
+      if (incomingEmail || incomingPhone) {
+        const orConditions = [];
+        if (incomingEmail) {
+          orConditions.push({ contactEmail: { equals: incomingEmail, mode: 'insensitive' } });
+        }
+        if (incomingPhone) {
+          orConditions.push({ contactPhone: { equals: incomingPhone, mode: 'insensitive' } });
+        }
+
+        const existingLead = await prisma.lead.findFirst({
+          where: {
+            organizationId: req.user.organizationId,
+            OR: orConditions,
+          },
+          select: { id: true, companyName: true, contactEmail: true, contactPhone: true },
+        });
+
+        if (existingLead) {
+          return res.status(409).json({
+            success: false,
+            message: `Duplicate lead: a lead already exists with the same ${
+              incomingEmail && existingLead.contactEmail?.toLowerCase() === incomingEmail
+                ? 'email'
+                : 'phone number'
+            }.`,
+            possibleDuplicate: existingLead,
+          });
+        }
+      }
+    }
+    // ── END duplicate check ────────────────────────────────────────────────
 
     const data = {
       ...filtered,
@@ -117,7 +156,7 @@ async function createLead(req, res) {
     await prisma.activityLog.create({ data: { organizationId: req.user.organizationId, userId: req.user.id,
       leadId: lead.id, action: 'lead_created', description: `Lead created: ${lead.companyName}` } }).catch(()=>{});
 
-    // Increment lead usage counter
+    // Increment lead usage counter (unchanged)
     await incrementLeadUsage(req.user.organizationId);
 
     dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
