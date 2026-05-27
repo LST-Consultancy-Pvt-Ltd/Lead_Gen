@@ -29,6 +29,20 @@ class OpportunityService {
     return opportunity.assignedToId === user.id;
   }
 
+  async _generateOpportunityId() {
+    const last = await prisma.opportunity.findFirst({
+      where: { opportunityId: { not: null } },
+      orderBy: { opportunityId: 'desc' },
+      select: { opportunityId: true },
+    });
+    let nextNum = 1;
+    if (last?.opportunityId) {
+      const match = last.opportunityId.match(/OPP-(\d+)/);
+      if (match) nextNum = parseInt(match[1], 10) + 1;
+    }
+    return `OPP-${String(nextNum).padStart(5, '0')}`;
+  }
+
   _buildWhere(user) {
     const where = { organizationId: user.organizationId };
     if (user.role === 'sales_user') where.assignedToId = user.id;
@@ -49,9 +63,11 @@ class OpportunityService {
         take: parseInt(limit),
         orderBy: { createdAt: 'desc' },
         include: {
-          lead: { select: { id: true, companyName: true, contactName: true } },
+          lead: { select: { id: true, companyName: true, contactName: true, contactEmail: true, contactPhone: true } },
           assignedTo: { select: { id: true, name: true, email: true } },
           createdBy: { select: { id: true, name: true } },
+          salesOwner: { select: { id: true, name: true } },
+          contact: { select: { id: true, name: true, email: true, phone: true } },
         },
       }),
       prisma.opportunity.count({ where }),
@@ -72,9 +88,11 @@ class OpportunityService {
     const opportunity = await prisma.opportunity.findFirst({
       where: { id, organizationId: user.organizationId },
       include: {
-        lead: { select: { id: true, companyName: true, contactName: true, contactEmail: true } },
+        lead: { select: { id: true, companyName: true, contactName: true, contactEmail: true, contactPhone: true } },
         assignedTo: { select: { id: true, name: true, email: true } },
         createdBy: { select: { id: true, name: true } },
+        salesOwner: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true, phone: true } },
       },
     });
     if (!opportunity) return { success: false, message: 'Opportunity not found', statusCode: 404 };
@@ -88,6 +106,7 @@ class OpportunityService {
     // Verify lead belongs to org
     const lead = await prisma.lead.findFirst({
       where: { id: data.leadId, organizationId: user.organizationId },
+      include: { leadContacts: { take: 1, select: { id: true } } },
     });
     if (!lead) return { success: false, message: 'Lead not found', statusCode: 404 };
 
@@ -105,24 +124,34 @@ class OpportunityService {
     const stage = data.stage || 'prospecting';
     const probability = data.probability != null ? data.probability : (STAGE_PROBABILITY[stage] ?? 10);
 
+    // Auto-populate contactId from lead's first linked contact if not provided
+    const contactId = data.contactId || lead.leadContacts?.[0]?.id || undefined;
+
     // Normalise date-only strings to full ISO DateTime (Prisma requires it)
     const toDateTime = (val) => val ? new Date(val) : undefined;
+
+    // Generate formatted opportunity ID
+    const opportunityId = await this._generateOpportunityId();
 
     const opportunity = await prisma.opportunity.create({
       data: {
         ...data,
+        opportunityId,
         expectedCloseDate: toDateTime(data.expectedCloseDate),
         title,
         opportunityName: data.opportunityName || title,
         stage,
         probability,
+        contactId,
         organizationId: user.organizationId,
         createdById: user.id,
         assignedToId: data.assignedToId || user.id,
       },
       include: {
-        lead: { select: { id: true, companyName: true } },
+        lead: { select: { id: true, companyName: true, contactName: true } },
         assignedTo: { select: { id: true, name: true, email: true } },
+        createdBy: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
       },
     });
     dashboardEvents.notifyOrg(user.organizationId, 'opportunity');
@@ -138,50 +167,7 @@ class OpportunityService {
       return { success: false, message: 'You do not have access to this opportunity', statusCode: 403 };
     }
 
-    // ── Stage progression validation ───────────────────────────────────────
-    if (data.stage && data.stage !== existing.stage) {
-      const newStage = data.stage;
-
-      // closed_won and closed_lost require wonLostReason
-      if (['closed_won', 'closed_lost'].includes(newStage)) {
-        const reason = data.wonLostReason?.trim() || existing.wonLostReason?.trim();
-        if (!reason) {
-          return {
-            success: false,
-            statusCode: 422,
-            message: `A won/lost reason is required when moving to ${newStage.replace('_', ' ')}.`,
-          };
-        }
-      }
-
-      // Demo stage: requires at least 1 Demo activity on this opportunity
-      if (newStage === 'demo') {
-        const demoActivity = await prisma.activityLog.count({
-          where: { opportunityId: id, action: 'demo' },
-        });
-        if (demoActivity === 0) {
-          return {
-            success: false,
-            statusCode: 422,
-            message: 'Cannot move to Demo stage until at least one Demo activity has been logged on this opportunity.',
-          };
-        }
-      }
-
-      // Proposal stage: requires at least 1 Meeting or Demo activity
-      if (newStage === 'proposal') {
-        const qualifyingActivity = await prisma.activityLog.count({
-          where: { opportunityId: id, action: { in: ['meeting', 'demo'] } },
-        });
-        if (qualifyingActivity === 0) {
-          return {
-            success: false,
-            statusCode: 422,
-            message: 'Cannot move to Proposal stage until at least one Meeting or Demo activity has been logged on this opportunity.',
-          };
-        }
-      }
-    }
+    // No stage progression restrictions — any stage change is allowed
 
     // Prevent sales_user from reassigning
     const updateData = { ...data };
@@ -312,8 +298,11 @@ class OpportunityService {
       ? `${lead.companyName} - ${requirementType.join(', ')}`
       : lead.companyName;
 
+    const opportunityId = await this._generateOpportunityId();
+
     const opportunity = await prisma.opportunity.create({
       data: {
+        opportunityId,
         organizationId: user.organizationId,
         leadId: lead.id,
         title: opportunityName,

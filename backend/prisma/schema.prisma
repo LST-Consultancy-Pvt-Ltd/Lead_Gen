@@ -382,6 +382,7 @@ model Opportunity {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
+  opportunityId   String?  @unique
   opportunityName String?
   accountId       String?
   contactId       String?

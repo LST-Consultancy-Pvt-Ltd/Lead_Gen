@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { leadsApi, contactsApi, dropdownsApi } from '../../../../lib/api';
+import { leadsApi, contactsApi, dropdownsApi, opportunitiesApi, usersApi } from '../../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner } from '../../../../components/ui';
 import { ActivitiesList } from '../../../../components/crm/ActivitiesList';
 import { RoleGuard } from '../../../../components/common/RoleGuard';
@@ -14,7 +14,7 @@ import {
   MapPin, Users2, FileText, Phone, ExternalLink, Copy,
   ChevronRight, Trash2, UserCog, Calendar, DollarSign,
   Clock, TrendingUp, Edit2, Save, X, UserPlus, Plus,
-  ChevronDown,
+  ChevronDown, Eye, Hash,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -167,6 +167,32 @@ export default function LeadDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any>({});
 
+  // ── Opportunity section state ─────────────────────────────────────────────
+  const OPP_STAGES = [
+    { id: 'qualified',   label: 'Qualified' },
+    { id: 'demo',        label: 'Demo' },
+    { id: 'proposal',    label: 'Proposal' },
+    { id: 'negotiation', label: 'Negotiation' },
+    { id: 'closed_won',  label: 'Closed Won' },
+    { id: 'closed_lost', label: 'Closed Lost' },
+  ];
+  const OPP_BIZ_LINES = [
+    { value: 'netsuite',   label: 'NetSuite Services' },
+    { value: 'salesforce', label: 'Salesforce Services' },
+    { value: 'dev',        label: 'Custom Development' },
+    { value: 'saas',       label: 'SaaS Product' },
+    { value: 'training',   label: 'Training' },
+  ];
+  const emptyOppForm = { opportunityName: '', businessLine: 'netsuite', stage: 'qualified', dealValue: 0, expectedCloseDate: '', assignedToId: '', notes: '' };
+  const [oppDeleteConfirmId, setOppDeleteConfirmId] = useState<string | null>(null);
+  const [oppCreateOpen,  setOppCreateOpen]  = useState(false);
+  const [oppCreateForm,  setOppCreateForm]  = useState<any>(emptyOppForm);
+  const [oppCreateError, setOppCreateError] = useState('');
+  const [oppEditModal,   setOppEditModal]   = useState<any | null>(null);
+  const [oppEditForm,    setOppEditForm]    = useState<any>({});
+  const [oppEditError,   setOppEditError]   = useState('');
+  const [oppViewModal,   setOppViewModal]   = useState<any | null>(null);
+
   // Multi-contact state
   const [isAddingContact,  setIsAddingContact]  = useState(false);
   const [newContact,       setNewContact]       = useState({ name: '', title: '', emails: [''], phones: [''], linkedins: [''] });
@@ -187,6 +213,13 @@ export default function LeadDetailPage() {
       }
     }
   }, []);
+
+  // Lock body scroll whenever an opportunity modal is open
+  const anyOppModalOpen = !!(oppCreateOpen || oppEditModal || oppViewModal || oppDeleteConfirmId);
+  useEffect(() => {
+    document.body.style.overflow = anyOppModalOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [anyOppModalOpen]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['lead', id],
@@ -329,6 +362,121 @@ export default function LeadDetailPage() {
     },
     onError: () => toast.error('Failed to update contact'),
   });
+
+  // ── Opportunities linked to this lead ─────────────────────────────────────
+  const { data: oppData, isLoading: oppLoading } = useQuery({
+    queryKey: ['lead-opportunities', id],
+    queryFn:  () => opportunitiesApi.list({ leadId: id, limit: 100 }).then(r => {
+      const d = r.data;
+      if (Array.isArray(d?.data)) return d.data;
+      if (Array.isArray(d))       return d;
+      return [];
+    }),
+    staleTime: 5000,
+  });
+  const leadOpportunities: any[] = oppData ?? [];
+
+  const { data: teamData } = useQuery({
+    queryKey: ['team-members'],
+    queryFn:  () => usersApi.list().then(r => r.data?.data ?? r.data ?? []),
+    enabled:  !permissions.isSalesUser,
+  });
+  const teamMembers: any[] = Array.isArray(teamData) ? teamData : [];
+
+  const createOppMutation = useMutation({
+    mutationFn: (data: any) => opportunitiesApi.create(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead-opportunities', id] });
+      qc.invalidateQueries({ queryKey: ['opportunities'] });
+      toast.success('Opportunity created');
+      setOppCreateOpen(false);
+      setOppCreateForm(emptyOppForm);
+      setOppCreateError('');
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message || 'Failed to create opportunity';
+      setOppCreateError(msg);
+      toast.error(msg);
+    },
+  });
+
+  const updateOppMutation = useMutation({
+    mutationFn: ({ oppId, data }: { oppId: string; data: any }) => opportunitiesApi.update(oppId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead-opportunities', id] });
+      qc.invalidateQueries({ queryKey: ['opportunities'] });
+      toast.success('Opportunity updated');
+      setOppEditModal(null);
+      setOppEditError('');
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message || 'Failed to update opportunity';
+      setOppEditError(msg);
+      toast.error(msg);
+    },
+  });
+
+  const deleteOppMutation = useMutation({
+    mutationFn: (oppId: string) => opportunitiesApi.delete(oppId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead-opportunities', id] });
+      qc.invalidateQueries({ queryKey: ['opportunities'] });
+      toast.success('Opportunity deleted');
+    },
+    onError: () => toast.error('Failed to delete opportunity'),
+  });
+
+  function openOppEdit(opp: any) {
+    setOppEditForm({
+      opportunityName:   opp.opportunityName || opp.title || '',
+      businessLine:      opp.businessLine    || 'netsuite',
+      stage:             opp.stage           || 'qualified',
+      dealValue:         opp.dealValue       ?? 0,
+      expectedCloseDate: opp.expectedCloseDate ? new Date(opp.expectedCloseDate).toISOString().split('T')[0] : '',
+      assignedToId:      opp.assignedToId    || '',
+      notes:             opp.notes           || '',
+    });
+    setOppEditError('');
+    setOppEditModal(opp);
+  }
+
+  function handleSaveOpp() {
+    if (!oppEditModal) return;
+    const payload: any = {
+      opportunityName:   oppEditForm.opportunityName,
+      businessLine:      oppEditForm.businessLine,
+      stage:             oppEditForm.stage,
+      dealValue:         Number(oppEditForm.dealValue),
+      expectedCloseDate: oppEditForm.expectedCloseDate || undefined,
+      notes:             oppEditForm.notes || undefined,
+    };
+    if (!permissions.isSalesUser && oppEditForm.assignedToId) payload.assignedToId = oppEditForm.assignedToId;
+    updateOppMutation.mutate({ oppId: oppEditModal.id, data: payload });
+  }
+
+  function handleCreateOpp() {
+    if (!oppCreateForm.opportunityName.trim()) { toast.error('Opportunity name is required'); return; }
+    if (!oppCreateForm.expectedCloseDate)       { toast.error('Expected close date is required'); return; }
+    setOppCreateError('');
+    createOppMutation.mutate({
+      leadId:            id,
+      opportunityName:   oppCreateForm.opportunityName,
+      businessLine:      oppCreateForm.businessLine,
+      stage:             oppCreateForm.stage,
+      dealValue:         Number(oppCreateForm.dealValue),
+      expectedCloseDate: oppCreateForm.expectedCloseDate,
+      assignedToId:      oppCreateForm.assignedToId || undefined,
+      notes:             oppCreateForm.notes || undefined,
+    });
+  }
+
+  function fmtDate(dateStr?: string | null) {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function fmtUSD(v: number) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(v || 0));
+  }
 
   function startEditContact(c: any) {
     setEditingContactId(c.id);
@@ -1002,6 +1150,212 @@ export default function LeadDetailPage() {
             />
           </div>
 
+          {/* ── Opportunities ────────────────────────────────────────────── */}
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="section-title">Opportunities ({leadOpportunities.length})</h2>
+              {permissions.canCreateOpportunities && (
+                <button
+                  className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5"
+                  onClick={() => { setOppCreateOpen(true); setOppCreateForm(emptyOppForm); setOppCreateError(''); }}
+                >
+                  <Plus size={12} /> Add Opportunity
+                </button>
+              )}
+            </div>
+
+            {oppLoading && (
+              <div className="flex items-center gap-2 text-xs text-slate-500 py-3">
+                <Loader2 size={12} className="animate-spin" /> Loading…
+              </div>
+            )}
+
+            {!oppLoading && leadOpportunities.length === 0 && (
+              <div className="py-6 text-center">
+                <p className="text-xs text-slate-500 mb-3">No opportunities linked to this lead yet</p>
+                {permissions.canCreateOpportunities && (
+                  <button className="btn-ghost text-xs py-1.5 px-3 mx-auto flex items-center gap-1.5"
+                    onClick={() => { setOppCreateOpen(true); setOppCreateForm(emptyOppForm); }}>
+                    <Plus size={12} /> Add Opportunity
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Scrollable 3-column grid */}
+            {leadOpportunities.length > 0 && (
+              <div className="overflow-y-auto max-h-[420px] pr-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {leadOpportunities.map((opp: any) => (
+                    <div key={opp.id}
+                      className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950 p-3 space-y-2 flex flex-col">
+                      {/* Top: ID + icons */}
+                      <div className="flex items-center justify-between gap-1">
+                        {opp.opportunityId && (
+                          <span className="flex items-center gap-0.5 text-[10px] font-mono text-slate-400">
+                            <Hash size={9} />{opp.opportunityId}
+                          </span>
+                        )}
+                        <div className="flex items-center gap-1 ml-auto">
+                          <button title="View"
+                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition-colors"
+                            onClick={() => setOppViewModal(opp)}>
+                            <Eye size={12} />
+                          </button>
+                          <button title="Edit"
+                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition-colors"
+                            onClick={() => openOppEdit(opp)}>
+                            <Edit2 size={12} />
+                          </button>
+                          {permissions.canDeleteOpportunities && (
+                            <button title="Delete"
+                              className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                              disabled={deleteOppMutation.isPending}
+                              onClick={() => setOppDeleteConfirmId(opp.id)}>
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Name */}
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 leading-snug">
+                        {opp.opportunityName || opp.title}
+                      </p>
+
+                      {/* Stage badge */}
+                      <span className="self-start text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-blue-500/10 text-blue-400 border-blue-500/25">
+                        {opp.stage?.replace(/_/g, ' ')}
+                      </span>
+
+                      {/* Contact person */}
+                      {(opp.contact?.name || opp.lead?.contactName || lead.contactName) && (
+                        <p className="text-xs text-slate-500 flex items-center gap-1 truncate">
+                          <User size={9} />
+                          {opp.contact?.name || opp.lead?.contactName || lead.contactName}
+                        </p>
+                      )}
+
+                      {/* Deal value */}
+                      <p className="text-sm font-semibold text-emerald-400">{fmtUSD(opp.dealValue)}</p>
+
+                      {/* Close date */}
+                      {opp.expectedCloseDate && (
+                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <Calendar size={9} /> Close: {fmtDate(opp.expectedCloseDate)}
+                        </p>
+                      )}
+
+                      {/* Assigned to */}
+                      <p className="text-xs text-slate-500">
+                        Assigned: {opp.assignedTo?.name || 'Unassigned'}
+                      </p>
+
+                      {/* Created by + date */}
+                      <p className="text-xs text-slate-500 mt-auto pt-1 border-t border-slate-200 dark:border-white/[0.06]">
+                        {opp.createdBy?.name || '—'} · {fmtDate(opp.createdAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Create opportunity form (inline below header) ── */}
+            {oppCreateOpen && (
+              <div className="mt-4 border border-blue-500/30 bg-blue-500/[0.04] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Plus size={12} className="text-blue-400" /> New Opportunity
+                  </p>
+                  <button onClick={() => setOppCreateOpen(false)}>
+                    <X size={14} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+                  </button>
+                </div>
+
+                {/* Opportunity Name (full row) */}
+                <div>
+                  <label className="label mb-1 block">Opportunity Name <span className="text-red-400">*</span></label>
+                  <input className="input" placeholder="e.g. ERP Implementation Proposal"
+                    value={oppCreateForm.opportunityName}
+                    onChange={e => setOppCreateForm((f: any) => ({ ...f, opportunityName: e.target.value }))} />
+                </div>
+
+                {/* Contact Person (auto from lead, read-only) */}
+                <div>
+                  <label className="label mb-1 block">Contact Person</label>
+                  <input className="input bg-slate-50 dark:bg-slate-800 cursor-not-allowed text-slate-500"
+                    readOnly value={lead.contactName || '—'} />
+                </div>
+
+                {/* Stage */}
+                <div>
+                  <label className="label mb-1 block">Stage / Status</label>
+                  <select className="input" value={oppCreateForm.stage}
+                    onChange={e => setOppCreateForm((f: any) => ({ ...f, stage: e.target.value }))}>
+                    {OPP_STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </div>
+
+                {/* Deal Value + Expected Close Date */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label mb-1 block">Deal Value</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium pointer-events-none">$</span>
+                      <input className="input pl-7" type="number" min="0" placeholder="0"
+                        value={oppCreateForm.dealValue}
+                        onChange={e => setOppCreateForm((f: any) => ({ ...f, dealValue: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label mb-1 block">Expected Close Date</label>
+                    <input className="input" type="date"
+                      onKeyDown={e => e.preventDefault()}
+                      value={oppCreateForm.expectedCloseDate}
+                      onChange={e => setOppCreateForm((f: any) => ({ ...f, expectedCloseDate: e.target.value }))} />
+                  </div>
+                </div>
+
+                {/* Assigned To (managers only) */}
+                {!permissions.isSalesUser && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label mb-1 block">Assigned To</label>
+                      <select className="input" value={oppCreateForm.assignedToId}
+                        onChange={e => setOppCreateForm((f: any) => ({ ...f, assignedToId: e.target.value }))}>
+                        <option value="">— Select assignee —</option>
+                        {teamMembers.map((m: any) => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div />
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div>
+                  <label className="label mb-1 block">Notes / Comments</label>
+                  <textarea className="input min-h-[60px] resize-none" placeholder="Add notes..."
+                    value={oppCreateForm.notes}
+                    onChange={e => setOppCreateForm((f: any) => ({ ...f, notes: e.target.value }))} />
+                </div>
+
+                {oppCreateError && <p className="text-xs text-red-400">{oppCreateError}</p>}
+
+                <div className="flex gap-2 pt-1">
+                  <button className="btn-ghost flex-1" onClick={() => setOppCreateOpen(false)}>Cancel</button>
+                  <button className="btn-primary flex-1" onClick={handleCreateOpp}
+                    disabled={createOppMutation.isPending}>
+                    {createOppMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                    Create Opportunity
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ── Tech Stack ───────────────────────────────────────────────── */}
           {lead.techStack?.length > 0 && (
             <div className="card p-5">
@@ -1206,6 +1560,181 @@ export default function LeadDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Opportunity Delete Confirmation Modal ──────────────────────────── */}
+      {oppDeleteConfirmId && (
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Delete Opportunity</h3>
+                <p className="text-sm text-slate-500 mt-1">Are you sure you want to delete this opportunity? This action cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => setOppDeleteConfirmId(null)}
+              >
+                No, Cancel
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+                disabled={deleteOppMutation.isPending}
+                onClick={() => {
+                  deleteOppMutation.mutate(oppDeleteConfirmId);
+                  setOppDeleteConfirmId(null);
+                }}
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Opportunity Edit Modal ──────────────────────────────────────────── */}
+      {oppEditModal && (
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="section-title">Edit Opportunity</h3>
+                {oppEditModal.opportunityId && (
+                  <p className="text-[10px] font-mono text-slate-400 mt-0.5 flex items-center gap-0.5">
+                    <Hash size={9} />{oppEditModal.opportunityId}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setOppEditModal(null)}>
+                <X size={16} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="label mb-1 block">Opportunity Name</label>
+                <input className="input" value={oppEditForm.opportunityName}
+                  onChange={e => setOppEditForm((f: any) => ({ ...f, opportunityName: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label mb-1 block">Contact Person</label>
+                <input className="input bg-slate-50 dark:bg-slate-800 cursor-not-allowed text-slate-500"
+                  readOnly value={oppEditModal.contact?.name || lead.contactName || '—'} />
+              </div>
+              <div>
+                <label className="label mb-1 block">Stage / Status</label>
+                <select className="input" value={oppEditForm.stage}
+                  onChange={e => setOppEditForm((f: any) => ({ ...f, stage: e.target.value }))}>
+                  {OPP_STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label mb-1 block">Deal Value</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium pointer-events-none">$</span>
+                    <input className="input pl-7" type="number" min="0" placeholder="0" value={oppEditForm.dealValue}
+                      onChange={e => setOppEditForm((f: any) => ({ ...f, dealValue: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="label mb-1 block">Expected Close Date</label>
+                  <input className="input" type="date" onKeyDown={e => e.preventDefault()} value={oppEditForm.expectedCloseDate}
+                    onChange={e => setOppEditForm((f: any) => ({ ...f, expectedCloseDate: e.target.value }))} />
+                </div>
+              </div>
+              {!permissions.isSalesUser && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label mb-1 block">Assigned To</label>
+                    <select className="input" value={oppEditForm.assignedToId}
+                      onChange={e => setOppEditForm((f: any) => ({ ...f, assignedToId: e.target.value }))}>
+                      <option value="">— Select assignee —</option>
+                      {teamMembers.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div />
+                </div>
+              )}
+              <div>
+                <label className="label mb-1 block">Notes / Comments</label>
+                <textarea className="input min-h-[70px] resize-none" value={oppEditForm.notes}
+                  onChange={e => setOppEditForm((f: any) => ({ ...f, notes: e.target.value }))} />
+              </div>
+              {oppEditError && <p className="text-xs text-red-400">{oppEditError}</p>}
+              <div className="flex gap-2 pt-1">
+                <button className="btn-ghost flex-1" onClick={() => setOppEditModal(null)}>Cancel</button>
+                <button className="btn-primary flex-1" onClick={handleSaveOpp} disabled={updateOppMutation.isPending}>
+                  {updateOppMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Opportunity View Modal ──────────────────────────────────────────── */}
+      {oppViewModal && (
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="section-title">{oppViewModal.opportunityName || oppViewModal.title}</h3>
+                {oppViewModal.opportunityId && (
+                  <p className="text-[10px] font-mono text-slate-400 mt-0.5 flex items-center gap-0.5">
+                    <Hash size={9} />{oppViewModal.opportunityId}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setOppViewModal(null)}>
+                <X size={16} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                { label: 'Linked Lead',     value: lead.companyName },
+                { label: 'Contact Person',  value: oppViewModal.contact?.name || lead.contactName },
+                { label: 'Business Line',   value: OPP_BIZ_LINES.find(b => b.value === oppViewModal.businessLine)?.label || oppViewModal.businessLine },
+                { label: 'Stage / Status',  value: OPP_STAGES.find(s => s.id === oppViewModal.stage)?.label || oppViewModal.stage },
+                { label: 'Deal Value',      value: fmtUSD(oppViewModal.dealValue) },
+                { label: 'Expected Close',  value: fmtDate(oppViewModal.expectedCloseDate) },
+                { label: 'Assigned To',     value: oppViewModal.assignedTo?.name || 'Unassigned' },
+                { label: 'Created By',      value: oppViewModal.createdBy?.name },
+                { label: 'Created Date',    value: fmtDate(oppViewModal.createdAt) },
+                { label: 'Last Updated',    value: fmtDate(oppViewModal.updatedAt) },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</p>
+                  <p className="text-sm text-slate-800 dark:text-slate-200">{value || '—'}</p>
+                </div>
+              ))}
+              {oppViewModal.wonLostReason && (
+                <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Won / Lost Reason</p>
+                  <p className="text-sm text-slate-800 dark:text-slate-200">{oppViewModal.wonLostReason}</p>
+                </div>
+              )}
+              {oppViewModal.notes && (
+                <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes / Comments</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{oppViewModal.notes}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button className="btn-ghost flex-1" onClick={() => setOppViewModal(null)}>Close</button>
+              <button className="btn-primary flex-1"
+                onClick={() => { openOppEdit(oppViewModal); setOppViewModal(null); }}>
+                <Edit2 size={13} /> Edit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

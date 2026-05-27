@@ -27,6 +27,7 @@ const createValidation = [
   body('probability').optional().isInt({ min: 0, max: 100 }).withMessage('Probability must be 0-100'),
   body('expectedCloseDate').optional().isISO8601().withMessage('Expected close date must be a valid date'),
   body('assignedToId').optional().isUUID().withMessage('assignedToId must be a valid UUID'),
+  body('contactId').optional().isUUID().withMessage('contactId must be a valid UUID'),
   body('wonLostReason').optional().trim().isLength({ max: 1000 }),
   body('notes').optional().trim().isLength({ max: 5000 }),
 ];
@@ -34,6 +35,7 @@ const createValidation = [
 const updateValidation = [
   param('id').isUUID().withMessage('Opportunity ID must be a valid UUID'),
   body('title').optional().trim().isLength({ max: 200 }),
+  body('opportunityName').optional().trim().isLength({ max: 200 }),
   body('stage').optional().isIn(VALID_STAGES).withMessage('Invalid stage'),
   body('dealValue').optional().isFloat({ min: 0 }),
   body('value').optional().isFloat({ min: 0 }),
@@ -41,6 +43,7 @@ const updateValidation = [
   body('probability').optional().isInt({ min: 0, max: 100 }),
   body('expectedCloseDate').optional().isISO8601(),
   body('assignedToId').optional().isUUID(),
+  body('contactId').optional().isUUID(),
   body('wonLostReason').optional().trim().isLength({ max: 1000 }),
   body('notes').optional().trim().isLength({ max: 5000 }),
 ];
