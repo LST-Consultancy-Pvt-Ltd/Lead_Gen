@@ -515,7 +515,7 @@ export default function OpportunitiesPage() {
 
   const { data: leadsData } = useQuery({
     queryKey: ['all-leads-dropdown'],
-    queryFn:  () => leadsApi.list({ limit: 1000 }).then(r => r.data?.data ?? []),
+    queryFn:  () => leadsApi.list({ limit: 100 }).then(r => r.data?.data ?? []),
   });
 
   const { data: teamData } = useQuery({
@@ -664,7 +664,7 @@ export default function OpportunitiesPage() {
                 stage:             values.stage,
                 dealValue:         values.dealValue ? Number(values.dealValue) : undefined,
                 expectedCloseDate: values.expectedCloseDate || undefined,
-                leadId:            values.leadId,
+                leadId:            values.leadId || undefined,
                 assignedToId:      values.assignedToId || undefined,
                 notes:             values.notes || undefined,
               });
