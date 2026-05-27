@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, opportunitiesApi, usersApi } from '../../../lib/api';
 import { usePermissions } from '../../../lib/rbac';
-import { Badge, Spinner } from '../../../components/ui';
+import { Spinner } from '../../../components/ui';
 import {
   Plus, Trash2, X, AlertTriangle, Calendar, User, Hash,
   Eye, Pencil, Save, Loader2, Briefcase,
@@ -26,15 +26,6 @@ const STAGES = [
   { id: 'closed_lost', label: 'Closed Lost', color: 'text-red-400 bg-red-500/10' },
 ];
 
-const BUSINESS_LINES = [
-  { value: 'all',        label: 'All' },
-  { value: 'netsuite',   label: 'NetSuite Services' },
-  { value: 'salesforce', label: 'Salesforce Services' },
-  { value: 'dev',        label: 'Custom Development' },
-  { value: 'saas',       label: 'SaaS Product' },
-  { value: 'training',   label: 'Training' },
-];
-
 const LOST_CATEGORIES = ['Pricing', 'Competition', 'No Budget', 'Not a Fit', 'Timing', 'Other'];
 
 const STUCK_DAYS_THRESHOLD = 14;
@@ -43,7 +34,6 @@ const STUCK_DAYS_THRESHOLD = 14;
 
 const stageColor = (id: string) => STAGES.find(s => s.id === id)?.color ?? 'text-slate-400 bg-slate-500/10';
 const stageLabel = (id: string) => STAGES.find(s => s.id === id)?.label ?? id;
-const bizLabel   = (v: string)  => BUSINESS_LINES.find(b => b.value === v)?.label ?? v;
 
 function daysSince(d?: string | null) {
   if (!d) return 0;
@@ -249,7 +239,6 @@ function OppCard({
           {[
             { label: 'Linked Lead',    value: opp.lead?.companyName },
             { label: 'Contact Person', value: opp.contact?.name || opp.lead?.contactName },
-            { label: 'Business Line',  value: bizLabel(opp.businessLine) },
             { label: 'Stage / Status', value: stageLabel(opp.stage) },
             { label: 'Deal Value',     value: fmtUSD(opp.dealValue) },
             { label: 'Expected Close', value: fmtDate(opp.expectedCloseDate) },
@@ -431,19 +420,6 @@ function OppCard({
             </span>
           </div>
         )}
-        {/* <div className="flex items-center justify-between gap-2 pt-0.5">
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-            colorClass.includes('blue')    ? 'border-blue-500/25'    :
-            colorClass.includes('violet')  ? 'border-violet-500/25'  :
-            colorClass.includes('amber')   ? 'border-amber-500/25'   :
-            colorClass.includes('orange')  ? 'border-orange-500/25'  :
-            colorClass.includes('emerald') ? 'border-emerald-500/25' :
-            colorClass.includes('red')     ? 'border-red-500/25'     : 'border-slate-500/25'
-          } ${colorClass}`}>
-            {bizLabel(opp.businessLine)}
-          </span>
-          <span className="text-sm font-semibold text-emerald-400">{fmtUSD(opp.dealValue)}</span>
-        </div> */}
         {opp.expectedCloseDate && (
           <div className="flex gap-2">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[56px] flex-shrink-0 pt-px">Close</span>
@@ -483,7 +459,6 @@ function OppCard({
 export default function OpportunitiesPage() {
   const permissions  = usePermissions();
   const queryClient  = useQueryClient();
-  const [businessFilter, setBusinessFilter] = useState('all');
 
   // Create modal
   const [createOpen,        setCreateOpen]        = useState(false);
@@ -572,9 +547,7 @@ export default function OpportunitiesPage() {
   // ── Derived data ───────────────────────────────────────────────────────────
 
   const opportunities = (data as any[]) ?? [];
-  const filtered = businessFilter === 'all'
-    ? opportunities
-    : opportunities.filter((o: any) => o.businessLine === businessFilter);
+  const filtered = opportunities;
 
   const byStage = STAGES.reduce((acc, s) => {
     acc[s.id] = filtered.filter((o: any) => o.stage === s.id);
@@ -599,20 +572,6 @@ export default function OpportunitiesPage() {
             <Plus size={14} /> New Opportunity
           </button>
         )}
-      </div>
-
-      {/* Business line filter */}
-      <div className="flex flex-wrap gap-2">
-        {BUSINESS_LINES.map((line) => (
-          <button key={line.value} onClick={() => setBusinessFilter(line.value)}
-            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
-              businessFilter === line.value
-                ? 'bg-blue-500/15 border-blue-500/40 text-blue-300'
-                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10 text-slate-400 hover:border-slate-400 dark:hover:border-white/20'
-            }`}>
-            {line.label}
-          </button>
-        ))}
       </div>
 
       {/* Kanban — 3 columns per row */}
