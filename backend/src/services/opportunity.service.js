@@ -271,6 +271,10 @@ class OpportunityService {
     });
     if (!existing) return { success: false, message: 'Opportunity not found', statusCode: 404 };
 
+    if (user.role === 'sales_user' && existing.assignedToId !== user.id) {
+      return { success: false, message: 'You can only delete your own opportunities', statusCode: 403 };
+    }
+
     await prisma.opportunity.delete({ where: { id } });
     dashboardEvents.notifyOrg(user.organizationId, 'opportunity');
     return { success: true };

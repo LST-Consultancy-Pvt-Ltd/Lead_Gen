@@ -1209,12 +1209,14 @@ export default function LeadDetailPage() {
                             onClick={() => openOppEdit(opp)}>
                             <Edit2 size={12} />
                           </button>
-                          <button title="Delete"
-                            className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
-                            disabled={deleteOppMutation.isPending}
-                            onClick={() => setOppDeleteConfirmId(opp.id)}>
-                            <Trash2 size={12} />
-                          </button>
+                          {(permissions.canDeleteOpportunities || (permissions.isSalesUser && opp.assignedToId === user?.id)) && (
+                            <button title="Delete"
+                              className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                              disabled={deleteOppMutation.isPending}
+                              onClick={() => setOppDeleteConfirmId(opp.id)}>
+                              <Trash2 size={12} />
+                            </button>
+                          )}
                         </div>
                       </div>
 

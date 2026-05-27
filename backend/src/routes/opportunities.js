@@ -62,7 +62,7 @@ router.post('/', createValidation, validate, ctrl.createOpportunity);
 // PATCH /api/opportunities/:id — ownership enforced in service; stage change validated for 7-day activity
 router.patch('/:id', updateValidation, validate, ctrl.updateOpportunity);
 
-// DELETE /api/opportunities/:id — admin only
-router.delete('/:id', requireAdmin, [param('id').isUUID()], validate, ctrl.deleteOpportunity);
+// DELETE /api/opportunities/:id — ownership enforced in service (sales_user own only, manager/admin any)
+router.delete('/:id', [param('id').isUUID()], validate, ctrl.deleteOpportunity);
 
 module.exports = router;
