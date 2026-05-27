@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, contactsApi, dropdownsApi, opportunitiesApi, usersApi } from '../../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner } from '../../../../components/ui';
@@ -156,6 +157,9 @@ export default function LeadDetailPage() {
   const router = useRouter();
   const permissions = usePermissions();
   const user = useAuthStore((s) => s.user);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const [enrichState, setEnrichState] = useState<EnrichState>({ status: 'idle' });
   const [aiTab,       setAiTab]       = useState<'analysis' | 'email'>('analysis');
@@ -450,7 +454,7 @@ export default function LeadDetailPage() {
       expectedCloseDate: oppEditForm.expectedCloseDate || undefined,
       notes:             oppEditForm.notes || undefined,
     };
-    if (!permissions.isSalesUser && oppEditForm.assignedToId) payload.assignedToId = oppEditForm.assignedToId;
+    if (oppEditForm.assignedToId) payload.assignedToId = oppEditForm.assignedToId;
     updateOppMutation.mutate({ oppId: oppEditModal.id, data: payload });
   }
 
@@ -1205,14 +1209,12 @@ export default function LeadDetailPage() {
                             onClick={() => openOppEdit(opp)}>
                             <Edit2 size={12} />
                           </button>
-                          {permissions.canDeleteOpportunities && (
-                            <button title="Delete"
-                              className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
-                              disabled={deleteOppMutation.isPending}
-                              onClick={() => setOppDeleteConfirmId(opp.id)}>
-                              <Trash2 size={12} />
-                            </button>
-                          )}
+                          <button title="Delete"
+                            className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                            disabled={deleteOppMutation.isPending}
+                            onClick={() => setOppDeleteConfirmId(opp.id)}>
+                            <Trash2 size={12} />
+                          </button>
                         </div>
                       </div>
 
@@ -1560,7 +1562,7 @@ export default function LeadDetailPage() {
       </div>
 
       {/* ── Opportunity Delete Confirmation Modal ──────────────────────────── */}
-      {oppDeleteConfirmId && (
+      {mounted && oppDeleteConfirmId && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex flex-col items-center text-center gap-3">
@@ -1592,10 +1594,10 @@ export default function LeadDetailPage() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* ── Opportunity Edit Modal ──────────────────────────────────────────── */}
-      {oppEditModal && (
+      {mounted && oppEditModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
@@ -1673,10 +1675,10 @@ export default function LeadDetailPage() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* ── Opportunity View Modal ──────────────────────────────────────────── */}
-      {oppViewModal && (
+      {mounted && oppViewModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
@@ -1732,7 +1734,7 @@ export default function LeadDetailPage() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }
