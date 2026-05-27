@@ -103,29 +103,32 @@ class OpportunityService {
   }
 
   async create(data, user) {
-    // Verify lead belongs to org
-    const lead = await prisma.lead.findFirst({
-      where: { id: data.leadId, organizationId: user.organizationId },
-      include: { leadContacts: { take: 1, select: { id: true } } },
-    });
-    if (!lead) return { success: false, message: 'Lead not found', statusCode: 404 };
+    // Verify lead belongs to org (leadId is optional)
+    let lead = null;
+    if (data.leadId) {
+      lead = await prisma.lead.findFirst({
+        where: { id: data.leadId, organizationId: user.organizationId },
+        include: { leadContacts: { take: 1, select: { id: true } } },
+      });
+      if (!lead) return { success: false, message: 'Lead not found', statusCode: 404 };
+    }
 
     // sales_user can only create opportunities for their own leads
-    if (user.role === 'sales_user' && lead.assignedToId !== user.id) {
+    if (lead && user.role === 'sales_user' && lead.assignedToId !== user.id) {
       return { success: false, message: 'You can only create opportunities for your own leads', statusCode: 403 };
     }
     // Prevent sales_user from assigning to others
     if (user.role === 'sales_user') delete data.assignedToId;
 
     // Derive title from name/opportunityName if not provided
-    const title = data.title || data.name || data.opportunityName || lead.companyName;
+    const title = data.title || data.name || data.opportunityName || lead?.companyName || 'New Opportunity';
 
     // Auto-set probability from stage unless explicitly provided
     const stage = data.stage || 'prospecting';
     const probability = data.probability != null ? data.probability : (STAGE_PROBABILITY[stage] ?? 10);
 
     // Auto-populate contactId from lead's first linked contact if not provided
-    const contactId = data.contactId || lead.leadContacts?.[0]?.id || undefined;
+    const contactId = data.contactId || lead?.leadContacts?.[0]?.id || undefined;
 
     // Normalise date-only strings to full ISO DateTime (Prisma requires it)
     const toDateTime = (val) => val ? new Date(val) : undefined;

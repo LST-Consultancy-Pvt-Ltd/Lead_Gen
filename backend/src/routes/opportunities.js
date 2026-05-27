@@ -16,7 +16,7 @@ const ctrl = require('../controllers/opportunityController');
 const VALID_STAGES = ['prospecting', 'qualification', 'qualified', 'demo', 'proposal', 'negotiation', 'closed_won', 'closed_lost'];
 
 const createValidation = [
-  body('leadId').isUUID().withMessage('leadId must be a valid UUID'),
+  body('leadId').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('leadId must be a valid UUID'),
   body('title').optional().trim().isLength({ max: 200 }),
   body('name').optional().trim().isLength({ max: 200 }),
   body('opportunityName').optional().trim().isLength({ max: 200 }),
