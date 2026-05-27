@@ -148,7 +148,7 @@ class OpportunityService {
         contactId,
         organizationId: user.organizationId,
         createdById: user.id,
-        assignedToId: data.assignedToId || user.id,
+        assignedToId: user.role === 'sales_user' ? user.id : (data.assignedToId || null),
       },
       include: {
         lead: { select: { id: true, companyName: true, contactName: true } },
