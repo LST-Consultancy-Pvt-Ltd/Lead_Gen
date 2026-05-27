@@ -455,16 +455,14 @@ export default function LeadDetailPage() {
   }
 
   function handleCreateOpp() {
-    if (!oppCreateForm.opportunityName.trim()) { toast.error('Opportunity name is required'); return; }
-    if (!oppCreateForm.expectedCloseDate)       { toast.error('Expected close date is required'); return; }
     setOppCreateError('');
     createOppMutation.mutate({
       leadId:            id,
-      opportunityName:   oppCreateForm.opportunityName,
+      opportunityName:   oppCreateForm.opportunityName || undefined,
       businessLine:      oppCreateForm.businessLine,
       stage:             oppCreateForm.stage,
       dealValue:         Number(oppCreateForm.dealValue),
-      expectedCloseDate: oppCreateForm.expectedCloseDate,
+      expectedCloseDate: oppCreateForm.expectedCloseDate || undefined,
       assignedToId:      oppCreateForm.assignedToId || undefined,
       notes:             oppCreateForm.notes || undefined,
     });
@@ -1275,7 +1273,7 @@ export default function LeadDetailPage() {
 
                 {/* Opportunity Name (full row) */}
                 <div>
-                  <label className="label mb-1 block">Opportunity Name <span className="text-red-400">*</span></label>
+                  <label className="label mb-1 block">Opportunity Name</label>
                   <input className="input" placeholder="e.g. ERP Implementation Proposal"
                     value={oppCreateForm.opportunityName}
                     onChange={e => setOppCreateForm((f: any) => ({ ...f, opportunityName: e.target.value }))} />

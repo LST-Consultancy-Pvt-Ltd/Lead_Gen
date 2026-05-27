@@ -68,7 +68,7 @@ const createSchema = yup.object({
   stage:             yup.mixed<string>().oneOf(STAGES.map(s => s.id)).optional(),
   dealValue:         yup.string().optional(),
   expectedCloseDate: yup.string().optional(),
-  leadId:            yup.string().required('Please select a lead'),
+  leadId:            yup.string().optional(),
   assignedToId:      yup.string().optional(),
   notes:             yup.string().optional(),
 });
@@ -672,7 +672,7 @@ export default function OpportunitiesPage() {
               {/* Row 1: Linked Lead | Opportunity Name */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label mb-1 block">Linked Lead <span className="text-red-400">*</span></label>
+                  <label className="label mb-1 block">Linked Lead</label>
                   <select className="input" {...register('leadId')}>
                     <option value="">Select a lead</option>
                     {leads.map((l: any) => <option key={l.id} value={l.id}>{l.companyName}</option>)}
