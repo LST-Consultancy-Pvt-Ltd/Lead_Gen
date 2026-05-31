@@ -1,7 +1,10 @@
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 
-function generateTemplate() {
-  const headers = [
+async function generateTemplate() {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Leads');
+
+  worksheet.addRow([
     'Company',
     'Contact',
     'Assign To',
@@ -10,12 +13,9 @@ function generateTemplate() {
     'Product / Service',
     'Source URL',
     'Next Follow-up',
-  ];
+  ]);
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([headers]);
-  XLSX.utils.book_append_sheet(wb, ws, 'Leads');
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 module.exports = { generateTemplate };

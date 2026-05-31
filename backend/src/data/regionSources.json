@@ -1,0 +1,199 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Region → high-signal press/business/tender sources. Used by sourceRouter to inject 1 regional site: query per region the user targets. Aliases include common variants (country code, city names, alternative spellings). Match is case-insensitive whole-token after splitting on comma.",
+    "matchOrder": "Canonical region key wins by exact match; otherwise aliases are checked. Cities map to their country."
+  },
+
+  "USA": {
+    "label": "United States",
+    "aliases": ["US", "U.S.", "U.S.A.", "United States", "America", "American"],
+    "press": ["bloomberg.com", "reuters.com", "wsj.com", "businessinsider.com", "techcrunch.com"],
+    "business": ["forbes.com", "fortune.com", "cnbc.com"],
+    "tenders": ["sam.gov", "bidnetdirect.com"]
+  },
+
+  "India": {
+    "label": "India",
+    "aliases": ["IN", "Bharat", "Mumbai", "Delhi", "New Delhi", "Bangalore", "Bengaluru", "Chennai", "Hyderabad", "Pune", "Kolkata", "Ahmedabad", "Gurgaon", "Gurugram", "Noida"],
+    "press": ["livemint.com", "economictimes.indiatimes.com", "business-standard.com", "moneycontrol.com", "thehindubusinessline.com"],
+    "business": ["financialexpress.com", "businesstoday.in", "fortuneindia.com"],
+    "tenders": ["eprocure.gov.in", "tendersinfo.com", "gem.gov.in"]
+  },
+
+  "UAE": {
+    "label": "United Arab Emirates",
+    "aliases": ["U.A.E.", "United Arab Emirates", "Dubai", "Abu Dhabi", "Sharjah", "Ajman", "Ras Al Khaimah", "Fujairah", "Umm Al Quwain", "Emirates"],
+    "press": ["zawya.com", "gulfnews.com", "khaleejtimes.com", "thenationalnews.com", "arabianbusiness.com"],
+    "business": ["arabnews.com", "menabytes.com"],
+    "tenders": ["tendersinfo.com"]
+  },
+
+  "Saudi Arabia": {
+    "label": "Saudi Arabia",
+    "aliases": ["KSA", "Saudi", "Riyadh", "Jeddah", "Dammam", "Mecca", "Makkah", "Medina"],
+    "press": ["arabnews.com", "zawya.com", "saudigazette.com.sa", "arabianbusiness.com"],
+    "business": ["argaam.com"],
+    "tenders": ["etimad.sa"]
+  },
+
+  "UK": {
+    "label": "United Kingdom",
+    "aliases": ["U.K.", "United Kingdom", "Britain", "British", "England", "Scotland", "Wales", "London", "Manchester", "Birmingham", "Edinburgh", "Glasgow"],
+    "press": ["ft.com", "bbc.com", "bbc.co.uk", "theguardian.com", "telegraph.co.uk", "thetimes.co.uk"],
+    "business": ["cityam.com", "economist.com"],
+    "tenders": ["contractsfinder.service.gov.uk", "find-tender.service.gov.uk"]
+  },
+
+  "Singapore": {
+    "label": "Singapore",
+    "aliases": ["SG", "Singaporean"],
+    "press": ["straitstimes.com", "businesstimes.com.sg", "channelnewsasia.com"],
+    "business": ["asiaone.com"],
+    "tenders": ["gebiz.gov.sg"]
+  },
+
+  "Australia": {
+    "label": "Australia",
+    "aliases": ["AU", "AUS", "Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide", "Canberra"],
+    "press": ["afr.com", "smh.com.au", "theaustralian.com.au", "abc.net.au"],
+    "business": ["businessinsider.com.au"],
+    "tenders": ["tenders.gov.au", "austender.gov.au"]
+  },
+
+  "Canada": {
+    "label": "Canada",
+    "aliases": ["CA", "CAN", "Toronto", "Vancouver", "Montreal", "Calgary", "Ottawa", "Edmonton"],
+    "press": ["theglobeandmail.com", "nationalpost.com", "thestar.com", "cbc.ca", "financialpost.com"],
+    "business": ["benefitscanada.com"],
+    "tenders": ["buyandsell.gc.ca", "merx.com"]
+  },
+
+  "Germany": {
+    "label": "Germany",
+    "aliases": ["DE", "Deutschland", "Berlin", "Munich", "Munchen", "Hamburg", "Frankfurt", "Cologne", "Stuttgart"],
+    "press": ["handelsblatt.com", "spiegel.de", "faz.net", "sueddeutsche.de", "manager-magazin.de"],
+    "business": ["wiwo.de"],
+    "tenders": ["evergabe-online.de"]
+  },
+
+  "France": {
+    "label": "France",
+    "aliases": ["FR", "Paris", "Lyon", "Marseille", "Toulouse", "Lille", "Nice"],
+    "press": ["lemonde.fr", "lefigaro.fr", "lesechos.fr", "latribune.fr"],
+    "business": ["challenges.fr"],
+    "tenders": ["boamp.fr"]
+  },
+
+  "Qatar": {
+    "label": "Qatar",
+    "aliases": ["QA", "Doha"],
+    "press": ["gulf-times.com", "thepeninsulaqatar.com", "zawya.com"],
+    "business": ["arabianbusiness.com"],
+    "tenders": []
+  },
+
+  "Kuwait": {
+    "label": "Kuwait",
+    "aliases": ["KW", "Kuwait City"],
+    "press": ["arabtimesonline.com", "kuwaittimes.com", "zawya.com"],
+    "business": ["arabianbusiness.com"],
+    "tenders": []
+  },
+
+  "Bahrain": {
+    "label": "Bahrain",
+    "aliases": ["BH", "Manama"],
+    "press": ["gdnonline.com", "zawya.com"],
+    "business": ["arabianbusiness.com"],
+    "tenders": []
+  },
+
+  "Oman": {
+    "label": "Oman",
+    "aliases": ["OM", "Muscat"],
+    "press": ["timesofoman.com", "omanobserver.om", "zawya.com"],
+    "business": ["arabianbusiness.com"],
+    "tenders": []
+  },
+
+  "Egypt": {
+    "label": "Egypt",
+    "aliases": ["EG", "Cairo", "Alexandria"],
+    "press": ["english.ahram.org.eg", "egypttoday.com", "zawya.com"],
+    "business": ["enterprise.press"],
+    "tenders": []
+  },
+
+  "South Africa": {
+    "label": "South Africa",
+    "aliases": ["ZA", "Johannesburg", "Cape Town", "Durban", "Pretoria"],
+    "press": ["businesslive.co.za", "iol.co.za", "news24.com", "moneyweb.co.za"],
+    "business": ["fin24.com"],
+    "tenders": ["etenders.gov.za"]
+  },
+
+  "Brazil": {
+    "label": "Brazil",
+    "aliases": ["BR", "Brasil", "Sao Paulo", "Rio de Janeiro", "Brasilia"],
+    "press": ["valor.globo.com", "folha.uol.com.br", "estadao.com.br"],
+    "business": ["exame.com"],
+    "tenders": []
+  },
+
+  "Mexico": {
+    "label": "Mexico",
+    "aliases": ["MX", "Mexico City", "Monterrey", "Guadalajara"],
+    "press": ["eluniversal.com.mx", "milenio.com", "reforma.com"],
+    "business": ["elfinanciero.com.mx"],
+    "tenders": ["compranet.gob.mx"]
+  },
+
+  "Indonesia": {
+    "label": "Indonesia",
+    "aliases": ["ID", "Jakarta", "Surabaya", "Bandung"],
+    "press": ["thejakartapost.com", "kompas.com", "tempo.co"],
+    "business": ["bisnis.com"],
+    "tenders": []
+  },
+
+  "Malaysia": {
+    "label": "Malaysia",
+    "aliases": ["MY", "Kuala Lumpur", "Penang", "Johor"],
+    "press": ["thestar.com.my", "nst.com.my", "freemalaysiatoday.com"],
+    "business": ["theedgemarkets.com"],
+    "tenders": []
+  },
+
+  "Vietnam": {
+    "label": "Vietnam",
+    "aliases": ["VN", "Hanoi", "Ho Chi Minh"],
+    "press": ["vnexpress.net", "tuoitrenews.vn", "vietnamnews.vn"],
+    "business": ["vietnambiz.vn"],
+    "tenders": []
+  },
+
+  "Thailand": {
+    "label": "Thailand",
+    "aliases": ["TH", "Bangkok"],
+    "press": ["bangkokpost.com", "thaipbsworld.com", "nationthailand.com"],
+    "business": [],
+    "tenders": []
+  },
+
+  "Japan": {
+    "label": "Japan",
+    "aliases": ["JP", "Tokyo", "Osaka", "Kyoto"],
+    "press": ["nikkei.com", "japantimes.co.jp", "asahi.com"],
+    "business": ["jp.reuters.com"],
+    "tenders": []
+  },
+
+  "_global": {
+    "label": "Global / multi-region fallback",
+    "aliases": ["global", "international", "worldwide", "world", "emea", "apac", "asean", "gcc", "mena", "middle east", "asia", "europe", "africa"],
+    "press": ["reuters.com", "bloomberg.com", "ft.com", "wsj.com"],
+    "business": ["forbes.com", "fortune.com"],
+    "tenders": []
+  }
+}

@@ -450,7 +450,7 @@ async function importLeadsFromExcel(req, res) {
  */
 async function downloadExcelTemplate(req, res) {
   try {
-    const buffer = generateTemplate();
+    const buffer = await generateTemplate();
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

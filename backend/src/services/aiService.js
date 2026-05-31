@@ -27,6 +27,14 @@ async function analyzeLeadIntent(lead, services) {
   if (!client) return fallbackScoring(lead);
 
   try {
+    // Phase 2.8: include description + signalText + sourceUrl so the summary AI
+    // has the article context the discovery AI used to identify this buyer.
+    // Without these, the summary defaults to "no signals" even when we already
+    // scraped a hiring announcement, expansion press release, etc.
+    const description = (lead.description || '').slice(0, 800);
+    const signalText  = (lead.signalText  || '').slice(0, 400);
+    const sourceUrl   = lead.sourceUrl || '';
+
     const prompt = `You are an expert B2B sales intelligence analyst.
 
 Company: ${lead.companyName}
@@ -34,18 +42,27 @@ Industry: ${lead.industry || 'Unknown'}
 Tech Stack: ${(lead.techStack || []).join(', ')}
 Job Postings: ${JSON.stringify(lead.jobPostings?.slice(0, 3))}
 Signals: ${JSON.stringify(lead.intentSignals?.slice(0, 5))}
+Signal text: ${signalText || 'None'}
+Source URL: ${sourceUrl || 'Unknown'}
+Source article excerpt: ${description || 'None'}
 
 Our Services: ${services.join(', ')}
 
-Analyze this lead and respond with ONLY valid JSON (no markdown):
+Use the Source article excerpt and Signal text as the primary evidence when
+they are present — they describe the specific buyer event (hiring announcement,
+facility expansion, funding round, etc.) that flagged this company. Cite that
+event in your aiSummary and aiPitch. Do NOT say "no signals available" or
+"limited insight" when the Source article excerpt is present.
+
+Respond with ONLY valid JSON (no markdown):
 {
   "leadScore": <0-100>,
   "intentScore": <0-100>,
   "intentLevel": <"hot"|"warm"|"cold">,
   "matchScore": <0-100, how well this company matches our services/position requirements>,
-  "opportunity": "<concise opportunity description>",
-  "aiSummary": "<2-3 sentence company analysis>",
-  "aiPitch": "<personalized 2-sentence sales pitch>",
+  "opportunity": "<concise opportunity description, citing the specific event when known>",
+  "aiSummary": "<2-3 sentence company analysis — reference the source article event if present>",
+  "aiPitch": "<personalized 2-sentence sales pitch tied to the source event>",
   "reasoning": "<brief scoring reasoning>"
 }`;
 
@@ -53,7 +70,7 @@ Analyze this lead and respond with ONLY valid JSON (no markdown):
       model: config.openai.model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
-      max_tokens: 500,
+      max_tokens: 600,
     });
 
     return parseJSONResponse(response.choices[0].message.content.trim());

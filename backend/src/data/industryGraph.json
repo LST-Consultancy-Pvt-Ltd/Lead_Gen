@@ -1,0 +1,536 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Industry knowledge graph — maps offer buckets to buyer industries, demand signals, source preferences, and persona hints. Used by sourceRouter to decide which queries to fire and which sources to prefer/avoid. AI fallback runs when the offer doesn't match any bucket above the confidence threshold.",
+    "matchHints": "Lowercased substring match against profile.productName + profile.productSummary + profile.buyerDescription. First bucket whose any matchKeyword appears wins. Order buckets from most specific to most general."
+  },
+
+  "industrial_rental": {
+    "label": "Industrial Equipment Rental",
+    "matchKeywords": ["generator rental", "crane rental", "scaffolding rental", "forklift rental", "compressor rental", "chiller rental", "boom lift", "scissor lift", "telehandler", "heavy lift", "rigging", "concrete pump", "portable cabin"],
+    "industries": ["construction", "oil_and_gas", "mining", "manufacturing", "infrastructure", "events", "telecom", "shipbuilding", "power_generation", "petrochemical"],
+    "buyerPersonas": ["construction_manager", "project_manager", "site_engineer", "facilities_manager", "procurement_manager", "plant_manager", "operations_director", "hse_manager"],
+    "buyerTitleSeeds": ["Project Manager", "Construction Manager", "Site Engineer", "Procurement Manager", "Facilities Manager", "Plant Manager", "Operations Manager", "EPC Project Director"],
+    "demandSignals": ["groundbreaking_ceremony", "topping_out", "epc_contract_award", "refinery_turnaround", "facility_expansion", "new_plant_announcement", "infrastructure_project_award", "wind_farm_sanctioning", "real_estate_launch", "bridge_metro_project"],
+    "queryPatterns": [
+      "\"groundbreaking\" OR \"topping out\" OR \"construction begins\"",
+      "\"new plant\" OR \"new factory\" announcement",
+      "\"facility expansion\" OR \"capacity expansion\"",
+      "\"EPC contract\" award announcement",
+      "\"refinery turnaround\" OR \"shutdown\" planned",
+      "\"infrastructure project\" awarded",
+      "\"wind farm\" OR \"solar plant\" project sanctioned"
+    ],
+    "preferredSources": ["constructiondive.com", "enr.com", "oilprice.com", "rigzone.com", "datacenterdynamics.com", "zawya.com", "gulfnews.com"],
+    "avoidSources": ["techcrunch.com", "venturebeat.com", "theinformation.com"],
+    "typicalCompanySize": "200-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "industrial_services": {
+    "label": "Industrial / Facility Services",
+    "matchKeywords": ["electrical panel maintenance", "switchgear maintenance", "thermography", "hvac maintenance", "industrial cleaning", "tank cleaning", "fire safety inspection", "water treatment service", "annual maintenance contract", "amc", "predictive maintenance"],
+    "industries": ["manufacturing", "oil_and_gas", "data_centers", "healthcare", "hospitality", "commercial_real_estate", "petrochemical", "cement", "steel", "pharma", "food_processing", "airports", "utilities"],
+    "buyerPersonas": ["facilities_manager", "plant_manager", "maintenance_manager", "reliability_engineer", "chief_engineer", "operations_director", "site_manager", "hse_manager"],
+    "buyerTitleSeeds": ["Facilities Manager", "Plant Manager", "Maintenance Manager", "Reliability Engineer", "Chief Engineer", "Operations Director", "HSE Manager", "Procurement Manager"],
+    "demandSignals": ["new_facility_opening", "warranty_expiry", "compliance_audit_finding", "insurance_inspection", "post_incident_review", "facility_handover", "iso_certification_drive"],
+    "queryPatterns": [
+      "\"new facility\" OR \"new plant\" inauguration",
+      "\"facility handover\" OR \"building handover\"",
+      "\"compliance audit\" OR \"safety audit\" findings",
+      "\"plant expansion\" announcement",
+      "\"ISO certification\" OR \"NABH\" OR \"GMP\" award",
+      "\"insurance audit\" facility OR plant"
+    ],
+    "preferredSources": ["constructiondive.com", "powermag.com", "utilitydive.com", "zawya.com"],
+    "avoidSources": ["techcrunch.com", "venturebeat.com"],
+    "typicalCompanySize": "200-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "facilities_services": {
+    "label": "Facility & Property Services",
+    "matchKeywords": ["security guard", "pest control", "landscaping", "office cleaning", "housekeeping service", "facility management", "ifm", "fm services", "janitorial", "waste management service", "concierge service"],
+    "industries": ["commercial_real_estate", "hospitality", "healthcare", "retail", "education", "residential", "industrial_parks", "logistics_parks", "government", "banking"],
+    "buyerPersonas": ["facilities_manager", "admin_head", "property_manager", "general_manager", "chief_security_officer", "operations_manager", "rwa_president"],
+    "buyerTitleSeeds": ["Facilities Manager", "Admin Head", "Property Manager", "General Manager", "Chief Security Officer", "Operations Manager", "Procurement Manager", "Estate Manager"],
+    "demandSignals": ["new_property_handover", "tower_inauguration", "mall_opening", "hospital_commissioning", "incident_response", "rwa_formation", "ipark_handover"],
+    "queryPatterns": [
+      "\"office tower\" OR \"commercial complex\" inauguration",
+      "\"mall opening\" OR \"shopping centre launch\"",
+      "\"hospital commissioning\" OR \"hospital handover\"",
+      "\"new corporate campus\" OR \"new HQ\" opens",
+      "\"IT park\" OR \"SEZ\" inauguration"
+    ],
+    "preferredSources": ["zawya.com", "gulfnews.com", "khaleejtimes.com", "thenationalnews.com", "livemint.com"],
+    "avoidSources": ["techcrunch.com", "github.com"],
+    "typicalCompanySize": "50-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "logistics_services": {
+    "label": "Logistics / 3PL / Cold Storage / Fleet",
+    "matchKeywords": ["cold storage", "warehouse rental", "fleet management", "freight forwarding", "3pl", "third party logistics", "reefer truck", "last mile delivery", "fulfilment service", "container yard", "transportation service"],
+    "industries": ["fmcg", "pharma", "dairy", "frozen_food", "seafood", "retail", "ecommerce", "qcommerce", "horeca", "quick_commerce", "automotive", "horticulture", "qsr"],
+    "buyerPersonas": ["supply_chain_head", "logistics_director", "warehouse_director", "coo", "procurement_director", "operations_manager", "quality_head"],
+    "buyerTitleSeeds": ["VP Supply Chain", "Head of Logistics", "Director of Warehousing", "Chief Operating Officer", "Procurement Director", "Operations Manager", "Distribution Manager"],
+    "demandSignals": ["new_product_launch", "geographic_expansion", "channel_expansion", "qcommerce_dark_store", "ipo_drhp", "fda_fssai_approval", "vaccine_campaign", "frozen_line_launch"],
+    "queryPatterns": [
+      "\"new product launch\" frozen OR dairy OR pharma",
+      "\"quick commerce\" OR \"dark store\" expansion",
+      "\"new warehouse\" OR \"new distribution center\" announcement",
+      "\"channel expansion\" modern trade OR ecommerce",
+      "\"capacity expansion\" frozen OR cold chain"
+    ],
+    "preferredSources": ["livemint.com", "business-standard.com", "economictimes.indiatimes.com", "moneycontrol.com", "zawya.com"],
+    "avoidSources": ["techcrunch.com", "github.com"],
+    "typicalCompanySize": "100-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "it_services": {
+    "label": "IT Services & Cloud Consulting",
+    "matchKeywords": ["cloud migration", "managed it", "devops consulting", "cybersecurity consulting", "data center hosting", "colocation", "managed services", "msp", "soc service", "cloud consulting", "azure migration", "aws migration", "gcp migration", "kubernetes consulting", "saas consulting"],
+    "industries": ["bfsi", "healthcare", "manufacturing", "retail_ecommerce", "telecom", "government", "education", "media", "gaming", "biotech", "saas", "ai_ml"],
+    "buyerPersonas": ["cio", "cto", "vp_infrastructure", "head_of_cloud", "enterprise_architect", "ciso", "vp_engineering", "director_it_operations"],
+    "buyerTitleSeeds": ["Chief Information Officer", "Chief Technology Officer", "VP Infrastructure", "Head of Cloud", "Enterprise Architect", "VP Engineering", "Director of IT", "Cloud Architect", "Chief Information Security Officer"],
+    "demandSignals": ["new_cio_cto_hire", "digital_transformation_initiative", "data_center_exit", "mainframe_sunset", "series_b_c_d_funding", "regulatory_compliance_pressure", "m_and_a_integration", "ai_workload_growth"],
+    "queryPatterns": [
+      "\"new CIO\" OR \"new CTO\" appointed",
+      "\"digital transformation\" initiative announcement",
+      "\"data center exit\" OR \"on-prem to cloud\"",
+      "\"mainframe modernization\" OR \"legacy modernization\"",
+      "\"Series C\" OR \"Series D\" funding SaaS",
+      "\"core banking\" modernization OR \"core banking\" upgrade"
+    ],
+    "preferredSources": ["techcrunch.com", "venturebeat.com", "theinformation.com", "datacenterdynamics.com", "datacenterknowledge.com"],
+    "avoidSources": ["constructiondive.com", "enr.com"],
+    "typicalCompanySize": "500-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "saas_b2b": {
+    "label": "B2B SaaS Software",
+    "matchKeywords": ["saas", "software as a service", "crm software", "erp software", "hr software", "marketing automation platform", "analytics platform", "data platform", "observability", "monitoring software", "collaboration software"],
+    "industries": ["saas", "ecommerce", "fintech", "healthtech", "edtech", "logistics_tech", "retail", "manufacturing_tech", "ai_ml_companies"],
+    "buyerPersonas": ["cio", "cto", "vp_engineering", "vp_revops", "vp_marketing", "vp_sales", "cfo", "head_of_data", "vp_product"],
+    "buyerTitleSeeds": ["Chief Technology Officer", "VP Engineering", "VP RevOps", "VP Marketing", "VP Sales", "Chief Financial Officer", "Head of Data", "VP Product"],
+    "demandSignals": ["series_a_b_c_funding", "rapid_headcount_growth", "new_geo_launch", "competitor_churn", "tooling_consolidation", "ipo_filing"],
+    "queryPatterns": [
+      "\"Series A\" OR \"Series B\" OR \"Series C\" funding announcement",
+      "\"rapid growth\" OR \"hypergrowth\" startup",
+      "\"new market\" OR \"global expansion\" SaaS",
+      "\"IPO filing\" OR \"DRHP\" SaaS"
+    ],
+    "preferredSources": ["techcrunch.com", "venturebeat.com", "theinformation.com", "saastr.com"],
+    "avoidSources": ["constructiondive.com", "enr.com", "rigzone.com"],
+    "typicalCompanySize": "50-10000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": false
+  },
+
+  "erp_implementation": {
+    "label": "ERP Implementation Services",
+    "matchKeywords": ["erp implementation", "sap implementation", "oracle implementation", "s/4hana", "s4hana", "netsuite implementation", "dynamics 365", "workday implementation", "erp consulting", "erp migration", "infor implementation"],
+    "industries": ["manufacturing", "retail", "bfsi", "pharma", "oil_and_gas", "government", "healthcare", "construction_epc", "logistics", "fmcg"],
+    "buyerPersonas": ["cfo", "coo", "cio", "vp_finance", "vp_supply_chain", "controller", "head_enterprise_apps", "transformation_director"],
+    "buyerTitleSeeds": ["Chief Financial Officer", "Chief Operating Officer", "Chief Information Officer", "VP Finance", "VP Supply Chain", "Controller", "Head of Enterprise Applications", "ERP Program Manager"],
+    "demandSignals": ["sap_ecc_eol", "m_and_a_consolidation", "ipo_preparation", "rapid_growth_outgrew_systems", "new_cfo_cio_hire", "regulatory_mandate", "private_equity_acquisition"],
+    "queryPatterns": [
+      "\"SAP ECC\" OR \"SAP S/4HANA migration\" announcement",
+      "\"acquired by\" OR \"merger\" finance consolidation",
+      "\"IPO preparation\" OR \"DRHP\" filing",
+      "\"new CFO\" OR \"new CIO\" appointed",
+      "\"e-invoicing\" OR \"GST\" mandate compliance"
+    ],
+    "preferredSources": ["livemint.com", "business-standard.com", "economictimes.indiatimes.com", "zawya.com", "techcrunch.com"],
+    "avoidSources": ["github.com"],
+    "typicalCompanySize": "200-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "recruitment_staffing": {
+    "label": "Recruitment / Staffing Agency",
+    "matchKeywords": ["recruitment", "staffing", "rpo", "executive search", "talent acquisition", "headhunting", "contract staffing", "mass hiring", "campus hiring", "recruiter", "hiring agency"],
+    "industries": ["it_services", "bfsi", "ecommerce", "saas", "manufacturing", "healthcare", "retail", "logistics", "professional_services", "gcc"],
+    "buyerPersonas": ["chro", "vp_talent_acquisition", "head_recruitment", "hr_director", "chief_people_officer", "ceo_founder", "procurement_director"],
+    "buyerTitleSeeds": ["Chief Human Resources Officer", "VP Talent Acquisition", "Head of Recruitment", "HR Director", "Chief People Officer", "Talent Acquisition Lead", "Procurement Manager"],
+    "demandSignals": ["series_a_b_c_funding", "ipo_filing", "new_gcc_setup", "plant_commissioning", "new_geo_expansion", "new_cxo_hire", "mass_hiring_campaign", "competitor_layoffs"],
+    "queryPatterns": [
+      "\"hiring 1000\" OR \"hiring 500\" OR \"hiring 5000\" engineers",
+      "\"new GCC\" OR \"capability center\" setup announcement",
+      "\"Series C\" OR \"Series D\" funding hiring",
+      "\"new factory\" OR \"plant commissioning\" announcement",
+      "\"opens new office\" OR \"new headquarters\" city"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "moneycontrol.com", "techcrunch.com", "business-standard.com"],
+    "avoidSources": ["github.com"],
+    "typicalCompanySize": "100-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "marketing_services": {
+    "label": "Marketing / Advertising / Creative Services",
+    "matchKeywords": ["marketing agency", "ad agency", "branding agency", "digital marketing", "performance marketing", "seo agency", "content agency", "creative agency", "media buying", "pr agency"],
+    "industries": ["ecommerce", "fmcg", "fashion", "beauty", "saas", "startup", "real_estate", "automotive", "edtech", "healthtech", "fintech"],
+    "buyerPersonas": ["cmo", "vp_marketing", "head_growth", "head_brand", "founder_ceo", "vp_digital", "head_ecommerce"],
+    "buyerTitleSeeds": ["Chief Marketing Officer", "VP Marketing", "Head of Growth", "Head of Brand", "Founder", "VP Digital", "Head of Ecommerce", "Director of Marketing"],
+    "demandSignals": ["series_funding", "new_product_launch", "rebranding", "geographic_launch", "new_cmo_hire", "campaign_launch"],
+    "queryPatterns": [
+      "\"Series A\" OR \"Series B\" funding D2C OR ecommerce",
+      "\"product launch\" announcement consumer",
+      "\"new CMO\" OR \"chief marketing officer\" appointed",
+      "\"rebranding\" OR \"brand refresh\" announcement"
+    ],
+    "preferredSources": ["techcrunch.com", "venturebeat.com", "livemint.com", "economictimes.indiatimes.com"],
+    "avoidSources": ["github.com", "rigzone.com"],
+    "typicalCompanySize": "50-5000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "legal_services": {
+    "label": "Legal / Compliance Services",
+    "matchKeywords": ["legal service", "law firm", "compliance consulting", "regulatory advisory", "corporate legal", "contract drafting", "ipr service", "intellectual property", "litigation support"],
+    "industries": ["bfsi", "saas", "ecommerce", "manufacturing", "pharma", "healthcare", "media", "real_estate", "startups"],
+    "buyerPersonas": ["general_counsel", "chief_legal_officer", "compliance_head", "founder_ceo", "cfo", "company_secretary"],
+    "buyerTitleSeeds": ["General Counsel", "Chief Legal Officer", "Head of Compliance", "Founder", "Chief Financial Officer", "Company Secretary", "Legal Director"],
+    "demandSignals": ["regulatory_change", "ipo_filing", "m_and_a_activity", "investigation_announced", "new_jurisdiction_launch", "series_c_d_funding"],
+    "queryPatterns": [
+      "\"IPO filing\" OR \"DRHP submitted\"",
+      "\"acquired\" OR \"acquisition announced\"",
+      "\"regulatory action\" OR \"sebi notice\" OR \"sec investigation\"",
+      "\"new jurisdiction\" OR \"international expansion\""
+    ],
+    "preferredSources": ["livemint.com", "business-standard.com", "moneycontrol.com", "economictimes.indiatimes.com"],
+    "avoidSources": ["github.com"],
+    "typicalCompanySize": "50-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "accounting_services": {
+    "label": "Accounting / Audit / Tax Services",
+    "matchKeywords": ["accounting service", "bookkeeping", "audit service", "tax consulting", "ca service", "internal audit", "statutory audit", "tax advisory", "transfer pricing"],
+    "industries": ["startups", "saas", "ecommerce", "manufacturing", "real_estate", "bfsi", "trading", "hospitality", "construction"],
+    "buyerPersonas": ["cfo", "founder_ceo", "controller", "head_finance", "company_secretary", "tax_director"],
+    "buyerTitleSeeds": ["Chief Financial Officer", "Founder", "Controller", "Head of Finance", "Company Secretary", "Tax Director", "Finance Manager"],
+    "demandSignals": ["incorporation", "series_funding", "ipo_preparation", "new_jurisdiction", "regulatory_filing_deadline"],
+    "queryPatterns": [
+      "\"newly incorporated\" OR \"company registered\"",
+      "\"Series A\" funding announcement",
+      "\"IPO preparation\" OR \"audit cycle\"",
+      "\"foreign subsidiary\" OR \"new entity\" setup"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "moneycontrol.com"],
+    "avoidSources": ["github.com", "rigzone.com"],
+    "typicalCompanySize": "10-10000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "real_estate_services": {
+    "label": "Real Estate Services (CRE / Office Fit-out)",
+    "matchKeywords": ["office fit-out", "interior design", "workspace design", "office furniture", "office setup", "coworking space", "commercial real estate broker", "office leasing"],
+    "industries": ["it_services", "saas", "gcc", "bfsi", "professional_services", "ecommerce", "startups", "consulting", "media"],
+    "buyerPersonas": ["admin_head", "facilities_director", "head_workplace", "coo", "founder_ceo", "real_estate_director"],
+    "buyerTitleSeeds": ["Head of Workplace", "Facilities Director", "Admin Head", "Chief Operating Officer", "Founder", "Real Estate Director", "Office Manager"],
+    "demandSignals": ["new_office_announcement", "headcount_doubling", "new_geo_office", "lease_expiry", "gcc_setup", "consolidation"],
+    "queryPatterns": [
+      "\"opens new office\" OR \"new headquarters\"",
+      "\"new GCC\" OR \"capability center\" setup",
+      "\"leasing\" OR \"signs lease\" office space",
+      "\"office expansion\" OR \"workplace expansion\""
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "business-standard.com", "moneycontrol.com"],
+    "avoidSources": ["github.com"],
+    "typicalCompanySize": "100-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "healthcare_services": {
+    "label": "Healthcare Services / Medical B2B",
+    "matchKeywords": ["medical equipment", "diagnostic service", "pharma logistics", "clinical research", "cro", "medical device", "hospital service"],
+    "industries": ["hospitals", "diagnostic_chains", "pharma", "biotech", "clinical_research", "medical_devices", "healthcare_it"],
+    "buyerPersonas": ["chief_medical_officer", "hospital_administrator", "vp_clinical", "head_procurement", "biomed_head", "chief_executive"],
+    "buyerTitleSeeds": ["Chief Medical Officer", "Hospital Administrator", "VP Clinical Operations", "Head of Procurement", "Biomedical Engineer Head", "Chief Executive Officer"],
+    "demandSignals": ["new_hospital_opening", "diagnostic_chain_expansion", "fda_cdsco_approval", "new_research_facility", "ipo_filing"],
+    "queryPatterns": [
+      "\"new hospital\" OR \"hospital commissioning\"",
+      "\"diagnostic chain\" OR \"diagnostic centre\" expansion",
+      "\"CDSCO approval\" OR \"FDA approval\" announcement",
+      "\"new research facility\" pharma OR biotech"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "business-standard.com"],
+    "avoidSources": ["github.com", "rigzone.com"],
+    "typicalCompanySize": "100-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "energy_services": {
+    "label": "Energy / Power / Utilities Services",
+    "matchKeywords": ["solar epc", "wind epc", "renewable energy service", "energy audit", "power consulting", "transmission service", "substation maintenance"],
+    "industries": ["utilities", "renewables", "oil_and_gas", "industrial", "data_centers", "telecom", "government"],
+    "buyerPersonas": ["plant_director", "vp_operations", "head_power", "chief_engineer", "head_renewables", "procurement_director"],
+    "buyerTitleSeeds": ["Plant Director", "VP Operations", "Head of Power", "Chief Engineer", "Head of Renewables", "Procurement Director"],
+    "demandSignals": ["solar_park_sanctioning", "wind_park_award", "transmission_line_award", "substation_upgrade", "energy_efficiency_audit"],
+    "queryPatterns": [
+      "\"solar park\" OR \"solar plant\" sanctioned OR awarded",
+      "\"wind farm\" OR \"wind park\" awarded",
+      "\"transmission line\" OR \"substation\" project",
+      "\"energy audit\" OR \"power audit\" initiative"
+    ],
+    "preferredSources": ["powermag.com", "utilitydive.com", "renewableenergyworld.com", "pv-magazine.com", "energy-storage.news"],
+    "avoidSources": ["techcrunch.com", "github.com"],
+    "typicalCompanySize": "200-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "construction_services": {
+    "label": "Construction / EPC / Infrastructure Services",
+    "matchKeywords": ["construction service", "epc service", "civil engineering", "building contractor", "infrastructure consulting", "project management consultancy", "pmc service", "structural consulting"],
+    "industries": ["infrastructure", "real_estate", "oil_and_gas", "manufacturing", "utilities", "transport", "government"],
+    "buyerPersonas": ["project_director", "vp_construction", "head_projects", "site_director", "procurement_head", "managing_director"],
+    "buyerTitleSeeds": ["Project Director", "VP Construction", "Head of Projects", "Site Director", "Procurement Head", "Managing Director", "Engineering Director"],
+    "demandSignals": ["infrastructure_contract_award", "real_estate_launch", "highway_project", "metro_project", "port_expansion", "airport_expansion"],
+    "queryPatterns": [
+      "\"contract awarded\" infrastructure OR construction",
+      "\"highway project\" OR \"metro project\" awarded",
+      "\"airport expansion\" OR \"port expansion\"",
+      "\"real estate launch\" OR \"residential launch\""
+    ],
+    "preferredSources": ["constructiondive.com", "enr.com", "livemint.com", "zawya.com"],
+    "avoidSources": ["techcrunch.com", "github.com"],
+    "typicalCompanySize": "200-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "financial_services": {
+    "label": "Financial Services (B2B Lending / Treasury / Fintech)",
+    "matchKeywords": ["b2b lending", "supply chain finance", "trade finance", "treasury management", "fx service", "embedded finance", "factoring service"],
+    "industries": ["sme_b2b", "manufacturing", "exporters", "retail", "ecommerce", "logistics", "wholesale"],
+    "buyerPersonas": ["cfo", "treasurer", "finance_director", "head_credit", "founder_ceo"],
+    "buyerTitleSeeds": ["Chief Financial Officer", "Treasurer", "Finance Director", "Head of Credit", "Founder", "Finance Manager"],
+    "demandSignals": ["working_capital_stress", "export_orders_growth", "new_geo_imports", "trade_finance_demand", "series_funding"],
+    "queryPatterns": [
+      "\"export orders\" OR \"export growth\" announcement",
+      "\"working capital\" OR \"liquidity\" pressure",
+      "\"new trade route\" OR \"export expansion\"",
+      "\"Series B\" OR \"Series C\" SME OR B2B"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "moneycontrol.com", "business-standard.com"],
+    "avoidSources": ["github.com"],
+    "typicalCompanySize": "50-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "raw_materials_b2b": {
+    "label": "Raw Materials / Industrial Inputs (B2B Products)",
+    "matchKeywords": ["chemicals supplier", "polymers", "steel supplier", "aluminium supplier", "industrial coatings", "lubricants", "industrial gases", "specialty chemicals", "raw material supplier"],
+    "industries": ["manufacturing", "automotive", "construction", "packaging", "fmcg", "pharma", "petrochemical", "shipbuilding", "aerospace"],
+    "buyerPersonas": ["procurement_head", "plant_manager", "supply_chain_director", "operations_director", "quality_head"],
+    "buyerTitleSeeds": ["Head of Procurement", "Plant Manager", "Supply Chain Director", "Operations Director", "Head of Quality", "Production Manager"],
+    "demandSignals": ["capacity_expansion", "new_plant_announcement", "supplier_diversification", "quality_certification_drive"],
+    "queryPatterns": [
+      "\"capacity expansion\" manufacturing OR plant",
+      "\"new plant\" OR \"new factory\" announcement",
+      "\"supplier diversification\" OR \"new supplier\"",
+      "\"ISO\" OR \"IATF\" OR \"QMS\" certification drive"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "business-standard.com", "zawya.com"],
+    "avoidSources": ["techcrunch.com", "github.com"],
+    "typicalCompanySize": "100-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": true,
+    "isRentalOrService": false
+  },
+
+  "industrial_equipment_sales": {
+    "label": "Industrial Equipment Sales (CapEx)",
+    "matchKeywords": ["cnc machine", "industrial robot", "machinery sales", "compressor sales", "boiler sales", "manufacturing equipment", "process equipment", "automation equipment"],
+    "industries": ["manufacturing", "automotive", "pharma", "fmcg", "packaging", "automation", "aerospace", "defense"],
+    "buyerPersonas": ["plant_manager", "production_head", "engineering_director", "procurement_director", "operations_director"],
+    "buyerTitleSeeds": ["Plant Manager", "Head of Production", "Engineering Director", "Procurement Director", "Operations Director", "Maintenance Manager"],
+    "demandSignals": ["new_plant_announcement", "production_line_expansion", "automation_initiative", "industry_4_0_adoption"],
+    "queryPatterns": [
+      "\"new plant\" OR \"new factory\" announcement",
+      "\"production line\" expansion OR upgrade",
+      "\"automation\" OR \"Industry 4.0\" initiative",
+      "\"PLI scheme\" OR \"manufacturing incentive\""
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "business-standard.com"],
+    "avoidSources": ["github.com", "rigzone.com"],
+    "typicalCompanySize": "200-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": true,
+    "isRentalOrService": false
+  },
+
+  "telecom_services": {
+    "label": "Telecom / Connectivity / Network Services",
+    "matchKeywords": ["mpls", "sd-wan", "leased line", "enterprise connectivity", "private 5g", "network as a service", "telecom service"],
+    "industries": ["bfsi", "retail", "logistics", "manufacturing", "data_centers", "education", "healthcare", "government"],
+    "buyerPersonas": ["cio", "head_network", "vp_infrastructure", "head_it_operations", "ciso"],
+    "buyerTitleSeeds": ["Chief Information Officer", "Head of Network", "VP Infrastructure", "Head of IT Operations", "Network Architect", "CISO"],
+    "demandSignals": ["new_branch_rollout", "private_5g_initiative", "wfh_to_hybrid", "ot_it_convergence"],
+    "queryPatterns": [
+      "\"new branches\" OR \"branch expansion\"",
+      "\"private 5G\" OR \"enterprise 5G\" initiative",
+      "\"hybrid work\" OR \"return to office\" infrastructure"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "techcrunch.com", "datacenterdynamics.com"],
+    "avoidSources": ["github.com"],
+    "typicalCompanySize": "500-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "hospitality_services": {
+    "label": "Hospitality / F&B / Events B2B",
+    "matchKeywords": ["catering service", "event management", "av equipment rental", "wedding planning", "hospitality service", "f&b service", "banquet service"],
+    "industries": ["hotels", "corporate", "event_organizers", "weddings", "exhibitions", "conferences", "qsr", "schools"],
+    "buyerPersonas": ["banquet_manager", "events_director", "admin_head", "general_manager", "founder_ceo"],
+    "buyerTitleSeeds": ["Banquet Manager", "Events Director", "Admin Head", "General Manager", "Founder", "Operations Manager"],
+    "demandSignals": ["new_hotel_opening", "expo_announcement", "conference_announcement", "wedding_season_peak"],
+    "queryPatterns": [
+      "\"new hotel\" OR \"hotel opening\"",
+      "\"expo\" OR \"summit\" OR \"conference\" announcement",
+      "\"new convention center\""
+    ],
+    "preferredSources": ["zawya.com", "gulfnews.com", "thenationalnews.com", "livemint.com"],
+    "avoidSources": ["github.com"],
+    "typicalCompanySize": "20-10000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "education_services": {
+    "label": "Education / EdTech / Training Services (B2B)",
+    "matchKeywords": ["corporate training", "edtech b2b", "lms platform", "skill development", "upskilling service", "education service"],
+    "industries": ["it_services", "bfsi", "manufacturing", "gcc", "consulting", "professional_services"],
+    "buyerPersonas": ["chro", "vp_learning", "head_l_d", "head_talent_management", "training_director"],
+    "buyerTitleSeeds": ["Chief Human Resources Officer", "VP Learning", "Head of L&D", "Head of Talent Management", "Training Director", "Learning Lead"],
+    "demandSignals": ["large_hiring_campaign", "digital_skills_gap", "reskilling_initiative", "new_technology_adoption"],
+    "queryPatterns": [
+      "\"reskilling\" OR \"upskilling\" announcement",
+      "\"digital skills\" OR \"AI skills\" initiative",
+      "\"learning and development\" investment"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "techcrunch.com"],
+    "avoidSources": ["github.com", "rigzone.com"],
+    "typicalCompanySize": "200-100000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "agriculture_b2b": {
+    "label": "Agriculture / Agritech B2B",
+    "matchKeywords": ["agritech", "farm equipment", "irrigation system", "agri inputs", "fertilizer", "pesticide", "agri b2b"],
+    "industries": ["agriculture", "farming_collectives", "fmcg", "food_processing", "cooperatives", "government"],
+    "buyerPersonas": ["farm_manager", "agri_director", "procurement_head", "operations_head"],
+    "buyerTitleSeeds": ["Farm Manager", "Agri Director", "Procurement Head", "Operations Head"],
+    "demandSignals": ["irrigation_initiative", "cluster_farming", "food_processing_expansion", "agri_subsidy"],
+    "queryPatterns": [
+      "\"irrigation\" OR \"micro-irrigation\" initiative",
+      "\"food processing\" OR \"agri processing\" plant",
+      "\"PMKSY\" OR \"PM-KISAN\" scheme"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "business-standard.com"],
+    "avoidSources": ["github.com", "techcrunch.com"],
+    "typicalCompanySize": "50-10000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": true,
+    "isRentalOrService": true
+  },
+
+  "media_creative_b2b": {
+    "label": "Media / Production / Creative B2B Services",
+    "matchKeywords": ["video production", "post-production", "vfx", "animation studio", "media services", "broadcasting", "ott production"],
+    "industries": ["media", "broadcasting", "ott_platforms", "advertising", "gaming", "edtech", "corporate"],
+    "buyerPersonas": ["head_content", "vp_production", "creative_director", "head_media"],
+    "buyerTitleSeeds": ["Head of Content", "VP Production", "Creative Director", "Head of Media", "Content Director"],
+    "demandSignals": ["content_slate_announcement", "new_show_commission", "ott_funding", "production_house_setup"],
+    "queryPatterns": [
+      "\"OTT\" OR \"streaming\" content slate",
+      "\"new show\" OR \"new series\" commission",
+      "\"production house\" OR \"studio\" expansion"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "techcrunch.com"],
+    "avoidSources": ["rigzone.com", "constructiondive.com"],
+    "typicalCompanySize": "20-5000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  },
+
+  "physical_consumer_product": {
+    "label": "Physical Consumer Product (D2C / Retail B2C)",
+    "matchKeywords": ["consumer electronics", "appliances", "home goods", "fashion product", "beauty product", "wellness product", "food product"],
+    "industries": ["retail", "ecommerce", "marketplace", "quick_commerce"],
+    "buyerPersonas": ["category_buyer", "vp_merchandising", "head_buying", "marketplace_manager"],
+    "buyerTitleSeeds": ["Category Buyer", "VP Merchandising", "Head of Buying", "Marketplace Manager", "Procurement Manager"],
+    "demandSignals": ["new_category_launch", "retail_expansion", "marketplace_onboarding"],
+    "queryPatterns": [
+      "\"new category\" OR \"new vertical\" retail",
+      "\"private label\" OR \"own brand\" launch",
+      "\"marketplace\" expansion announcement"
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "techcrunch.com"],
+    "avoidSources": ["github.com", "rigzone.com"],
+    "typicalCompanySize": "50-100000",
+    "buyerType": "BOTH",
+    "isPhysicalProduct": true,
+    "isRentalOrService": false
+  },
+
+  "_default_b2b_service": {
+    "label": "Generic B2B Service (Fallback)",
+    "matchKeywords": [],
+    "industries": ["manufacturing", "bfsi", "it_services", "retail", "healthcare", "logistics"],
+    "buyerPersonas": ["procurement_director", "operations_director", "head_facilities", "head_administration"],
+    "buyerTitleSeeds": ["Procurement Director", "Operations Director", "Head of Facilities", "Head of Administration", "VP Operations"],
+    "demandSignals": ["new_facility_opening", "expansion_announcement", "rfp_published", "new_cxo_hire"],
+    "queryPatterns": [
+      "\"new facility\" OR \"new plant\" announcement",
+      "\"expansion\" OR \"new project\" announcement",
+      "\"RFP published\" OR \"tender invited\""
+    ],
+    "preferredSources": ["livemint.com", "economictimes.indiatimes.com", "business-standard.com", "zawya.com"],
+    "avoidSources": [],
+    "typicalCompanySize": "100-50000",
+    "buyerType": "B2B",
+    "isPhysicalProduct": false,
+    "isRentalOrService": true
+  }
+}

@@ -510,7 +510,7 @@ async function enrichViaApollo(lead, options = {}) {
     return null;
   }
 
-  const { personTitles, returnAll = false } = options;
+  const { personTitles, returnAll = false, smbAllowed = false } = options;
   const userTitles = Array.isArray(personTitles) && personTitles.length > 0 ? personTitles : null;
 
   const domain = lead.website ? normDomain(lead.website) : null;
@@ -532,6 +532,16 @@ async function enrichViaApollo(lead, options = {}) {
     orgPhone = org?.sanitized_phone || org?.phone || null;
     if (orgPhone) {
       logger.info('Apollo: org phone found', { domain, orgPhone });
+    }
+    // Phase 1: runtime size gate — Apollo just told us the headcount. If under
+    // threshold and the user isn't explicitly chasing SMB, abort here before
+    // burning credits on people search at a micro-org.
+    const empCount = Number(org?.estimated_num_employees) || 0;
+    if (!smbAllowed && empCount > 0 && empCount < BG_MIN_COMPANY_SIZE_FOR_ENRICHMENT) {
+      logger.info('Apollo: skipped — micro-org under size threshold', {
+        leadId: lead.id, domain, employees: empCount, threshold: BG_MIN_COMPANY_SIZE_FOR_ENRICHMENT,
+      });
+      return returnAll ? [] : null;
     }
   }
 
@@ -772,7 +782,15 @@ async function aggregateCompanyProfile(lead) {
 // Safe to fire-and-forget; never throws.
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function runApolloEnrichmentBackground(lead, prisma, { organizationId, createdById = null, roles = [] } = {}) {
+// Phase 1: shared with productDiscoveryService — keep in sync.
+const BG_MIN_COMPANY_SIZE_FOR_ENRICHMENT = 20;
+
+function bgUserTargetsSmb(filters = {}) {
+  const size = (filters?.companySize || '').toLowerCase();
+  return size.startsWith('1-10') || size.startsWith('11-50') || /\b(smb|small business|micro)\b/.test(size);
+}
+
+async function runApolloEnrichmentBackground(lead, prisma, { organizationId, createdById = null, roles = [], filters = {} } = {}) {
   try {
     if (!config.apollo?.apiKey) {
       logger.info('Apollo auto-enrich: skipped (no API key)', { leadId: lead.id });
@@ -780,6 +798,19 @@ async function runApolloEnrichmentBackground(lead, prisma, { organizationId, cre
     }
 
     const personTitles = Array.isArray(roles) && roles.length > 0 ? roles : null;
+
+    // Phase 1: size gate — if the lead already has a size and it's a micro-org,
+    // skip enrichment (unless user explicitly targets SMB). This stops attaching
+    // random contacts at 2-employee companies like PPME.
+    if (!bgUserTargetsSmb(filters)) {
+      const size = (lead.companySize || '').toLowerCase();
+      if (size === '1-10' || size.startsWith('1-10')) {
+        logger.info('Apollo auto-enrich: skipped (micro-org size gate)', {
+          leadId: lead.id, company: lead.companyName, size: lead.companySize,
+        });
+        return;
+      }
+    }
 
     logger.info('Apollo auto-enrich: starting', {
       leadId: lead.id,
@@ -790,6 +821,7 @@ async function runApolloEnrichmentBackground(lead, prisma, { organizationId, cre
     const contacts = await enrichViaApollo(lead, {
       personTitles,
       returnAll: !!(personTitles && personTitles.length > 0),
+      smbAllowed: bgUserTargetsSmb(filters),
     });
 
     if (!contacts || (Array.isArray(contacts) ? contacts.length === 0 : !contacts.email && !contacts.name)) {

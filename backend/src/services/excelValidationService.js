@@ -1,4 +1,4 @@
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 
 const REQUIRED_COLUMNS = [
   'Company',
@@ -13,20 +13,23 @@ const REQUIRED_COLUMNS = [
 const ALLOWED_COLUMNS = [...REQUIRED_COLUMNS, 'Assign To'];
 
 async function validateExcelFile(buffer) {
-  let workbook;
+  const workbook = new ExcelJS.Workbook();
   try {
-    workbook = XLSX.read(buffer, { type: 'buffer' });
+    await workbook.xlsx.load(buffer);
   } catch {
     return { valid: false, errors: ['Excel file is empty'] };
   }
 
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) {
+  const sheet = workbook.worksheets[0];
+  if (!sheet) {
     return { valid: false, errors: ['Excel file is empty'] };
   }
 
-  const sheet = workbook.Sheets[sheetName];
-  const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  const allRows = [];
+  sheet.eachRow({ includeEmpty: true }, row => {
+    const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+    allRows.push(values);
+  });
 
   if (!allRows || allRows.length === 0) {
     return { valid: false, errors: ['Excel file is empty'] };
