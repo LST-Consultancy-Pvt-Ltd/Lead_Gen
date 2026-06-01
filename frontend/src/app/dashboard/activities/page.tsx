@@ -1169,7 +1169,7 @@ export default function ActivitiesPage() {
       )} */}
 
       {/* 3. VIEW TOGGLE */}
-      <div className="flex items-center gap-2">
+      {/* <div className="flex items-center gap-2">
         <button
           onClick={() => setViewMode("list")}
           className={
@@ -1192,7 +1192,7 @@ export default function ActivitiesPage() {
         >
           <Clock size={13} /> Timeline view
         </button>
-      </div>
+      </div> */}
 
       {/* 4. FILTERS */}
       <div className="space-y-2">
