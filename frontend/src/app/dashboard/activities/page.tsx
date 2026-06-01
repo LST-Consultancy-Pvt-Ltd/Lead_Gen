@@ -1216,7 +1216,7 @@ export default function ActivitiesPage() {
           {/* Exec filter \u2014 manager and admin */}
           {!isSalesUser && teamMembers.length > 0 && (
             <select
-              className="input h-9 text-xs"
+              className="input h-9 text-xs w-44"
               title="Filter by executive"
               value={loggedByFilter}
               onChange={(e) => {
@@ -1236,7 +1236,7 @@ export default function ActivitiesPage() {
           {/* Type filter \u2014 manager and admin dropdown */}
           {!isSalesUser && (
             <select
-              className="input h-9 text-xs"
+              className="input h-9 text-xs w-44"
               title="Filter by type"
               value={typeFilter}
               onChange={(e) => {
@@ -1256,7 +1256,7 @@ export default function ActivitiesPage() {
           {/* Date range \u2014 manager and admin */}
           {!isSalesUser && (
             <select
-              className="input h-9 text-xs"
+              className="input h-9 text-xs w-44"
               title="Date range"
               value={dateFilter}
               onChange={(e) => {
@@ -1276,7 +1276,7 @@ export default function ActivitiesPage() {
             <div className="relative" ref={linkedFilterRef}>
               <button
                 className={
-                  "flex items-center gap-1.5 input h-9 text-xs cursor-pointer min-w-[140px] " +
+                  "flex items-center gap-1.5 input h-9 text-xs cursor-pointer w-44 " +
                   (linkedToFilterId ? "text-blue-300" : "")
                 }
                 onClick={() => setShowLinkedFilter((v) => !v)}
