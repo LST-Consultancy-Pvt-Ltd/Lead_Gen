@@ -423,6 +423,26 @@ async function importLeadsFromExcel(req, res) {
       }
       const resolvedSource = (rawSource && validSources.has(rawSource)) ? rawSource : (defaultSource ?? 'Excel Import');
 
+      // ── Required field check (all columns must have a value) ──────────────
+      const REQUIRED_FIELDS = [
+        'Company Name', 'Lead Type', 'Contact Name', 'Job Title', 'Email',
+        'Phone', 'Lead Status', 'Lead Source', 'Score', 'Follow-up Date',
+        'Assign Lead To', 'Website', 'Industry', 'Location', 'Description / Notes',
+      ];
+      const missingFields = REQUIRED_FIELDS.filter(f => {
+        const val = record[f];
+        return val === undefined || val === null || String(val).trim() === '';
+      });
+      if (missingFields.length > 0) {
+        excelImportErrors.push({
+          row: i + 2,
+          missingFields,
+          error: `Row ${i + 2}: Missing required field(s): ${missingFields.join(', ')}`,
+          isMissingError: true,
+        });
+        continue;
+      }
+
       // ── Field validations (Email, Phone, Score, Date, Website) ───────────
       const fieldErrors = [];
 
@@ -525,10 +545,11 @@ async function importLeadsFromExcel(req, res) {
       skipped: excelImportErrors.length,
     });
 
-    const statusErrors = excelImportErrors.filter(e => e.isStatusError === true);
-    const sourceErrors = excelImportErrors.filter(e => e.isSourceError === true);
-    const fieldValErrors = excelImportErrors.filter(e => e.isFieldError === true);
-    const otherErrors  = excelImportErrors.filter(e => !e.isStatusError && !e.isSourceError && !e.isFieldError);
+    const statusErrors  = excelImportErrors.filter(e => e.isStatusError  === true);
+    const sourceErrors  = excelImportErrors.filter(e => e.isSourceError  === true);
+    const missingErrors = excelImportErrors.filter(e => e.isMissingError === true);
+    const fieldValErrors = excelImportErrors.filter(e => e.isFieldError  === true);
+    const otherErrors   = excelImportErrors.filter(e => !e.isStatusError && !e.isSourceError && !e.isMissingError && !e.isFieldError);
 
     return res.status(201).json({
       success: true,
@@ -538,6 +559,7 @@ async function importLeadsFromExcel(req, res) {
       failedRows:     excelImportErrors.length,
       statusErrors:   statusErrors.slice(0, 50),
       sourceErrors:   sourceErrors.slice(0, 50),
+      missingErrors:  missingErrors.slice(0, 50),
       fieldErrors:    fieldValErrors.slice(0, 50),
       otherErrors:    otherErrors.slice(0, 50),
       errors:         excelImportErrors.slice(0, 50),
