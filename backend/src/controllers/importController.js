@@ -337,6 +337,14 @@ async function importLeadsFromExcel(req, res) {
     const validStatuses = new Set(statusRows.map(r => r.value.toLowerCase()));
     const defaultStatus = (statusRows.find(r => r.isDefault)?.value ?? statusRows[0]?.value ?? 'new').toLowerCase();
 
+    // ── Load valid sources from org's dropdown config ──────────────────────
+    const sourceRows = await prisma.dropdownConfig.findMany({
+      where: { organizationId, category: 'lead_source', isActive: true },
+      select: { value: true, isDefault: true },
+    });
+    const validSources = new Set(sourceRows.map(r => r.value.toLowerCase()));
+    const defaultSource = (sourceRows.find(r => r.isDefault)?.value ?? sourceRows[0]?.value ?? null)?.toLowerCase() ?? null;
+
     // ── Map records to Lead model objects ──────────────────────────────────
     const isSalesUser = req.user.role === 'sales_user';
 
@@ -367,7 +375,6 @@ async function importLeadsFromExcel(req, res) {
         assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
         leadType:     normaliseLeadType(record['Lead Type']),
-        source:       record['Lead Source']?.toString().trim() || 'Excel Import',
         website:      record['Website']?.toString().trim() || null,
         industry:     record['Industry']?.toString().trim() || null,
         location:     record['Location']?.toString().trim() || null,
@@ -401,6 +408,21 @@ async function importLeadsFromExcel(req, res) {
       }
       const resolvedStatus = rawStatus && validStatuses.has(rawStatus) ? rawStatus : defaultStatus;
 
+      // ── Source validation against DB ──────────────────────────────────────
+      const rawSource = String(record['Lead Source'] ?? '').trim().toLowerCase();
+      if (rawSource && validSources.size > 0 && !validSources.has(rawSource)) {
+        excelImportErrors.push({
+          row: i + 2,
+          field: 'Lead Source',
+          invalidValue: record['Lead Source'],
+          validOptions: [...validSources].join(', '),
+          error: `Invalid source "${record['Lead Source']}" in row ${i + 2}. Allowed values are: ${[...validSources].join(', ')}. Row skipped.`,
+          isSourceError: true,
+        });
+        continue;
+      }
+      const resolvedSource = (rawSource && validSources.has(rawSource)) ? rawSource : (defaultSource ?? 'Excel Import');
+
       try {
         const rawPhone = String(record['Phone'] || record['Contact Phone'] || record['phone'] || '').trim() || null;
         const rawEmail = String(record['Email'] || record['Contact Email'] || record['email'] || '').trim().toLowerCase() || null;
@@ -427,7 +449,7 @@ async function importLeadsFromExcel(req, res) {
           }
         }
 
-        await prisma.lead.create({ data: { ...leadData, status: resolvedStatus } });
+        await prisma.lead.create({ data: { ...leadData, status: resolvedStatus, source: resolvedSource } });
         insertedCount++;
       } catch (rowErr) {
         excelImportErrors.push({ row: i + 2, error: rowErr.message });
@@ -444,15 +466,17 @@ async function importLeadsFromExcel(req, res) {
     });
 
     const statusErrors = excelImportErrors.filter(e => e.isStatusError === true);
-    const otherErrors  = excelImportErrors.filter(e => !e.isStatusError);
+    const sourceErrors = excelImportErrors.filter(e => e.isSourceError === true);
+    const otherErrors  = excelImportErrors.filter(e => !e.isStatusError && !e.isSourceError);
 
     return res.status(201).json({
       success: true,
-      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped (invalid status: ${statusErrors.length}, duplicates/other: ${otherErrors.length})`,
+      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped (invalid status: ${statusErrors.length}, invalid source: ${sourceErrors.length}, duplicates/other: ${otherErrors.length})`,
       totalRecords:  records.length,
       successRows:   insertedCount,
       failedRows:    excelImportErrors.length,
       statusErrors:  statusErrors.slice(0, 50),
+      sourceErrors:  sourceErrors.slice(0, 50),
       otherErrors:   otherErrors.slice(0, 50),
       errors:        excelImportErrors.slice(0, 50),
       data: [],
