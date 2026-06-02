@@ -401,7 +401,7 @@ export default function LeadsPage() {
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <select className="input h-9 text-xs w-auto" title="Filter by status" value={statusFilter}
+        <select className="input h-9 text-xs w-48" title="Filter by status" value={statusFilter}
           onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
           <option value="">All Status</option>
           {(Array.isArray(leadStatusOptions) ? leadStatusOptions : [])
@@ -412,7 +412,7 @@ export default function LeadsPage() {
           }
         </select>
         <RoleGuard permission="canViewAllLeads">
-          <select className="input h-9 text-xs w-auto" title="Filter by owner" value={ownerFilter}
+          <select className="input h-9 text-xs w-48" title="Filter by owner" value={ownerFilter}
             onChange={e => { setOwnerFilter(e.target.value); setPage(1); }}>
             <option value="">All Owners</option>
             <option value="unassigned">Unassigned</option>
