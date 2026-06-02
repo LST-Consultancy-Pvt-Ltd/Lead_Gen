@@ -93,9 +93,17 @@ function OppCard({
 
   function handleSave() {
     setEditError('');
+    const newStage = editForm.stage;
+    if (newStage !== opp.stage && (newStage === 'closed_won' || newStage === 'closed_lost')) {
+      setPendingStage(newStage);
+      setWonLostReason('');
+      setLostCategory('Pricing');
+      setMode('reason');
+      return;
+    }
     const payload: any = {
       opportunityName:   editForm.opportunityName || undefined,
-      stage:             editForm.stage,
+      stage:             newStage,
       dealValue:         editForm.dealValue ? Number(editForm.dealValue) : undefined,
       expectedCloseDate: editForm.expectedCloseDate || undefined,
       notes:             editForm.notes || undefined,
@@ -105,18 +113,6 @@ function OppCard({
       { id: opp.id, data: payload },
       { onSuccess: () => setMode('view-card'), onError: (e: any) => setEditError(e.response?.data?.message || 'Update failed') }
     );
-  }
-
-  function handleStageDropdown(nextStage: string) {
-    if (nextStage === opp.stage) return;
-    if (nextStage === 'closed_won' || nextStage === 'closed_lost') {
-      setPendingStage(nextStage);
-      setWonLostReason('');
-      setLostCategory('Pricing');
-      setMode('reason');
-      return;
-    }
-    updateMutation.mutate({ id: opp.id, data: { stage: nextStage } });
   }
 
   function handleReasonSave() {
@@ -420,8 +416,12 @@ function OppCard({
           </div>
         )}
         <div className="flex gap-2">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[56px] flex-shrink-0 pt-px">Stage: </span>
+          <span className="text-xs text-slate-700 dark:text-slate-300">{stageLabel(opp.stage)}</span>
+        </div>
+        <div className="flex gap-2">
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[56px] flex-shrink-0 pt-px">Created By: </span>
-          <span className="text-xs text-slate-500">{opp.assignedTo?.name || opp.salesOwner?.name || 'Unassigned'}</span>
+          <span className="text-xs text-slate-500">{opp.createdBy?.name || 'Unassigned'}</span>
         </div>
         {/* {opp.createdBy?.name && (
           <div className="flex gap-2 pt-1 border-t border-slate-200 dark:border-white/[0.06] mt-1">
@@ -431,15 +431,6 @@ function OppCard({
         )} */}
       </div>
 
-      {/* Stage change dropdown */}
-      <select
-        className="input h-10 text-xs mt-3"
-        title="Change stage"
-        value={opp.stage}
-        onChange={(e) => handleStageDropdown(e.target.value)}
-      >
-        {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-      </select>
     </div>
   );
 }

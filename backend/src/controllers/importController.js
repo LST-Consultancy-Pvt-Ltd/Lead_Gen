@@ -309,7 +309,7 @@ async function importLeadsFromExcel(req, res) {
     const uniqueAssignToValues = [
       ...new Set(
         records
-          .map(r => String(r['Assign To'] ?? '').trim())
+          .map(r => String(r['Assign Lead To'] ?? '').trim())
           .filter(v => v !== '')
       ),
     ];
@@ -337,19 +337,24 @@ async function importLeadsFromExcel(req, res) {
     const validStatuses = new Set(statusRows.map(r => r.value.toLowerCase()));
     const defaultStatus = (statusRows.find(r => r.isDefault)?.value ?? statusRows[0]?.value ?? 'new').toLowerCase();
 
+    // ── Load valid sources from org's dropdown config ──────────────────────
+    const sourceRows = await prisma.dropdownConfig.findMany({
+      where: { organizationId, category: 'lead_source', isActive: true },
+      select: { value: true, isDefault: true },
+    });
+    const validSources = new Set(sourceRows.map(r => r.value.toLowerCase()));
+    const defaultSource = (sourceRows.find(r => r.isDefault)?.value ?? sourceRows[0]?.value ?? null)?.toLowerCase() ?? null;
+
     // ── Map records to Lead model objects ──────────────────────────────────
-    // For sales_user: if no "Assign To" is specified, assign to themselves so
-    // the lead appears in their filtered view (which scopes to assignedToId = user.id).
     const isSalesUser = req.user.role === 'sales_user';
 
     const leadsData = records.map(record => {
-      const followUpRaw = record['Next Follow-up'];
+      const followUpRaw = record['Follow-up Date'];
       let followUpDate = null;
       if (followUpRaw) {
         if (followUpRaw instanceof Date) {
           followUpDate = isNaN(followUpRaw.getTime()) ? null : followUpRaw;
         } else if (typeof followUpRaw === 'number') {
-          // Excel serial number (days since Dec 30, 1899); convert to JS timestamp
           followUpDate = new Date((followUpRaw - 25569) * 86400 * 1000);
         } else {
           const parsed = new Date(followUpRaw);
@@ -357,24 +362,26 @@ async function importLeadsFromExcel(req, res) {
         }
       }
 
-      // Sales users always own their own imported leads;
-      // admins/managers use the "Assign To" column (falls back to null if unspecified).
       const resolvedAssignedToId = isSalesUser
         ? req.user.id
-        : (userMap.get(record['Assign To']?.toString().trim().toLowerCase()) || null);
+        : (userMap.get(record['Assign Lead To']?.toString().trim().toLowerCase()) || null);
 
       return {
-        companyName:  String(record['Company']).trim(),
-        contactName:  record['Contact']?.toString().trim() || null,
+        companyName:  String(record['Company Name']).trim(),
+        contactName:  record['Contact Name']?.toString().trim() || null,
+        contactTitle: record['Job Title']?.toString().trim() || null,
+        contactEmail: record['Email']?.toString().trim().toLowerCase() || null,
+        contactPhone: record['Phone']?.toString().trim() || null,
         assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
-        status:       (() => { const s = record['Status']?.toString().trim().toLowerCase() || defaultStatus; return validStatuses.has(s) ? s : defaultStatus; })(),
-        leadType:     normaliseLeadType(record['Product / Service']),
-        sourceUrl:    record['Source URL']?.toString().trim() || null,
+        leadType:     normaliseLeadType(record['Lead Type']),
+        website:      record['Website']?.toString().trim() || null,
+        industry:     record['Industry']?.toString().trim() || null,
+        location:     record['Location']?.toString().trim() || null,
+        notes:        record['Description / Notes']?.toString().trim() || null,
         followUpDate,
         organizationId,
         createdById:  req.user.id,
-        source:       'Excel Import',
       };
     });
 
@@ -385,6 +392,116 @@ async function importLeadsFromExcel(req, res) {
     for (let i = 0; i < leadsData.length; i++) {
       const leadData = leadsData[i];
       const record = records[i];
+
+      // ── Status validation against DB ──────────────────────────────────────
+      const rawStatus = String(record['Lead Status'] ?? '').trim().toLowerCase();
+      if (rawStatus && !validStatuses.has(rawStatus)) {
+        excelImportErrors.push({
+          row: i + 2,
+          field: 'Lead Status',
+          invalidValue: record['Lead Status'],
+          validOptions: [...validStatuses].join(', '),
+          error: `Invalid status "${record['Lead Status']}" in row ${i + 2}. Allowed values are: ${[...validStatuses].join(', ')}. Row skipped.`,
+          isStatusError: true,
+        });
+        continue;
+      }
+      const resolvedStatus = rawStatus && validStatuses.has(rawStatus) ? rawStatus : defaultStatus;
+
+      // ── Source validation against DB ──────────────────────────────────────
+      const rawSource = String(record['Lead Source'] ?? '').trim().toLowerCase();
+      if (rawSource && validSources.size > 0 && !validSources.has(rawSource)) {
+        excelImportErrors.push({
+          row: i + 2,
+          field: 'Lead Source',
+          invalidValue: record['Lead Source'],
+          validOptions: [...validSources].join(', '),
+          error: `Invalid source "${record['Lead Source']}" in row ${i + 2}. Allowed values are: ${[...validSources].join(', ')}. Row skipped.`,
+          isSourceError: true,
+        });
+        continue;
+      }
+      const resolvedSource = (rawSource && validSources.has(rawSource)) ? rawSource : (defaultSource ?? 'Excel Import');
+
+      // ── Required field check (all columns must have a value) ──────────────
+      const REQUIRED_FIELDS = [
+        'Company Name', 'Lead Type', 'Contact Name', 'Job Title', 'Email',
+        'Phone', 'Lead Status', 'Lead Source', 'Score', 'Follow-up Date',
+        'Assign Lead To', 'Website', 'Industry', 'Location', 'Description / Notes',
+      ];
+      const missingFields = REQUIRED_FIELDS.filter(f => {
+        const val = record[f];
+        return val === undefined || val === null || String(val).trim() === '';
+      });
+      if (missingFields.length > 0) {
+        excelImportErrors.push({
+          row: i + 2,
+          missingFields,
+          error: `Row ${i + 2}: Missing required field(s): ${missingFields.join(', ')}`,
+          isMissingError: true,
+        });
+        continue;
+      }
+
+      // ── Field validations (Email, Phone, Score, Date, Website) ───────────
+      const fieldErrors = [];
+
+      const emailVal = String(record['Email'] ?? '').trim();
+      if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+        fieldErrors.push({ field: 'Email', invalidValue: emailVal, reason: 'Must be a valid email address (e.g. john@example.com)' });
+      }
+
+      const phoneVal = String(record['Phone'] ?? '').trim();
+      if (phoneVal && !/^[+\d\s\-().]{6,20}$/.test(phoneVal)) {
+        fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Only digits, spaces, +, −, (, ) allowed · 6–20 characters' });
+      }
+
+      const scoreRaw = record['Score'];
+      if (scoreRaw !== undefined && scoreRaw !== null && scoreRaw !== '') {
+        const scoreNum = Number(scoreRaw);
+        if (isNaN(scoreNum) || !Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > 100) {
+          fieldErrors.push({ field: 'Score', invalidValue: String(scoreRaw), reason: 'Must be a whole number between 0 and 100' });
+        }
+      }
+
+      const followUpRaw = record['Follow-up Date'];
+      if (followUpRaw && typeof followUpRaw === 'string') {
+        const dateStr = followUpRaw.trim();
+        const dateMatch = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(dateStr);
+        if (!dateMatch) {
+          fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: 'Use DD/MM/YYYY or DD-MM-YYYY only (e.g. 10/10/2026 or 31-12-2026).' });
+        } else {
+          const day = parseInt(dateMatch[1], 10);
+          const month = parseInt(dateMatch[2], 10);
+          if (day < 1 || day > 31) {
+            fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: `Day "${dateMatch[1]}" is invalid — must be between 01 and 31` });
+          } else if (month < 1 || month > 12) {
+            fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: `Month "${dateMatch[2]}" is invalid — must be between 01 and 12` });
+          }
+        }
+      }
+
+      const websiteVal = String(record['Website'] ?? '').trim();
+      if (websiteVal) {
+        const validWebsite = /^(https?:\/\/)?(www\.)?[\w\-]+(\.[\w\-]+)+([\w\-._~:/?#[\]@!$&'()*+,;=%]*)?$/.test(websiteVal) && !websiteVal.includes(' ') && websiteVal.length <= 500;
+        if (!validWebsite) {
+          fieldErrors.push({ field: 'Website', invalidValue: websiteVal, reason: 'Must be a valid URL with no spaces (e.g. https://example.com)' });
+        }
+      }
+
+      if (fieldErrors.length > 0) {
+        fieldErrors.forEach(fe => {
+          excelImportErrors.push({
+            row: i + 2,
+            field: fe.field,
+            invalidValue: fe.invalidValue,
+            reason: fe.reason,
+            error: `Row ${i + 2} – ${fe.field}: ${fe.reason} (got: "${fe.invalidValue}")`,
+            isFieldError: true,
+          });
+        });
+        continue;
+      }
 
       try {
         const rawPhone = String(record['Phone'] || record['Contact Phone'] || record['phone'] || '').trim() || null;
@@ -412,7 +529,7 @@ async function importLeadsFromExcel(req, res) {
           }
         }
 
-        await prisma.lead.create({ data: leadData });
+        await prisma.lead.create({ data: { ...leadData, status: resolvedStatus, source: resolvedSource } });
         insertedCount++;
       } catch (rowErr) {
         excelImportErrors.push({ row: i + 2, error: rowErr.message });
@@ -428,13 +545,24 @@ async function importLeadsFromExcel(req, res) {
       skipped: excelImportErrors.length,
     });
 
+    const statusErrors  = excelImportErrors.filter(e => e.isStatusError  === true);
+    const sourceErrors  = excelImportErrors.filter(e => e.isSourceError  === true);
+    const missingErrors = excelImportErrors.filter(e => e.isMissingError === true);
+    const fieldValErrors = excelImportErrors.filter(e => e.isFieldError  === true);
+    const otherErrors   = excelImportErrors.filter(e => !e.isStatusError && !e.isSourceError && !e.isMissingError && !e.isFieldError);
+
     return res.status(201).json({
       success: true,
-      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped (duplicates or errors)`,
-      totalRecords: records.length,
-      successRows: insertedCount,
-      failedRows: excelImportErrors.length,
-      errors: excelImportErrors.slice(0, 50),
+      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped`,
+      totalRecords:   records.length,
+      successRows:    insertedCount,
+      failedRows:     excelImportErrors.length,
+      statusErrors:   statusErrors.slice(0, 50),
+      sourceErrors:   sourceErrors.slice(0, 50),
+      missingErrors:  missingErrors.slice(0, 50),
+      fieldErrors:    fieldValErrors.slice(0, 50),
+      otherErrors:    otherErrors.slice(0, 50),
+      errors:         excelImportErrors.slice(0, 50),
       data: [],
     });
   } catch (err) {

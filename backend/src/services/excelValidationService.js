@@ -1,16 +1,27 @@
 const XLSX = require('xlsx');
 
 const REQUIRED_COLUMNS = [
-  'Company',
-  'Contact',
-  'Score',
-  'Status',
-  'Product / Service',
-  'Source URL',
-  'Next Follow-up',
+  'Company Name',
+  'Email',
 ];
 
-const ALLOWED_COLUMNS = [...REQUIRED_COLUMNS, 'Assign To'];
+const ALLOWED_COLUMNS = [
+  'Company Name',
+  'Lead Type',
+  'Contact Name',
+  'Job Title',
+  'Email',
+  'Phone',
+  'Lead Status',
+  'Lead Source',
+  'Score',
+  'Follow-up Date',
+  'Assign Lead To',
+  'Website',
+  'Industry',
+  'Location',
+  'Description / Notes',
+];
 
 async function validateExcelFile(buffer) {
   let workbook;

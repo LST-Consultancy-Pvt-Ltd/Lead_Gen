@@ -149,7 +149,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   function startEdit(activity: Activity) {
     setEditingId(activity.id);
     setEditForm({
-      type: activity.type,
+      type: activity.action,
       outcome: activity.outcome || '',
       description: activity.description || '',
       activityDate: activity.activityDate ? new Date(activity.activityDate).toISOString().split('T')[0] : getToday(),
@@ -358,8 +358,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
       ) : (
         <div className="space-y-2">
           {activities.map((activity) => {
-            const Icon = activityIcons[activity.type] || FileText;
-            const colorClass = activityColors[activity.type] || activityColors.note;
+            const Icon = activityIcons[activity.action] || FileText;
+            const colorClass = activityColors[activity.action] || activityColors.note;
             const isOwner = activity.createdById === currentUser?.id;
             const canEdit = isOwner || isAdmin;
             const isEditingThis = editingId === activity.id;
@@ -470,7 +470,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                           <Icon size={15} />
                         </div>
                         <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 capitalize">
-                          {activity.type?.replace(/_/g, " ")}
+                          {activity.action?.replace(/_/g, " ")}
                         </span>
                       </div>
                       <button className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" onClick={() => setViewingId(null)}>
@@ -485,7 +485,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                         </div>
                         <div>
                           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Activity Type</p>
-                          <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{activity.type?.replace(/_/g, " ") || '—'}</p>
+                          <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{activity.action?.replace(/_/g, " ") || '—'}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
@@ -561,7 +561,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                           <Icon size={15} />
                         </div>
                         <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 capitalize truncate">
-                          {activity.type?.replace(/_/g, " ")}
+                          {activity.action?.replace(/_/g, " ")}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">

@@ -253,7 +253,7 @@ export default function LeadDetailPage() {
         contactTitle: lead.contactTitle || '',
         notes: lead.notes || '',
         leadType: lead.leadType || '',
-        sourceUrl: lead.sourceUrl || '',
+        sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
       });
     }
   }, [isEditing, lead]);
@@ -653,7 +653,7 @@ export default function LeadDetailPage() {
                     contactTitle: lead.contactTitle || '',
                     notes: lead.notes || '',
                     leadType: lead.leadType || '',
-                    sourceUrl: lead.sourceUrl || '',
+                    sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
                   });
                 }}
               >
@@ -693,23 +693,30 @@ export default function LeadDetailPage() {
               )}
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Title</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Job Title</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Product / Service</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead type</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">
                 {lead.leadType ? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1) : '—'}
               </p>
             </div>
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source URL</p>
-              {lead.sourceUrl ? (
-                <a href={lead.sourceUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-blue-400 hover:underline break-all">{lead.sourceUrl}</a>
-              ) : (
-                <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
-              )}
+              {(() => {
+                const url = lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '');
+                return url ? (
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    className="text-sm text-blue-400 hover:underline break-all">{url}</a>
+                ) : (
+                  <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
+                );
+              })()}
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead Source</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.source || '—'}</p>
             </div>
             <div className="sm:col-span-2">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
@@ -794,7 +801,7 @@ export default function LeadDetailPage() {
               />
             </div>
             <div>
-              <label className="label">Contact Title</label>
+              <label className="label">Job Title</label>
               <input
                 className="input"
                 value={editData.contactTitle || ''}
@@ -803,7 +810,7 @@ export default function LeadDetailPage() {
               />
             </div>
             <div>
-              <label className="label">Product / Service</label>
+              <label className="label">Lead type</label>
               <select
                 className="input"
                 title="Product or Service type"
@@ -1187,14 +1194,12 @@ export default function LeadDetailPage() {
                   {leadOpportunities.map((opp: any) => (
                     <div key={opp.id}
                       className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950 p-3 space-y-2 flex flex-col">
-                      {/* Top: ID + icons */}
+                      {/* Name + icons */}
                       <div className="flex items-center justify-between gap-1">
-                        {opp.opportunityId && (
-                          <span className="flex items-center gap-0.5 text-[10px] font-mono text-slate-400">
-                            <Hash size={9} />{opp.opportunityId}
-                          </span>
-                        )}
-                        <div className="flex items-center gap-1 ml-auto">
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 leading-snug truncate">
+                          {opp.opportunityName || opp.title}
+                        </p>
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           <button title="View"
                             className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition-colors"
                             onClick={() => setOppViewModal(opp)}>
@@ -1215,11 +1220,6 @@ export default function LeadDetailPage() {
                           )}
                         </div>
                       </div>
-
-                      {/* Name */}
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 leading-snug">
-                        {opp.opportunityName || opp.title}
-                      </p>
 
                       {/* Stage badge */}
                       <span className="self-start text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-blue-500/10 text-blue-400 border-blue-500/25">
@@ -1601,11 +1601,11 @@ export default function LeadDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="section-title">Edit Opportunity</h3>
-                {oppEditModal.opportunityId && (
+                {/* {oppEditModal.opportunityId && (
                   <p className="text-[10px] font-mono text-slate-400 mt-0.5 flex items-center gap-0.5">
                     <Hash size={9} />{oppEditModal.opportunityId}
                   </p>
-                )}
+                )} */}
               </div>
               <button onClick={() => setOppEditModal(null)}>
                 <X size={16} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
@@ -1682,11 +1682,11 @@ export default function LeadDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="section-title">{oppViewModal.opportunityName || oppViewModal.title}</h3>
-                {oppViewModal.opportunityId && (
+                {/* {oppViewModal.opportunityId && (
                   <p className="text-[10px] font-mono text-slate-400 mt-0.5 flex items-center gap-0.5">
                     <Hash size={9} />{oppViewModal.opportunityId}
                   </p>
-                )}
+                )} */}
               </div>
               <button onClick={() => setOppViewModal(null)}>
                 <X size={16} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />

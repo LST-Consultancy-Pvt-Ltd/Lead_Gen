@@ -1169,7 +1169,7 @@ export default function ActivitiesPage() {
       )} */}
 
       {/* 3. VIEW TOGGLE */}
-      <div className="flex items-center gap-2">
+      {/* <div className="flex items-center gap-2">
         <button
           onClick={() => setViewMode("list")}
           className={
@@ -1192,12 +1192,12 @@ export default function ActivitiesPage() {
         >
           <Clock size={13} /> Timeline view
         </button>
-      </div>
+      </div> */}
 
       {/* 4. FILTERS */}
-      <div className="space-y-2">
+      {/* <div className="space-y-2">
         <div className="flex flex-wrap gap-2 items-center">
-          {/* <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search
               size={13}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
@@ -1211,12 +1211,12 @@ export default function ActivitiesPage() {
                 setPage(1);
               }}
             />
-          </div> */}
+          </div>
 
-          {/* Exec filter \u2014 manager and admin */}
+          Exec filter \u2014 manager and admin
           {!isSalesUser && teamMembers.length > 0 && (
             <select
-              className="input h-9 text-xs"
+              className="input h-9 text-xs w-44"
               title="Filter by executive"
               value={loggedByFilter}
               onChange={(e) => {
@@ -1233,10 +1233,10 @@ export default function ActivitiesPage() {
             </select>
           )}
 
-          {/* Type filter \u2014 manager and admin dropdown */}
+          Type filter \u2014 manager and admin dropdown
           {!isSalesUser && (
             <select
-              className="input h-9 text-xs"
+              className="input h-9 text-xs w-44"
               title="Filter by type"
               value={typeFilter}
               onChange={(e) => {
@@ -1253,10 +1253,10 @@ export default function ActivitiesPage() {
             </select>
           )}
 
-          {/* Date range \u2014 manager and admin */}
+          Date range \u2014 manager and admin
           {!isSalesUser && (
             <select
-              className="input h-9 text-xs"
+              className="input h-9 text-xs w-44"
               title="Date range"
               value={dateFilter}
               onChange={(e) => {
@@ -1271,12 +1271,12 @@ export default function ActivitiesPage() {
             </select>
           )}
 
-          {/* Linked-to filter \u2014 admin only */}
+          Linked-to filter \u2014 admin only
           {isAdmin && (
             <div className="relative" ref={linkedFilterRef}>
               <button
                 className={
-                  "flex items-center gap-1.5 input h-9 text-xs cursor-pointer min-w-[140px] " +
+                  "flex items-center gap-1.5 input h-9 text-xs cursor-pointer w-44 " +
                   (linkedToFilterId ? "text-blue-300" : "")
                 }
                 onClick={() => setShowLinkedFilter((v) => !v)}
@@ -1361,7 +1361,7 @@ export default function ActivitiesPage() {
           )}
         </div>
 
-        {/* Type pills \u2014 sales user only */}
+        Type pills \u2014 sales user only
         {isSalesUser && (
           <div className="flex flex-wrap gap-1.5">
             {[{ value: "", label: "All types" }, ...ACTIVITY_TYPES].map((t) => (
@@ -1383,10 +1383,10 @@ export default function ActivitiesPage() {
             ))}
           </div>
         )}
-      </div>
+      </div> */}
 
       {/* 5. ACTIVITY LIST */}
-      <div className="card overflow-hidden">
+      {/* <div className="card overflow-hidden">
         {!isSalesUser && activities.length > 0 && (
           <div className="px-5 py-3 border-b border-slate-200 dark:border-white/[0.04]">
             <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest">
@@ -1477,10 +1477,10 @@ export default function ActivitiesPage() {
             ))}
           </div>
         )}
-      </div>
+      </div> */}
 
       {/* PAGINATION */}
-      {totalPages > 1 && (
+      {/* {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-slate-500">
             {total} total activities
@@ -1533,7 +1533,7 @@ export default function ActivitiesPage() {
             </button>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* COACHING ALERTS \u2014 manager only */}
       {isManager && overdueActivities.length > 0 && (

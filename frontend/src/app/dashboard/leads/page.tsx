@@ -30,6 +30,20 @@ export default function LeadsPage() {
   const [importing, setImporting] = useState(false);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [statusPopup, setStatusPopup] = useState<{
+    count: number;
+    rows: { row: number; invalidValue: string; validOptions: string }[];
+  } | null>(null);
+  const [sourcePopup, setSourcePopup] = useState<{
+    count: number;
+    rows: { row: number; invalidValue: string; validOptions: string }[];
+  } | null>(null);
+  const [fieldPopup, setFieldPopup] = useState<{
+    rows: { row: number; field: string; invalidValue: string; reason: string }[];
+  } | null>(null);
+  const [missingPopup, setMissingPopup] = useState<{
+    rows: { row: number; missingFields: string[] }[];
+  } | null>(null);
 
   const permissions = usePermissions();
   const authPerms = useAuthPermissions();
@@ -155,19 +169,65 @@ export default function LeadsPage() {
       const resp = await api.post('/import/leads/excel', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+      const statusErrors  = Array.isArray(resp.data.statusErrors)  ? resp.data.statusErrors  : [];
+      const sourceErrors  = Array.isArray(resp.data.sourceErrors)  ? resp.data.sourceErrors  : [];
+      const missingErrors = Array.isArray(resp.data.missingErrors) ? resp.data.missingErrors : [];
+      const fieldErrors   = Array.isArray(resp.data.fieldErrors)   ? resp.data.fieldErrors   : [];
+
       toast.success(
         `${resp.data.successRows} lead${resp.data.successRows !== 1 ? 's' : ''} imported successfully`
       );
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       await queryClient.refetchQueries({ queryKey: ['leads'] });
-      setImportOpen(false);
-      setImportFile(null);
-      setImportErrors([]);
+
+      if (statusErrors.length > 0) {
+        setStatusPopup({
+          count: statusErrors.length,
+          rows: statusErrors.map((e: any) => ({
+            row: e.row,
+            invalidValue: e.invalidValue ?? '',
+            validOptions: e.validOptions ?? '',
+          })),
+        });
+      }
+      if (sourceErrors.length > 0) {
+        setSourcePopup({
+          count: sourceErrors.length,
+          rows: sourceErrors.map((e: any) => ({
+            row: e.row,
+            invalidValue: e.invalidValue ?? '',
+            validOptions: e.validOptions ?? '',
+          })),
+        });
+      }
+      if (missingErrors.length > 0) {
+        setMissingPopup({
+          rows: missingErrors.map((e: any) => ({
+            row: e.row,
+            missingFields: Array.isArray(e.missingFields) ? e.missingFields : [],
+          })),
+        });
+      }
+      if (fieldErrors.length > 0) {
+        setFieldPopup({
+          rows: fieldErrors.map((e: any) => ({
+            row: e.row,
+            field: e.field ?? '',
+            invalidValue: e.invalidValue ?? '',
+            reason: e.reason ?? '',
+          })),
+        });
+      }
+      if (statusErrors.length === 0 && sourceErrors.length === 0 && missingErrors.length === 0 && fieldErrors.length === 0) {
+        setImportOpen(false);
+        setImportFile(null);
+        setImportErrors([]);
+      }
     } catch (err: any) {
       const errData = err?.response?.data;
       if (Array.isArray(errData?.errors) && errData.errors.length > 0) {
-        setImportErrors(errData.errors);
+        setImportErrors(errData.errors.map((e: any) => (typeof e === 'string' ? e : e.error || JSON.stringify(e))));
       } else {
         toast.error(errData?.message || 'Import failed');
       }
@@ -280,7 +340,7 @@ export default function LeadsPage() {
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           {!isQuotaLoading && quota && (
-            <div className="mr-4 flex flex-col items-end hidden sm:flex">
+            <div className="mr-4 hidden sm:flex flex-col items-end">
                 <div className="flex justify-between w-32 mb-1">
                     <span className="text-[10px] font-medium text-slate-500">Lead Quota</span>
                     <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
@@ -341,7 +401,7 @@ export default function LeadsPage() {
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <select className="input h-9 text-xs w-auto" title="Filter by status" value={statusFilter}
+        <select className="input h-9 text-xs w-48" title="Filter by status" value={statusFilter}
           onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
           <option value="">All Status</option>
           {(Array.isArray(leadStatusOptions) ? leadStatusOptions : [])
@@ -352,7 +412,7 @@ export default function LeadsPage() {
           }
         </select>
         <RoleGuard permission="canViewAllLeads">
-          <select className="input h-9 text-xs w-auto" title="Filter by owner" value={ownerFilter}
+          <select className="input h-9 text-xs w-48" title="Filter by owner" value={ownerFilter}
             onChange={e => { setOwnerFilter(e.target.value); setPage(1); }}>
             <option value="">All Owners</option>
             <option value="unassigned">Unassigned</option>
@@ -746,6 +806,252 @@ export default function LeadsPage() {
 
       {/* Create Modal */}
       <CreateLeadModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
+
+      {/* Missing Required Fields Popup */}
+      {missingPopup && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center px-4 bg-black/60">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-2xl shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30">
+                <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Missing Required Fields</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {missingPopup.rows.length} row{missingPopup.rows.length !== 1 ? 's were' : ' was'} skipped — all fields are required. Fill in the missing values and re-upload.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 max-h-64 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 sticky top-0">
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium w-16">Row #</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Missing Fields</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missingPopup.rows.map((r, idx) => (
+                    <tr key={idx} className="border-b border-slate-100 dark:border-white/5 last:border-0">
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300 font-mono">{r.row}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          {r.missingFields.map((f, fi) => (
+                            <span key={fi} className="inline-block bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+              Every column in the template is required. Please fill all fields for each row before uploading.
+            </p>
+            <button
+              className="btn-primary w-full"
+              onClick={() => {
+                setMissingPopup(null);
+                setImportOpen(false);
+                setImportFile(null);
+                setImportErrors([]);
+              }}
+            >
+              OK, Got It
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Field Validation Errors Popup */}
+      {fieldPopup && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center px-4 bg-black/60">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-2xl shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30">
+                <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Invalid Field Values Detected</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {fieldPopup.rows.length} row{fieldPopup.rows.length !== 1 ? 's were' : ' was'} skipped due to invalid field values. Fix the highlighted cells and re-upload.
+                </p>
+              </div>
+            </div>
+            <div className="mb-4 max-h-64 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 sticky top-0">
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Row #</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Field</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Invalid Value</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Rule</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fieldPopup.rows.map((r, idx) => (
+                    <tr key={idx} className="border-b border-slate-100 dark:border-white/5 last:border-0">
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300 font-mono">{r.row}</td>
+                      <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-200">{r.field}</td>
+                      <td className="px-3 py-2">
+                        <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded font-medium max-w-[140px] truncate" title={r.invalidValue}>
+                          {r.invalidValue || '(empty)'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-400 dark:text-slate-500 max-w-[200px]">{r.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button
+              className="btn-primary w-full"
+              onClick={() => {
+                setFieldPopup(null);
+                setImportOpen(false);
+                setImportFile(null);
+                setImportErrors([]);
+              }}
+            >
+              OK, Got It
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Invalid Source Popup */}
+      {sourcePopup && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center px-4 bg-black/60">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30">
+                <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Invalid Lead Source Detected</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {sourcePopup.count} row{sourcePopup.count !== 1 ? 's were' : ' was'} skipped — the Lead Source value is not in your organisation&apos;s source list.
+                </p>
+              </div>
+            </div>
+            <div className="mb-4 max-h-56 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800">
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Row #</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Invalid Value</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Allowed Sources</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourcePopup.rows.map((r, idx) => (
+                    <tr key={idx} className="border-b border-slate-100 dark:border-white/5 last:border-0">
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300 font-mono">{r.row}</td>
+                      <td className="px-3 py-2">
+                        <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded font-medium">
+                          {r.invalidValue || '(empty)'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-400 dark:text-slate-500 truncate max-w-[180px]" title={r.validOptions}>
+                        {r.validOptions}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+              Update the Lead Source column in your Excel file to use one of the allowed values above, then re-upload. You can manage allowed sources under <span className="font-semibold">Settings → Lead Source</span>.
+            </p>
+            <button
+              className="btn-primary w-full"
+              onClick={() => {
+                setSourcePopup(null);
+                setImportOpen(false);
+                setImportFile(null);
+                setImportErrors([]);
+              }}
+            >
+              OK, Got It
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Invalid Status Popup */}
+      {statusPopup && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center px-4 bg-black/60">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30">
+                <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Invalid Lead Status Detected</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {statusPopup.count} row{statusPopup.count !== 1 ? 's were' : ' was'} skipped — the Status value is not in your organisation&apos;s status list.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 max-h-56 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800">
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Row #</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Invalid Value</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Allowed Statuses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statusPopup.rows.map((r, idx) => (
+                    <tr key={idx} className="border-b border-slate-100 dark:border-white/5 last:border-0">
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300 font-mono">{r.row}</td>
+                      <td className="px-3 py-2">
+                        <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded font-medium">
+                          {r.invalidValue || '(empty)'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-400 dark:text-slate-500 truncate max-w-[180px]" title={r.validOptions}>
+                        {r.validOptions}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+              Update the Status column in your Excel file to use one of the allowed values above, then re-upload. You can manage allowed statuses under <span className="font-semibold">Settings → Lead Status</span>.
+            </p>
+
+            <button
+              className="btn-primary w-full"
+              onClick={() => {
+                setStatusPopup(null);
+                setImportOpen(false);
+                setImportFile(null);
+                setImportErrors([]);
+              }}
+            >
+              OK, Got It
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
