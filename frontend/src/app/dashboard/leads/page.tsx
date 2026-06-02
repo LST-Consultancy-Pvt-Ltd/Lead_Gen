@@ -30,6 +30,10 @@ export default function LeadsPage() {
   const [importing, setImporting] = useState(false);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [statusPopup, setStatusPopup] = useState<{
+    count: number;
+    rows: { row: number; invalidValue: string; validOptions: string }[];
+  } | null>(null);
 
   const permissions = usePermissions();
   const authPerms = useAuthPermissions();
@@ -155,19 +159,33 @@ export default function LeadsPage() {
       const resp = await api.post('/import/leads/excel', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+      const statusErrors = Array.isArray(resp.data.statusErrors) ? resp.data.statusErrors : [];
+
       toast.success(
         `${resp.data.successRows} lead${resp.data.successRows !== 1 ? 's' : ''} imported successfully`
       );
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       await queryClient.refetchQueries({ queryKey: ['leads'] });
-      setImportOpen(false);
-      setImportFile(null);
-      setImportErrors([]);
+
+      if (statusErrors.length > 0) {
+        setStatusPopup({
+          count: statusErrors.length,
+          rows: statusErrors.map((e: any) => ({
+            row: e.row,
+            invalidValue: e.invalidValue ?? '',
+            validOptions: e.validOptions ?? '',
+          })),
+        });
+      } else {
+        setImportOpen(false);
+        setImportFile(null);
+        setImportErrors([]);
+      }
     } catch (err: any) {
       const errData = err?.response?.data;
       if (Array.isArray(errData?.errors) && errData.errors.length > 0) {
-        setImportErrors(errData.errors);
+        setImportErrors(errData.errors.map((e: any) => (typeof e === 'string' ? e : e.error || JSON.stringify(e))));
       } else {
         toast.error(errData?.message || 'Import failed');
       }
@@ -746,6 +764,70 @@ export default function LeadsPage() {
 
       {/* Create Modal */}
       <CreateLeadModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
+
+      {/* Invalid Status Popup */}
+      {statusPopup && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center px-4 bg-black/60">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30">
+                <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Invalid Lead Status Detected</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {statusPopup.count} row{statusPopup.count !== 1 ? 's were' : ' was'} skipped — the Status value is not in your organisation&apos;s status list.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 max-h-56 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800">
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Row #</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Invalid Value</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Allowed Statuses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statusPopup.rows.map((r, idx) => (
+                    <tr key={idx} className="border-b border-slate-100 dark:border-white/5 last:border-0">
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300 font-mono">{r.row}</td>
+                      <td className="px-3 py-2">
+                        <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded font-medium">
+                          {r.invalidValue || '(empty)'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-400 dark:text-slate-500 truncate max-w-[180px]" title={r.validOptions}>
+                        {r.validOptions}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+              Update the Status column in your Excel file to use one of the allowed values above, then re-upload. You can manage allowed statuses under <span className="font-semibold">Settings → Lead Status</span>.
+            </p>
+
+            <button
+              className="btn-primary w-full"
+              onClick={() => {
+                setStatusPopup(null);
+                setImportOpen(false);
+                setImportFile(null);
+                setImportErrors([]);
+              }}
+            >
+              OK, Got It
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

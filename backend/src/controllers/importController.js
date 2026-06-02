@@ -358,8 +358,6 @@ async function importLeadsFromExcel(req, res) {
         ? req.user.id
         : (userMap.get(record['Assign Lead To']?.toString().trim().toLowerCase()) || null);
 
-      const rawStatus = record['Lead Status']?.toString().trim().toLowerCase() || defaultStatus;
-
       return {
         companyName:  String(record['Company Name']).trim(),
         contactName:  record['Contact Name']?.toString().trim() || null,
@@ -368,7 +366,6 @@ async function importLeadsFromExcel(req, res) {
         contactPhone: record['Phone']?.toString().trim() || null,
         assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
-        status:       validStatuses.has(rawStatus) ? rawStatus : defaultStatus,
         leadType:     normaliseLeadType(record['Lead Type']),
         source:       record['Lead Source']?.toString().trim() || 'Excel Import',
         website:      record['Website']?.toString().trim() || null,
@@ -388,6 +385,21 @@ async function importLeadsFromExcel(req, res) {
     for (let i = 0; i < leadsData.length; i++) {
       const leadData = leadsData[i];
       const record = records[i];
+
+      // ── Status validation against DB ──────────────────────────────────────
+      const rawStatus = String(record['Lead Status'] ?? '').trim().toLowerCase();
+      if (rawStatus && !validStatuses.has(rawStatus)) {
+        excelImportErrors.push({
+          row: i + 2,
+          field: 'Lead Status',
+          invalidValue: record['Lead Status'],
+          validOptions: [...validStatuses].join(', '),
+          error: `Invalid status "${record['Lead Status']}" in row ${i + 2}. Allowed values are: ${[...validStatuses].join(', ')}. Row skipped.`,
+          isStatusError: true,
+        });
+        continue;
+      }
+      const resolvedStatus = rawStatus && validStatuses.has(rawStatus) ? rawStatus : defaultStatus;
 
       try {
         const rawPhone = String(record['Phone'] || record['Contact Phone'] || record['phone'] || '').trim() || null;
@@ -415,7 +427,7 @@ async function importLeadsFromExcel(req, res) {
           }
         }
 
-        await prisma.lead.create({ data: leadData });
+        await prisma.lead.create({ data: { ...leadData, status: resolvedStatus } });
         insertedCount++;
       } catch (rowErr) {
         excelImportErrors.push({ row: i + 2, error: rowErr.message });
@@ -431,13 +443,18 @@ async function importLeadsFromExcel(req, res) {
       skipped: excelImportErrors.length,
     });
 
+    const statusErrors = excelImportErrors.filter(e => e.isStatusError === true);
+    const otherErrors  = excelImportErrors.filter(e => !e.isStatusError);
+
     return res.status(201).json({
       success: true,
-      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped (duplicates or errors)`,
-      totalRecords: records.length,
-      successRows: insertedCount,
-      failedRows: excelImportErrors.length,
-      errors: excelImportErrors.slice(0, 50),
+      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped (invalid status: ${statusErrors.length}, duplicates/other: ${otherErrors.length})`,
+      totalRecords:  records.length,
+      successRows:   insertedCount,
+      failedRows:    excelImportErrors.length,
+      statusErrors:  statusErrors.slice(0, 50),
+      otherErrors:   otherErrors.slice(0, 50),
+      errors:        excelImportErrors.slice(0, 50),
       data: [],
     });
   } catch (err) {
