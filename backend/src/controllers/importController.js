@@ -423,6 +423,66 @@ async function importLeadsFromExcel(req, res) {
       }
       const resolvedSource = (rawSource && validSources.has(rawSource)) ? rawSource : (defaultSource ?? 'Excel Import');
 
+      // ── Field validations (Email, Phone, Score, Date, Website) ───────────
+      const fieldErrors = [];
+
+      const emailVal = String(record['Email'] ?? '').trim();
+      if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+        fieldErrors.push({ field: 'Email', invalidValue: emailVal, reason: 'Must be a valid email address (e.g. john@example.com)' });
+      }
+
+      const phoneVal = String(record['Phone'] ?? '').trim();
+      if (phoneVal && !/^[+\d\s\-().]{6,20}$/.test(phoneVal)) {
+        fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Only digits, spaces, +, −, (, ) allowed · 6–20 characters' });
+      }
+
+      const scoreRaw = record['Score'];
+      if (scoreRaw !== undefined && scoreRaw !== null && scoreRaw !== '') {
+        const scoreNum = Number(scoreRaw);
+        if (isNaN(scoreNum) || !Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > 100) {
+          fieldErrors.push({ field: 'Score', invalidValue: String(scoreRaw), reason: 'Must be a whole number between 0 and 100' });
+        }
+      }
+
+      const followUpRaw = record['Follow-up Date'];
+      if (followUpRaw && typeof followUpRaw === 'string') {
+        const dateStr = followUpRaw.trim();
+        const dateMatch = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(dateStr);
+        if (!dateMatch) {
+          fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: 'Use DD/MM/YYYY or DD-MM-YYYY only (e.g. 10/10/2026 or 31-12-2026).' });
+        } else {
+          const day = parseInt(dateMatch[1], 10);
+          const month = parseInt(dateMatch[2], 10);
+          if (day < 1 || day > 31) {
+            fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: `Day "${dateMatch[1]}" is invalid — must be between 01 and 31` });
+          } else if (month < 1 || month > 12) {
+            fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: `Month "${dateMatch[2]}" is invalid — must be between 01 and 12` });
+          }
+        }
+      }
+
+      const websiteVal = String(record['Website'] ?? '').trim();
+      if (websiteVal) {
+        const validWebsite = /^(https?:\/\/)?(www\.)?[\w\-]+(\.[\w\-]+)+([\w\-._~:/?#[\]@!$&'()*+,;=%]*)?$/.test(websiteVal) && !websiteVal.includes(' ') && websiteVal.length <= 500;
+        if (!validWebsite) {
+          fieldErrors.push({ field: 'Website', invalidValue: websiteVal, reason: 'Must be a valid URL with no spaces (e.g. https://example.com)' });
+        }
+      }
+
+      if (fieldErrors.length > 0) {
+        fieldErrors.forEach(fe => {
+          excelImportErrors.push({
+            row: i + 2,
+            field: fe.field,
+            invalidValue: fe.invalidValue,
+            reason: fe.reason,
+            error: `Row ${i + 2} – ${fe.field}: ${fe.reason} (got: "${fe.invalidValue}")`,
+            isFieldError: true,
+          });
+        });
+        continue;
+      }
+
       try {
         const rawPhone = String(record['Phone'] || record['Contact Phone'] || record['phone'] || '').trim() || null;
         const rawEmail = String(record['Email'] || record['Contact Email'] || record['email'] || '').trim().toLowerCase() || null;
@@ -467,18 +527,20 @@ async function importLeadsFromExcel(req, res) {
 
     const statusErrors = excelImportErrors.filter(e => e.isStatusError === true);
     const sourceErrors = excelImportErrors.filter(e => e.isSourceError === true);
-    const otherErrors  = excelImportErrors.filter(e => !e.isStatusError && !e.isSourceError);
+    const fieldValErrors = excelImportErrors.filter(e => e.isFieldError === true);
+    const otherErrors  = excelImportErrors.filter(e => !e.isStatusError && !e.isSourceError && !e.isFieldError);
 
     return res.status(201).json({
       success: true,
-      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped (invalid status: ${statusErrors.length}, invalid source: ${sourceErrors.length}, duplicates/other: ${otherErrors.length})`,
-      totalRecords:  records.length,
-      successRows:   insertedCount,
-      failedRows:    excelImportErrors.length,
-      statusErrors:  statusErrors.slice(0, 50),
-      sourceErrors:  sourceErrors.slice(0, 50),
-      otherErrors:   otherErrors.slice(0, 50),
-      errors:        excelImportErrors.slice(0, 50),
+      message: `File imported successfully: ${insertedCount} leads created, ${excelImportErrors.length} skipped`,
+      totalRecords:   records.length,
+      successRows:    insertedCount,
+      failedRows:     excelImportErrors.length,
+      statusErrors:   statusErrors.slice(0, 50),
+      sourceErrors:   sourceErrors.slice(0, 50),
+      fieldErrors:    fieldValErrors.slice(0, 50),
+      otherErrors:    otherErrors.slice(0, 50),
+      errors:         excelImportErrors.slice(0, 50),
       data: [],
     });
   } catch (err) {

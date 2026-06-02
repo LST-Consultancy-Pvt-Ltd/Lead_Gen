@@ -38,6 +38,9 @@ export default function LeadsPage() {
     count: number;
     rows: { row: number; invalidValue: string; validOptions: string }[];
   } | null>(null);
+  const [fieldPopup, setFieldPopup] = useState<{
+    rows: { row: number; field: string; invalidValue: string; reason: string }[];
+  } | null>(null);
 
   const permissions = usePermissions();
   const authPerms = useAuthPermissions();
@@ -165,6 +168,7 @@ export default function LeadsPage() {
       });
       const statusErrors = Array.isArray(resp.data.statusErrors) ? resp.data.statusErrors : [];
       const sourceErrors = Array.isArray(resp.data.sourceErrors) ? resp.data.sourceErrors : [];
+      const fieldErrors  = Array.isArray(resp.data.fieldErrors)  ? resp.data.fieldErrors  : [];
 
       toast.success(
         `${resp.data.successRows} lead${resp.data.successRows !== 1 ? 's' : ''} imported successfully`
@@ -193,7 +197,17 @@ export default function LeadsPage() {
           })),
         });
       }
-      if (statusErrors.length === 0 && sourceErrors.length === 0) {
+      if (fieldErrors.length > 0) {
+        setFieldPopup({
+          rows: fieldErrors.map((e: any) => ({
+            row: e.row,
+            field: e.field ?? '',
+            invalidValue: e.invalidValue ?? '',
+            reason: e.reason ?? '',
+          })),
+        });
+      }
+      if (statusErrors.length === 0 && sourceErrors.length === 0 && fieldErrors.length === 0) {
         setImportOpen(false);
         setImportFile(null);
         setImportErrors([]);
@@ -780,6 +794,64 @@ export default function LeadsPage() {
 
       {/* Create Modal */}
       <CreateLeadModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
+
+      {/* Field Validation Errors Popup */}
+      {fieldPopup && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center px-4 bg-black/60">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-2xl shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30">
+                <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Invalid Field Values Detected</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {fieldPopup.rows.length} row{fieldPopup.rows.length !== 1 ? 's were' : ' was'} skipped due to invalid field values. Fix the highlighted cells and re-upload.
+                </p>
+              </div>
+            </div>
+            <div className="mb-4 max-h-64 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 sticky top-0">
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Row #</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Field</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Invalid Value</th>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Rule</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fieldPopup.rows.map((r, idx) => (
+                    <tr key={idx} className="border-b border-slate-100 dark:border-white/5 last:border-0">
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300 font-mono">{r.row}</td>
+                      <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-200">{r.field}</td>
+                      <td className="px-3 py-2">
+                        <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded font-medium max-w-[140px] truncate" title={r.invalidValue}>
+                          {r.invalidValue || '(empty)'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-400 dark:text-slate-500 max-w-[200px]">{r.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button
+              className="btn-primary w-full"
+              onClick={() => {
+                setFieldPopup(null);
+                setImportOpen(false);
+                setImportFile(null);
+                setImportErrors([]);
+              }}
+            >
+              OK, Got It
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Invalid Source Popup */}
       {sourcePopup && (
