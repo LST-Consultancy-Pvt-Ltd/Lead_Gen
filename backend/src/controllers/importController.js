@@ -309,7 +309,7 @@ async function importLeadsFromExcel(req, res) {
     const uniqueAssignToValues = [
       ...new Set(
         records
-          .map(r => String(r['Assign To'] ?? '').trim())
+          .map(r => String(r['Assign Lead To'] ?? '').trim())
           .filter(v => v !== '')
       ),
     ];
@@ -338,18 +338,15 @@ async function importLeadsFromExcel(req, res) {
     const defaultStatus = (statusRows.find(r => r.isDefault)?.value ?? statusRows[0]?.value ?? 'new').toLowerCase();
 
     // ── Map records to Lead model objects ──────────────────────────────────
-    // For sales_user: if no "Assign To" is specified, assign to themselves so
-    // the lead appears in their filtered view (which scopes to assignedToId = user.id).
     const isSalesUser = req.user.role === 'sales_user';
 
     const leadsData = records.map(record => {
-      const followUpRaw = record['Next Follow-up'];
+      const followUpRaw = record['Follow-up Date'];
       let followUpDate = null;
       if (followUpRaw) {
         if (followUpRaw instanceof Date) {
           followUpDate = isNaN(followUpRaw.getTime()) ? null : followUpRaw;
         } else if (typeof followUpRaw === 'number') {
-          // Excel serial number (days since Dec 30, 1899); convert to JS timestamp
           followUpDate = new Date((followUpRaw - 25569) * 86400 * 1000);
         } else {
           const parsed = new Date(followUpRaw);
@@ -357,24 +354,30 @@ async function importLeadsFromExcel(req, res) {
         }
       }
 
-      // Sales users always own their own imported leads;
-      // admins/managers use the "Assign To" column (falls back to null if unspecified).
       const resolvedAssignedToId = isSalesUser
         ? req.user.id
-        : (userMap.get(record['Assign To']?.toString().trim().toLowerCase()) || null);
+        : (userMap.get(record['Assign Lead To']?.toString().trim().toLowerCase()) || null);
+
+      const rawStatus = record['Lead Status']?.toString().trim().toLowerCase() || defaultStatus;
 
       return {
-        companyName:  String(record['Company']).trim(),
-        contactName:  record['Contact']?.toString().trim() || null,
+        companyName:  String(record['Company Name']).trim(),
+        contactName:  record['Contact Name']?.toString().trim() || null,
+        contactTitle: record['Job Title']?.toString().trim() || null,
+        contactEmail: record['Email']?.toString().trim().toLowerCase() || null,
+        contactPhone: record['Phone']?.toString().trim() || null,
         assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
-        status:       (() => { const s = record['Status']?.toString().trim().toLowerCase() || defaultStatus; return validStatuses.has(s) ? s : defaultStatus; })(),
-        leadType:     normaliseLeadType(record['Product / Service']),
-        sourceUrl:    record['Source URL']?.toString().trim() || null,
+        status:       validStatuses.has(rawStatus) ? rawStatus : defaultStatus,
+        leadType:     normaliseLeadType(record['Lead Type']),
+        source:       record['Lead Source']?.toString().trim() || 'Excel Import',
+        website:      record['Website']?.toString().trim() || null,
+        industry:     record['Industry']?.toString().trim() || null,
+        location:     record['Location']?.toString().trim() || null,
+        notes:        record['Description / Notes']?.toString().trim() || null,
         followUpDate,
         organizationId,
         createdById:  req.user.id,
-        source:       'Excel Import',
       };
     });
 

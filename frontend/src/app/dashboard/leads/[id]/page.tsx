@@ -253,7 +253,7 @@ export default function LeadDetailPage() {
         contactTitle: lead.contactTitle || '',
         notes: lead.notes || '',
         leadType: lead.leadType || '',
-        sourceUrl: lead.sourceUrl || '',
+        sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
       });
     }
   }, [isEditing, lead]);
@@ -653,7 +653,7 @@ export default function LeadDetailPage() {
                     contactTitle: lead.contactTitle || '',
                     notes: lead.notes || '',
                     leadType: lead.leadType || '',
-                    sourceUrl: lead.sourceUrl || '',
+                    sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
                   });
                 }}
               >
@@ -693,23 +693,30 @@ export default function LeadDetailPage() {
               )}
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Title</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Job Title</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Product / Service</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead type</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">
                 {lead.leadType ? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1) : '—'}
               </p>
             </div>
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source URL</p>
-              {lead.sourceUrl ? (
-                <a href={lead.sourceUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-blue-400 hover:underline break-all">{lead.sourceUrl}</a>
-              ) : (
-                <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
-              )}
+              {(() => {
+                const url = lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '');
+                return url ? (
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    className="text-sm text-blue-400 hover:underline break-all">{url}</a>
+                ) : (
+                  <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
+                );
+              })()}
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead Source</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.source || '—'}</p>
             </div>
             <div className="sm:col-span-2">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
@@ -794,7 +801,7 @@ export default function LeadDetailPage() {
               />
             </div>
             <div>
-              <label className="label">Contact Title</label>
+              <label className="label">Job Title</label>
               <input
                 className="input"
                 value={editData.contactTitle || ''}
@@ -803,7 +810,7 @@ export default function LeadDetailPage() {
               />
             </div>
             <div>
-              <label className="label">Product / Service</label>
+              <label className="label">Lead type</label>
               <select
                 className="input"
                 title="Product or Service type"

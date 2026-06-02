@@ -2,14 +2,21 @@ const XLSX = require('xlsx');
 
 function generateTemplate() {
   const headers = [
-    'Company',
-    'Contact',
-    'Assign To',
+    'Company Name',
+    'Lead Type',
+    'Contact Name',
+    'Job Title',
+    'Email',
+    'Phone',
+    'Lead Status',
+    'Lead Source',
     'Score',
-    'Status',
-    'Product / Service',
-    'Source URL',
-    'Next Follow-up',
+    'Follow-up Date',
+    'Assign Lead To',
+    'Website',
+    'Industry',
+    'Location',
+    'Description / Notes',
   ];
 
   const wb = XLSX.utils.book_new();
