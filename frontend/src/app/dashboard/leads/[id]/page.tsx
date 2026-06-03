@@ -1315,7 +1315,7 @@ export default function LeadDetailPage() {
                   </div>
                 </div>
 
-                {/* Assigned To (managers only) */}
+                {/* ASSIGNED TO (managers only) - HIDDEN (do not remove)
                 {!permissions.isSalesUser && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1331,6 +1331,7 @@ export default function LeadDetailPage() {
                     <div />
                   </div>
                 )}
+                */}
 
                 {/* Notes */}
                 <div>
@@ -1644,6 +1645,7 @@ export default function LeadDetailPage() {
                     onChange={e => setOppEditForm((f: any) => ({ ...f, expectedCloseDate: e.target.value }))} />
                 </div>
               </div>
+              {/* ASSIGNED TO (managers only) - HIDDEN (do not remove)
               {!permissions.isSalesUser && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1657,6 +1659,7 @@ export default function LeadDetailPage() {
                   <div />
                 </div>
               )}
+              */}
               <div>
                 <label className="label mb-1 block">Notes / Comments</label>
                 <textarea className="input min-h-[70px] resize-none" value={oppEditForm.notes}
@@ -1699,7 +1702,8 @@ export default function LeadDetailPage() {
                 { label: 'Stage / Status',  value: OPP_STAGES.find(s => s.id === oppViewModal.stage)?.label || oppViewModal.stage },
                 { label: 'Deal Value',      value: fmtUSD(oppViewModal.dealValue) },
                 { label: 'Expected Close',  value: fmtDate(oppViewModal.expectedCloseDate) },
-                { label: 'Assigned To',     value: oppViewModal.assignedTo?.name || 'Unassigned' },
+                // ASSIGNED TO - HIDDEN (do not remove)
+                // { label: 'Assigned To',     value: oppViewModal.assignedTo?.name || 'Unassigned' },
                 { label: 'Created By',      value: oppViewModal.createdBy?.name },
                 { label: 'Created Date',    value: fmtDate(oppViewModal.createdAt) },
                 { label: 'Last Updated',    value: fmtDate(oppViewModal.updatedAt) },

@@ -233,7 +233,8 @@ function OppCard({
             { label: 'Stage / Status', value: stageLabel(opp.stage) },
             { label: 'Deal Value',     value: fmtUSD(opp.dealValue) },
             { label: 'Expected Close', value: fmtDate(opp.expectedCloseDate) },
-            { label: 'Assigned To',    value: opp.assignedTo?.name || opp.salesOwner?.name || 'Unassigned' },
+            // ASSIGNED TO - HIDDEN (do not remove)
+            // { label: 'Assigned To',    value: opp.assignedTo?.name || opp.salesOwner?.name || 'Unassigned' },
             { label: 'Created By',     value: opp.createdBy?.name },
             { label: 'Created Date',   value: fmtDate(opp.createdAt) },
             { label: 'Last Updated',   value: fmtDate(opp.updatedAt) },
@@ -303,7 +304,7 @@ function OppCard({
           </div>
         </div>
 
-        {/* Assigned To (managers only) */}
+        {/* ASSIGNED TO (managers only) - HIDDEN (do not remove)
         {!permissions.isSalesUser && teamMembers.length > 0 && (
           <div>
             <label className="label text-xs">Assigned To</label>
@@ -314,6 +315,7 @@ function OppCard({
             </select>
           </div>
         )}
+        */}
 
         {/* Notes */}
         <div>
@@ -626,8 +628,9 @@ export default function OpportunitiesPage() {
                 </div>
               </div>
 
-              {/* Row 2: Assigned To | Contact Person */}
+              {/* Row 2: Stage | Contact Person */}
               <div className="grid grid-cols-2 gap-3">
+                {/* ASSIGNED TO FIELD - HIDDEN (do not remove)
                 <div>
                   <label className="label mb-1 block">Assigned To</label>
                   {permissions.isSalesUser ? (
@@ -639,15 +642,7 @@ export default function OpportunitiesPage() {
                     </select>
                   )}
                 </div>
-                <div>
-                  <label className="label mb-1 block">Contact Person</label>
-                  <input className="input bg-slate-50 dark:bg-slate-800 cursor-not-allowed text-slate-500"
-                    readOnly value={contactPersonName || '—'} />
-                </div>
-              </div>
-
-              {/* Row 3: Stage | Expected Close Date */}
-              <div className="grid grid-cols-2 gap-3">
+                */}
                 <div>
                   <label className="label mb-1 block">Stage / Status</label>
                   <select className="input" {...register('stage')}>
@@ -655,13 +650,18 @@ export default function OpportunitiesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="label mb-1 block">Expected Close Date</label>
-                  <input className="input" type="date" onKeyDown={e => e.preventDefault()} {...register('expectedCloseDate')} />
+                  <label className="label mb-1 block">Contact Person</label>
+                  <input className="input bg-slate-50 dark:bg-slate-800 cursor-not-allowed text-slate-500"
+                    readOnly value={contactPersonName || '—'} />
                 </div>
               </div>
 
-              {/* Row 4: Deal Value | Notes */}
+              {/* Row 3: Expected Close Date | Deal Value */}
               <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label mb-1 block">Expected Close Date</label>
+                  <input className="input" type="date" onKeyDown={e => e.preventDefault()} {...register('expectedCloseDate')} />
+                </div>
                 <div>
                   <label className="label mb-1 block">Deal Value</label>
                   <div className="relative">
@@ -669,8 +669,8 @@ export default function OpportunitiesPage() {
                     <input className="input pl-7" type="number" min="0" placeholder="0" {...register('dealValue')} />
                   </div>
                 </div>
-                <div />
               </div>
+
               <div>
                 <label className="label mb-1 block">Notes / Comments</label>
                 <textarea className="input min-h-[70px] resize-none" placeholder="Add notes..." {...register('notes')} />
