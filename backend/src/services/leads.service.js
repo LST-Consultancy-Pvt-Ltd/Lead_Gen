@@ -581,9 +581,19 @@ class LeadsService {
       return { success: false, message: accessCheck.reason };
     }
 
-    await prisma.lead.delete({
-      where: { id: leadId },
-    });
+    // Delete in dependency order inside a transaction to avoid FK constraint errors
+    await prisma.$transaction([
+      // Activity logs linked to this lead's opportunities
+      prisma.activityLog.deleteMany({ where: { opportunity: { leadId } } }),
+      // Activity logs linked directly to this lead
+      prisma.activityLog.deleteMany({ where: { leadId } }),
+      // Opportunities linked to this lead
+      prisma.opportunity.deleteMany({ where: { leadId } }),
+      // Campaign-lead join table entries
+      prisma.campaignLead.deleteMany({ where: { leadId } }),
+      // Finally the lead itself
+      prisma.lead.delete({ where: { id: leadId } }),
+    ]);
 
     // ── Decrement lead usage counter ─────────────────────────────────────────
     await decrementLeadUsage(user.organizationId);
