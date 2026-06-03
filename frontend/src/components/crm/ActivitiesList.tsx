@@ -79,9 +79,9 @@ const emptyForm = (leadId?: string, opportunityId?: string) => ({
   type: "call",
   outcome: "",
   description: "",
-  activityDate: getToday(),
+  activityDate: "",
   duration: "",
-  nextActionDate: getTomorrow(),
+  nextActionDate: "",
   leadId,
   opportunityId,
 });
@@ -282,6 +282,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 value={form.nextActionDate}
                 min={getToday()}
                 onChange={(e) => field("nextActionDate", e.target.value)}
+                onKeyDown={(e) => e.preventDefault()}
                 className="input h-9 text-xs"
                 required
               />
@@ -294,6 +295,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 value={form.activityDate}
                 max={getToday()}
                 onChange={(e) => field("activityDate", e.target.value)}
+                onKeyDown={(e) => e.preventDefault()}
               />
             </div>
           </div>
@@ -365,20 +367,18 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-slate-800/30">
-                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Type</th>
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Type</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Date</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Duration</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Next Action</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Outcome</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Notes</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Logged</th>
-                <th className="py-2.5 px-3"></th>
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
               {activities.map((activity) => {
-                const Icon = activityIcons[activity.action] || FileText;
-                const colorClass = activityColors[activity.action] || activityColors.note;
                 const isOwner = activity.createdById === currentUser?.id;
                 const canEdit = isOwner || isAdmin;
 
@@ -408,17 +408,22 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                   <tr key={activity.id} className="border-b border-slate-100 dark:border-white/[0.04] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors last:border-0">
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2">
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${colorClass}`}>
-                          <Icon size={11} />
-                        </div>
                         <span className="font-medium text-slate-800 dark:text-slate-200 capitalize whitespace-nowrap">{activity.action?.replace(/_/g, " ")}</span>
                       </div>
                     </td>
                     <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.activityDate ? new Date(activity.activityDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
                     <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.duration != null ? `${activity.duration} mins` : '—'}</td>
                     <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.nextActionDate ? new Date(activity.nextActionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
-                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">{activity.outcome || '—'}</td>
-                    <td className="py-2.5 px-3 text-slate-500 max-w-[180px] truncate">{activity.description || '—'}</td>
+                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      {activity.outcome
+                        ? <span title={activity.outcome}>{activity.outcome.length > 12 ? activity.outcome.slice(0, 12) + '…' : activity.outcome}</span>
+                        : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
+                      {activity.description
+                        ? <span title={activity.description}>{activity.description.length > 12 ? activity.description.slice(0, 12) + '…' : activity.description}</span>
+                        : '—'}
+                    </td>
                     <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap">{timeAgo(activity.createdAt)}</td>
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-1 flex-shrink-0">
@@ -471,20 +476,21 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                   { label: 'Duration',       value: viewActivity.duration != null ? `${viewActivity.duration} mins` : '—' },
                   { label: 'Activity Type',  value: viewActivity.action?.replace(/_/g, " ") },
                   { label: 'Next Action',    value: viewActivity.nextActionDate ? new Date(viewActivity.nextActionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
-                  { label: 'Outcome',        value: viewActivity.outcome || '—' },
                   { label: 'Logged',         value: timeAgo(viewActivity.createdAt) },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-                    <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{value || '—'}</p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200 capitalize break-words">{value || '—'}</p>
                   </div>
                 ))}
-                {viewActivity.description && (
-                  <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes / Description</p>
-                    <p className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{viewActivity.description}</p>
-                  </div>
-                )}
+                <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Outcome</p>
+                  <p className="text-sm text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap">{viewActivity.outcome || '—'}</p>
+                </div>
+                <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes / Description</p>
+                  <p className="text-sm text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap">{viewActivity.description || '—'}</p>
+                </div>
                 {viewActivity.createdBy?.name && (
                   <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Created By</p>
@@ -496,7 +502,12 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 )}
               </div>
               <div className="mt-4">
-                <button className="btn-ghost w-full" onClick={() => setViewingId(null)}>Close</button>
+                <button
+                  className="w-full py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-center"
+                  onClick={() => setViewingId(null)}
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>
@@ -538,12 +549,14 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                   <label className="label mb-1 block">Next Action Date <span className="text-red-400">*</span></label>
                   <input type="date" className="input" value={editForm.nextActionDate}
                     min={getToday()}
+                    onKeyDown={(e) => e.preventDefault()}
                     onChange={(e) => setEditForm((f) => ({ ...f, nextActionDate: e.target.value }))} />
                 </div>
                 <div>
                   <label className="label mb-1 block">Activity Date <span className="text-red-400">*</span></label>
                   <input type="date" className="input" value={editForm.activityDate}
                     max={getToday()}
+                    onKeyDown={(e) => e.preventDefault()}
                     onChange={(e) => setEditForm((f) => ({ ...f, activityDate: e.target.value }))} />
                 </div>
               </div>
