@@ -453,7 +453,7 @@ async function importLeadsFromExcel(req, res) {
 
       const phoneVal = String(record['Phone'] ?? '').trim();
       if (phoneVal && !/^[+\d\s\-().]{6,20}$/.test(phoneVal)) {
-        fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Only digits, spaces, +, −, (, ) allowed · 6–20 characters' });
+        fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Only allowed (6–20 digits)' });
       }
 
       const scoreRaw = record['Score'];

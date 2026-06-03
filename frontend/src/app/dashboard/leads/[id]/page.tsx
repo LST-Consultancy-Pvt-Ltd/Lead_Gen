@@ -580,7 +580,7 @@ export default function LeadDetailPage() {
   const websiteUrl = agg.website || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : null);
 
   return (
-    <div className="space-y-5 max-w-5xl">
+    <div className="space-y-5 w-full">
       <Link href="/dashboard/leads"
         className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-500 dark:hover:text-slate-300">
         <ArrowLeft size={15} /> Back to Leads
@@ -1187,81 +1187,9 @@ export default function LeadDetailPage() {
               </div>
             )}
 
-            {/* Scrollable 3-column grid */}
-            {leadOpportunities.length > 0 && (
-              <div className="overflow-y-auto max-h-[420px] pr-1">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {leadOpportunities.map((opp: any) => (
-                    <div key={opp.id}
-                      className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950 p-3 space-y-2 flex flex-col">
-                      {/* Name + icons */}
-                      <div className="flex items-center justify-between gap-1">
-                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 leading-snug truncate">
-                          {opp.opportunityName || opp.title}
-                        </p>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <button title="View"
-                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition-colors"
-                            onClick={() => setOppViewModal(opp)}>
-                            <Eye size={12} />
-                          </button>
-                          <button title="Edit"
-                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition-colors"
-                            onClick={() => openOppEdit(opp)}>
-                            <Edit2 size={12} />
-                          </button>
-                          {(permissions.canDeleteOpportunities || (permissions.isSalesUser && opp.assignedToId === user?.id)) && (
-                            <button title="Delete"
-                              className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
-                              disabled={deleteOppMutation.isPending}
-                              onClick={() => setOppDeleteConfirmId(opp.id)}>
-                              <Trash2 size={12} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Stage badge */}
-                      <span className="self-start text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-blue-500/10 text-blue-400 border-blue-500/25">
-                        {opp.stage?.replace(/_/g, ' ')}
-                      </span>
-
-                      {/* Contact person */}
-                      {(opp.contact?.name || opp.lead?.contactName || lead.contactName) && (
-                        <p className="text-xs text-slate-500 flex items-center gap-1 truncate">
-                          <User size={9} />
-                          {opp.contact?.name || opp.lead?.contactName || lead.contactName}
-                        </p>
-                      )}
-
-                      {/* Deal value */}
-                      <p className="text-sm font-semibold text-emerald-400">{fmtUSD(opp.dealValue)}</p>
-
-                      {/* Close date */}
-                      {opp.expectedCloseDate && (
-                        <p className="text-xs text-slate-500 flex items-center gap-1">
-                          <Calendar size={9} /> Close: {fmtDate(opp.expectedCloseDate)}
-                        </p>
-                      )}
-
-                      {/* Assigned to */}
-                      <p className="text-xs text-slate-500">
-                        Assigned: {opp.assignedTo?.name || 'Unassigned'}
-                      </p>
-
-                      {/* Created by + date */}
-                      <p className="text-xs text-slate-500 mt-auto pt-1 border-t border-slate-200 dark:border-white/[0.06]">
-                        {opp.createdBy?.name || '—'} · {fmtDate(opp.createdAt)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── Create opportunity form (inline below header) ── */}
+            {/* ── Create opportunity form ── */}
             {oppCreateOpen && (
-              <div className="mt-4 border border-blue-500/30 bg-blue-500/[0.04] rounded-xl p-4 space-y-3">
+              <div className="mb-4 border border-blue-500/30 bg-blue-500/[0.04] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                     <Plus size={12} className="text-blue-400" /> New Opportunity
@@ -1315,7 +1243,7 @@ export default function LeadDetailPage() {
                   </div>
                 </div>
 
-                {/* Assigned To (managers only) */}
+                {/* ASSIGNED TO (managers only) - HIDDEN (do not remove)
                 {!permissions.isSalesUser && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1331,6 +1259,7 @@ export default function LeadDetailPage() {
                     <div />
                   </div>
                 )}
+                */}
 
                 {/* Notes */}
                 <div>
@@ -1350,6 +1279,73 @@ export default function LeadDetailPage() {
                     Create Opportunity
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Opportunities table */}
+            {leadOpportunities.length > 0 && (
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/[0.06]">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-slate-800/30">
+                      <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Opportunity</th>
+                      <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Stage</th>
+                      <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Contact</th>
+                      <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Deal Value</th>
+                      <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Close Date</th>
+                      <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Notes / Comments</th>
+                      <th className="py-2.5 px-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leadOpportunities.map((opp: any) => (
+                      <tr key={opp.id} className="border-b border-slate-100 dark:border-white/[0.04] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors last:border-0">
+                        <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                          {opp.opportunityName || opp.title}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-blue-500/10 text-blue-400 border-blue-500/25 whitespace-nowrap">
+                            {opp.stage?.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500">
+                          {opp.contact?.name || opp.lead?.contactName || lead.contactName || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-emerald-400 whitespace-nowrap">
+                          {fmtUSD(opp.dealValue)}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
+                          {opp.expectedCloseDate ? fmtDate(opp.expectedCloseDate) : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 max-w-[200px] truncate">
+                          {opp.notes || '—'}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button title="View"
+                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition-colors"
+                              onClick={() => setOppViewModal(opp)}>
+                              <Eye size={12} />
+                            </button>
+                            <button title="Edit"
+                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition-colors"
+                              onClick={() => openOppEdit(opp)}>
+                              <Edit2 size={12} />
+                            </button>
+                            {(permissions.canDeleteOpportunities || (permissions.isSalesUser && opp.assignedToId === user?.id)) && (
+                              <button title="Delete"
+                                className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                                disabled={deleteOppMutation.isPending}
+                                onClick={() => setOppDeleteConfirmId(opp.id)}>
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -1644,6 +1640,7 @@ export default function LeadDetailPage() {
                     onChange={e => setOppEditForm((f: any) => ({ ...f, expectedCloseDate: e.target.value }))} />
                 </div>
               </div>
+              {/* ASSIGNED TO (managers only) - HIDDEN (do not remove)
               {!permissions.isSalesUser && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1657,6 +1654,7 @@ export default function LeadDetailPage() {
                   <div />
                 </div>
               )}
+              */}
               <div>
                 <label className="label mb-1 block">Notes / Comments</label>
                 <textarea className="input min-h-[70px] resize-none" value={oppEditForm.notes}
@@ -1699,7 +1697,8 @@ export default function LeadDetailPage() {
                 { label: 'Stage / Status',  value: OPP_STAGES.find(s => s.id === oppViewModal.stage)?.label || oppViewModal.stage },
                 { label: 'Deal Value',      value: fmtUSD(oppViewModal.dealValue) },
                 { label: 'Expected Close',  value: fmtDate(oppViewModal.expectedCloseDate) },
-                { label: 'Assigned To',     value: oppViewModal.assignedTo?.name || 'Unassigned' },
+                // ASSIGNED TO - HIDDEN (do not remove)
+                // { label: 'Assigned To',     value: oppViewModal.assignedTo?.name || 'Unassigned' },
                 { label: 'Created By',      value: oppViewModal.createdBy?.name },
                 { label: 'Created Date',    value: fmtDate(oppViewModal.createdAt) },
                 { label: 'Last Updated',    value: fmtDate(oppViewModal.updatedAt) },
@@ -1715,12 +1714,10 @@ export default function LeadDetailPage() {
                   <p className="text-sm text-slate-800 dark:text-slate-200">{oppViewModal.wonLostReason}</p>
                 </div>
               )}
-              {oppViewModal.notes && (
-                <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes / Comments</p>
-                  <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{oppViewModal.notes}</p>
-                </div>
-              )}
+              <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes / Comments</p>
+                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{oppViewModal.notes || '—'}</p>
+              </div>
             </div>
             <div className="flex gap-2 mt-4">
               <button className="btn-ghost flex-1" onClick={() => setOppViewModal(null)}>Close</button>
