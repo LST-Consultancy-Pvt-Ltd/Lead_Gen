@@ -1795,26 +1795,6 @@ export default function ActivitiesPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="label mb-1 block">
-                    Outcome <span className="text-red-400">*</span>
-                  </label>
-                  <textarea
-                    className="input min-h-[96px]"
-                    placeholder="What happened? e.g. Client interested, wants proposal"
-                    maxLength={1000}
-                    {...register("outcome")}
-                  />
-                  <p className="text-[10px] text-slate-600 mt-1 text-right">
-                    {outcome.length}/1000
-                  </p>
-                  {errors.outcome && (
-                    <p className="text-xs text-red-400 mt-1">
-                      {errors.outcome.message as string}
-                    </p>
-                  )}
-                </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label mb-1 block">
@@ -1844,6 +1824,26 @@ export default function ActivitiesPage() {
                       title="Notes"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="label mb-1 block">
+                    Outcome <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    className="input min-h-[96px]"
+                    placeholder="What happened? e.g. Client interested, wants proposal"
+                    maxLength={1000}
+                    {...register("outcome")}
+                  />
+                  <p className="text-[10px] text-slate-600 mt-1 text-right">
+                    {outcome.length}/1000
+                  </p>
+                  {errors.outcome && (
+                    <p className="text-xs text-red-400 mt-1">
+                      {errors.outcome.message as string}
+                    </p>
+                  )}
                 </div>
 
 

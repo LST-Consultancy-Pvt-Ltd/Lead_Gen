@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { activitiesApi } from "../../lib/api";
 import { Spinner, Avatar } from "../ui";
@@ -91,6 +92,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   const currentUser = useAuthStore((s) => s.user);
 
   const [isAdding, setIsAdding] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const [form, setForm] = useState(emptyForm(leadId, opportunityId));
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -99,6 +101,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   });
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const { data, isLoading } = useQuery({
     queryKey: ["activities", leadId, opportunityId],
@@ -210,7 +214,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
         </h3>
         {!isAdding && (
           <button
-            onClick={() => setIsAdding(true)}
+            onClick={() => { setIsAdding(true); setForm(emptyForm(leadId, opportunityId)); setFormKey(k => k + 1); }}
             className="btn-ghost text-xs flex items-center gap-1"
           >
             <Plus size={12} /> Add Activity
@@ -221,6 +225,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
       {/* Inline Add Form */}
       {isAdding && (
         <form
+          key={formKey}
           onSubmit={handleSubmit}
           className="rounded-xl border border-blue-500/20 bg-blue-500/[0.03] p-4 space-y-3"
         >
@@ -348,7 +353,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
           <p className="text-sm text-slate-500">No activities yet</p>
           {!isAdding && (
             <button
-              onClick={() => setIsAdding(true)}
+              onClick={() => { setIsAdding(true); setForm(emptyForm(leadId, opportunityId)); setFormKey(k => k + 1); }}
               className="btn-ghost text-xs mt-3 flex items-center gap-1 mx-auto"
             >
               <Plus size={12} /> Log first activity
@@ -356,217 +361,68 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
           )}
         </div>
       ) : (
-        <div className="space-y-2">
-          {activities.map((activity) => {
-            const Icon = activityIcons[activity.action] || FileText;
-            const colorClass = activityColors[activity.action] || activityColors.note;
-            const isOwner = activity.createdById === currentUser?.id;
-            const canEdit = isOwner || isAdmin;
-            const isEditingThis = editingId === activity.id;
-            const isDeletingThis = deletingId === activity.id;
+        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/[0.06]">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-slate-800/30">
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Type</th>
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Date</th>
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Duration</th>
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Next Action</th>
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Outcome</th>
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Notes</th>
+                <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Logged</th>
+                <th className="py-2.5 px-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {activities.map((activity) => {
+                const Icon = activityIcons[activity.action] || FileText;
+                const colorClass = activityColors[activity.action] || activityColors.note;
+                const isOwner = activity.createdById === currentUser?.id;
+                const canEdit = isOwner || isAdmin;
 
-            return (
-              <div
-                key={activity.id}
-                className="rounded-xl border border-slate-200 dark:border-white/[0.06] p-4"
-              >
-                {isEditingThis ? (
-                  /* ── Inline edit form ── */
-                  <div className="space-y-3">
-                    {/* Row 1: Duration + Activity Type */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label text-xs">Duration (mins)</label>
-                        <input
-                          type="number"
-                          min="1"
-                          className="input h-9 text-xs"
-                          placeholder="e.g. 30"
-                          value={editForm.duration}
-                          onChange={(e) => setEditForm((f) => ({ ...f, duration: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="label text-xs">Activity Type</label>
-                        <select
-                          value={editForm.type}
-                          onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}
-                          className="input h-9 text-xs"
-                        >
-                          {ACTIVITY_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    {/* Row 2: Next Action Date + Activity Date */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label text-xs">Next Action Date <span className="text-red-400">*</span></label>
-                        <input
-                          type="date"
-                          value={editForm.nextActionDate}
-                          min={getToday()}
-                          onChange={(e) => setEditForm((f) => ({ ...f, nextActionDate: e.target.value }))}
-                          className="input h-9 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="label text-xs">Activity Date <span className="text-red-400">*</span></label>
-                        <input
-                          type="date"
-                          value={editForm.activityDate}
-                          max={getToday()}
-                          onChange={(e) => setEditForm((f) => ({ ...f, activityDate: e.target.value }))}
-                          className="input h-9 text-xs"
-                        />
-                      </div>
-                    </div>
-                    {/* Row 3: Outcome */}
-                    <div>
-                      <label className="label text-xs">Outcome <span className="text-red-400">*</span></label>
-                      <input
-                        type="text"
-                        value={editForm.outcome}
-                        onChange={(e) => setEditForm((f) => ({ ...f, outcome: e.target.value }))}
-                        className="input h-9 text-xs"
-                        placeholder="e.g. Connected, Left voicemail…"
-                      />
-                    </div>
-                    {/* Row 4: Notes */}
-                    <div>
-                      <label className="label text-xs">Notes/Description <span className="text-red-400">*</span></label>
-                      <textarea
-                        value={editForm.description}
-                        onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                        className="input min-h-[72px] text-xs resize-none"
-                        placeholder="What happened during this activity?"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        className="btn-primary flex-1 h-9 text-xs"
-                        onClick={() => handleSaveEdit(activity.id)}
-                        disabled={updateMutation.isPending}
-                      >
-                        {updateMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                        Save
-                      </button>
-                      <button
-                        className="btn-ghost flex-1 h-9 text-xs"
-                        onClick={() => setEditingId(null)}
-                        disabled={updateMutation.isPending}
-                      >
-                        <X size={13} /> Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : viewingId === activity.id ? (
-                  /* ── Inline view panel ── */
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}>
-                          <Icon size={15} />
-                        </div>
-                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 capitalize">
-                          {activity.action?.replace(/_/g, " ")}
-                        </span>
-                      </div>
-                      <button className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" onClick={() => setViewingId(null)}>
-                        <X size={14} />
-                      </button>
-                    </div>
-                    <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Duration (mins)</p>
-                          <p className="text-sm text-slate-800 dark:text-slate-200">{activity.duration ?? '—'}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Activity Type</p>
-                          <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{activity.action?.replace(/_/g, " ") || '—'}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Next Action Date</p>
-                          <p className="text-sm text-slate-700 dark:text-slate-300">{activity.nextActionDate ? new Date(activity.nextActionDate).toLocaleDateString() : '—'}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Activity Date</p>
-                          <p className="text-sm text-slate-700 dark:text-slate-300">{activity.activityDate ? new Date(activity.activityDate).toLocaleDateString() : '—'}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Outcome</p>
-                          <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">{activity.outcome || '—'}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Notes</p>
-                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{activity.description || '—'}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-white/[0.06]">
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Logged</p>
-                          <p className="text-sm text-slate-700 dark:text-slate-300">{timeAgo(activity.createdAt)}</p>
-                        </div>
-                        {activity.createdBy?.name && (
-                          <div>
-                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Created By</p>
-                            <div className="flex items-center gap-1.5">
-                              <Avatar initials={getInitials(activity.createdBy.name)} size="xs" />
-                              <span className="text-sm text-slate-700 dark:text-slate-300">{activity.createdBy.name}</span>
-                            </div>
+                /* ── Old inline view/edit rows — moved to popup modals below (do not remove) ──
+                const isEditingThis = editingId === activity.id;
+                const isDeletingThis = deletingId === activity.id;
+                if (isEditingThis || viewingId === activity.id) {
+                  return (
+                    <tr key={activity.id}>
+                      <td colSpan={8} className="p-3">
+                        {isEditingThis ? (
+                          <div className="space-y-3">
+                            ... inline edit form ...
                           </div>
-                        )}
-                      </div>
-                    </div>
-                    <button className="btn-ghost w-full h-8 text-xs" onClick={() => setViewingId(null)}>
-                      Close
-                    </button>
-                  </div>
-                ) : isDeletingThis ? (
-                  /* ── Delete confirmation ── */
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}>
-                      <Icon size={16} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Are you sure you want to delete this activity?</p>
-                      <div className="flex gap-2">
-                        <button
-                          className="btn-primary h-8 text-xs px-4 bg-red-500 hover:bg-red-600 border-red-500"
-                          onClick={() => handleDelete(activity.id)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          {deleteMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
-                          Yes, Delete
-                        </button>
-                        <button className="btn-ghost h-8 text-xs px-4" onClick={() => setDeletingId(null)}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* ── Normal read-only card ── */
-                  <div>
-                    {/* Top row: icon + type + timestamp + action icons — all on one line */}
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}>
-                          <Icon size={15} />
+                        ) : viewingId === activity.id ? (
+                          <div className="space-y-3">
+                            ... inline view panel ...
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                }
+                ── end old inline code ── */
+
+                return (
+                  <tr key={activity.id} className="border-b border-slate-100 dark:border-white/[0.04] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors last:border-0">
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+                          <Icon size={11} />
                         </div>
-                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 capitalize truncate">
-                          {activity.action?.replace(/_/g, " ")}
-                        </span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 capitalize whitespace-nowrap">{activity.action?.replace(/_/g, " ")}</span>
                       </div>
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.activityDate ? new Date(activity.activityDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.duration != null ? `${activity.duration} mins` : '—'}</td>
+                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.nextActionDate ? new Date(activity.nextActionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">{activity.outcome || '—'}</td>
+                    <td className="py-2.5 px-3 text-slate-500 max-w-[180px] truncate">{activity.description || '—'}</td>
+                    <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap">{timeAgo(activity.createdAt)}</td>
+                    <td className="py-2.5 px-3">
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        <span className="text-xs text-slate-400 whitespace-nowrap">{timeAgo(activity.createdAt)}</span>
-                        <button title="View details" className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 transition-colors ml-1" onClick={() => setViewingId(activity.id)}>
+                        <button title="View details" className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 transition-colors" onClick={() => setViewingId(activity.id)}>
                           <Eye size={12} />
                         </button>
                         {canEdit && (
@@ -580,43 +436,175 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                           </button>
                         )}
                       </div>
-                    </div>
-                    {/* All fields */}
-                    <div className="mt-2 space-y-1">
-                      <div className="flex gap-2">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Activity Date</span>
-                        <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0">{activity.activityDate ? new Date(activity.activityDate).toLocaleDateString() : '—'}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Duration</span>
-                        <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0">{activity.duration != null ? `${activity.duration} mins` : '—'}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Next Action</span>
-                        <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0">{activity.nextActionDate ? new Date(activity.nextActionDate).toLocaleDateString() : '—'}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Outcome</span>
-                        <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0">{activity.outcome || '—'}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider min-w-[88px] flex-shrink-0 pt-px">Notes</span>
-                        <span className="text-xs text-slate-700 dark:text-slate-300 break-words min-w-0 whitespace-pre-wrap">{activity.description || '—'}</span>
-                      </div>
-                      {activity.createdBy?.name && (
-                        <div className="flex items-center gap-1.5 pt-1 text-xs text-slate-400">
-                          <Avatar initials={getInitials(activity.createdBy.name)} size="xs" />
-                          <span>{activity.createdBy.name}</span>
-                        </div>
-                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Activity View Modal ── */}
+      {mounted && viewingId && (() => {
+        const viewActivity = activities.find(a => a.id === viewingId);
+        if (!viewActivity) return null;
+        const ViewIcon = activityIcons[viewActivity.action] || FileText;
+        const viewColorClass = activityColors[viewActivity.action] || activityColors.note;
+        return createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${viewColorClass}`}>
+                    <ViewIcon size={15} />
+                  </div>
+                  <h3 className="section-title capitalize">{viewActivity.action?.replace(/_/g, " ")}</h3>
+                </div>
+                <button onClick={() => setViewingId(null)}>
+                  <X size={16} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {[
+                  { label: 'Activity Date',  value: viewActivity.activityDate ? new Date(viewActivity.activityDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                  { label: 'Duration',       value: viewActivity.duration != null ? `${viewActivity.duration} mins` : '—' },
+                  { label: 'Activity Type',  value: viewActivity.action?.replace(/_/g, " ") },
+                  { label: 'Next Action',    value: viewActivity.nextActionDate ? new Date(viewActivity.nextActionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                  { label: 'Outcome',        value: viewActivity.outcome || '—' },
+                  { label: 'Logged',         value: timeAgo(viewActivity.createdAt) },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{value || '—'}</p>
+                  </div>
+                ))}
+                {viewActivity.description && (
+                  <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes / Description</p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{viewActivity.description}</p>
+                  </div>
+                )}
+                {viewActivity.createdBy?.name && (
+                  <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Created By</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Avatar initials={getInitials(viewActivity.createdBy.name)} size="xs" />
+                      <p className="text-sm text-slate-800 dark:text-slate-200">{viewActivity.createdBy.name}</p>
                     </div>
                   </div>
                 )}
               </div>
-            );
-          })}
+              <div className="mt-4">
+                <button className="btn-ghost w-full" onClick={() => setViewingId(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        , document.body);
+      })()}
+
+      {/* ── Activity Edit Modal ── */}
+      {mounted && editingId && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="section-title">Edit Activity</h3>
+              <button onClick={() => setEditingId(null)}>
+                <X size={16} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              {/* Row 1: Duration + Activity Type */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label mb-1 block">Duration (mins)</label>
+                  <input type="number" min="1" className="input" placeholder="e.g. 30"
+                    value={editForm.duration}
+                    onChange={(e) => setEditForm((f) => ({ ...f, duration: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label mb-1 block">Activity Type</label>
+                  <select className="input" value={editForm.type}
+                    onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}>
+                    {ACTIVITY_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {/* Row 2: Next Action Date + Activity Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label mb-1 block">Next Action Date <span className="text-red-400">*</span></label>
+                  <input type="date" className="input" value={editForm.nextActionDate}
+                    min={getToday()}
+                    onChange={(e) => setEditForm((f) => ({ ...f, nextActionDate: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label mb-1 block">Activity Date <span className="text-red-400">*</span></label>
+                  <input type="date" className="input" value={editForm.activityDate}
+                    max={getToday()}
+                    onChange={(e) => setEditForm((f) => ({ ...f, activityDate: e.target.value }))} />
+                </div>
+              </div>
+              {/* Outcome */}
+              <div>
+                <label className="label mb-1 block">Outcome <span className="text-red-400">*</span></label>
+                <input type="text" className="input" value={editForm.outcome}
+                  onChange={(e) => setEditForm((f) => ({ ...f, outcome: e.target.value }))}
+                  placeholder="e.g. Connected, Left voicemail…" />
+              </div>
+              {/* Notes */}
+              <div>
+                <label className="label mb-1 block">Notes/Description <span className="text-red-400">*</span></label>
+                <textarea className="input min-h-[72px] resize-none" value={editForm.description}
+                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="What happened during this activity?" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button className="btn-ghost flex-1" onClick={() => setEditingId(null)}>Cancel</button>
+                <button className="btn-primary flex-1" onClick={() => handleSaveEdit(editingId)}
+                  disabled={updateMutation.isPending}>
+                  {updateMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+      , document.body)}
+
+      {/* ── Delete Activity Popup ── */}
+      {mounted && deletingId && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Delete Activity</h3>
+                <p className="text-sm text-slate-500 mt-1">Are you sure you want to delete this activity? This action cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => setDeletingId(null)}
+              >
+                No, Cancel
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+                onClick={() => handleDelete(deletingId)}
+              >
+                {deleteMutation.isPending ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Yes, Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
 
     </div>
   );
