@@ -387,6 +387,7 @@ async function importLeadsFromExcel(req, res) {
 
     // ── Row-by-row insert with Phone OR Email duplicate check ─────────────
     let insertedCount = 0;
+    const pendingNotifications = [];
     const excelImportErrors = skippedRows.map(s => ({
       row: s.row,
       missingFields: s.missingFields,
@@ -514,11 +515,27 @@ async function importLeadsFromExcel(req, res) {
           }
         }
 
-        await prisma.lead.create({ data: { ...leadData, status: resolvedStatus, source: resolvedSource } });
+        const createdLead = await prisma.lead.create({ data: { ...leadData, status: resolvedStatus, source: resolvedSource } });
         insertedCount++;
+        if (leadData.assignedToId && leadData.assignedToId !== req.user.id) {
+          pendingNotifications.push({
+            userId: leadData.assignedToId,
+            organizationId,
+            type: 'lead_assigned',
+            title: 'New lead assigned to you',
+            message: `Lead "${createdLead.companyName}" was assigned to you via Excel import`,
+            entityType: 'Lead',
+            entityId: createdLead.id,
+            isRead: false,
+          });
+        }
       } catch (rowErr) {
         excelImportErrors.push({ row: i + 2, error: rowErr.message });
       }
+    }
+
+    if (pendingNotifications.length > 0) {
+      await prisma.notification.createMany({ data: pendingNotifications });
     }
 
     logger.info('Excel import completed', {
