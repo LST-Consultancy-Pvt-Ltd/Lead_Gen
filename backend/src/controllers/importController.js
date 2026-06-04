@@ -137,6 +137,17 @@ async function importLeads(req, res) {
         // Duplicate check: Phone OR Email (not companyName)
         const contactPhone = String(row.contactPhone || row['Contact Phone'] || row.phone || '').trim() || null;
 
+        if (contactPhone) {
+          if (!/^\d+$/.test(contactPhone)) {
+            importErrors.push({ row: i + 2, field: 'contactPhone', error: 'Phone number must contain digits only (must be between 3 and 16 digits)', value: contactPhone });
+            continue;
+          }
+          if (contactPhone.length < 3 || contactPhone.length > 16) {
+            importErrors.push({ row: i + 2, field: 'contactPhone', error: 'Phone number must be between 3 and 16 digits', value: contactPhone });
+            continue;
+          }
+        }
+
         const dupOrConditions = [];
         if (contactEmail) dupOrConditions.push({ contactEmail: { equals: contactEmail, mode: 'insensitive' } });
         if (contactPhone) dupOrConditions.push({ contactPhone: { equals: contactPhone, mode: 'insensitive' } });
@@ -438,8 +449,12 @@ async function importLeadsFromExcel(req, res) {
       }
 
       const phoneVal = String(record['Phone'] ?? '').trim();
-      if (phoneVal && !/^[+\d\s\-().]{6,20}$/.test(phoneVal)) {
-        fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Only allowed (6–20 digits)' });
+      if (phoneVal) {
+        if (!/^\d+$/.test(phoneVal)) {
+          fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Phone number must contain digits only (no spaces, dashes, or special characters)' });
+        } else if (phoneVal.length < 3 || phoneVal.length > 16) {
+          fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Phone number must be between 3 and 16 digits' });
+        }
       }
 
       const scoreRaw = record['Score'];
