@@ -45,7 +45,12 @@ class OpportunityService {
 
   _buildWhere(user) {
     const where = { organizationId: user.organizationId };
-    if (user.role === 'sales_user') where.assignedToId = user.id;
+    if (user.role === 'sales_user') {
+      where.OR = [
+        { assignedToId: user.id },
+        { lead: { assignedToId: user.id } },
+      ];
+    }
     return where;
   }
 

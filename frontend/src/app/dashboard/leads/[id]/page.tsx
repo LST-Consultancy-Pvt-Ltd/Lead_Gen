@@ -1294,7 +1294,7 @@ export default function LeadDetailPage() {
                       <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Deal Value</th>
                       <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Close Date</th>
                       <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Notes / Comments</th>
-                      <th className="py-2.5 px-3"></th>
+                      <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1303,10 +1303,8 @@ export default function LeadDetailPage() {
                         <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
                           {opp.opportunityName || opp.title}
                         </td>
-                        <td className="py-2.5 px-3">
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-blue-500/10 text-blue-400 border-blue-500/25 whitespace-nowrap">
-                            {opp.stage?.replace(/_/g, ' ')}
-                          </span>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 capitalize whitespace-nowrap">
+                          {opp.stage?.replace(/_/g, ' ')}
                         </td>
                         <td className="py-2.5 px-3 text-slate-500">
                           {opp.contact?.name || opp.lead?.contactName || lead.contactName || '—'}

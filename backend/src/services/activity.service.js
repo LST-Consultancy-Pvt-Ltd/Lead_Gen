@@ -401,7 +401,10 @@ class ActivityService {
           .findMany({
             where: {
               organizationId: user.organizationId,
-              assignedToId: user.id,
+              OR: [
+                { assignedToId: user.id },
+                { lead: { assignedToId: user.id } },
+              ],
             },
             select: { id: true },
           })
@@ -578,7 +581,10 @@ class ActivityService {
           .findMany({
             where: {
               organizationId: user.organizationId,
-              assignedToId: user.id,
+              OR: [
+                { assignedToId: user.id },
+                { lead: { assignedToId: user.id } },
+              ],
             },
             select: { id: true },
           })
