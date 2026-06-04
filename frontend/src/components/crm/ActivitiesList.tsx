@@ -380,7 +380,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
             <tbody>
               {activities.map((activity) => {
                 const isOwner = activity.createdById === currentUser?.id;
-                const canEdit = isOwner || isAdmin;
+                const canEdit = isOwner || isAdmin || currentUser?.role === 'sales_user' || currentUser?.role === 'manager';
 
                 /* ── Old inline view/edit rows — moved to popup modals below (do not remove) ──
                 const isEditingThis = editingId === activity.id;
