@@ -818,7 +818,7 @@ export default function LeadsPage() {
               <div>
                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Missing Required Fields</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {missingPopup.rows.length} row{missingPopup.rows.length !== 1 ? 's were' : ' was'} skipped — all fields are required. Fill in the missing values and re-upload.
+                  {missingPopup.rows.length} row{missingPopup.rows.length !== 1 ? 's were' : ' was'} skipped — Lead Type, Contact Name, and Lead Status are required. Fill in the missing values and re-upload.
                 </p>
               </div>
             </div>
@@ -851,7 +851,7 @@ export default function LeadsPage() {
             </div>
 
             <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
-              Every column in the template is required. Please fill all fields for each row before uploading.
+              Only Lead Type, Contact Name, and Lead Status are required. All other fields are optional.
             </p>
             <button
               className="btn-primary w-full"

@@ -302,7 +302,7 @@ async function importLeadsFromExcel(req, res) {
       });
     }
 
-    const { records } = validation;
+    const { records, skippedRows = [] } = validation;
     const organizationId = req.user.organizationId;
 
     // ── Assign To lookup — one query for all unique names ──────────────────
@@ -367,18 +367,18 @@ async function importLeadsFromExcel(req, res) {
         : (userMap.get(record['Assign Lead To']?.toString().trim().toLowerCase()) || null);
 
       return {
-        companyName:  String(record['Company Name']).trim(),
+        companyName:  record['Company Name']?.toString().trim() || '-',
         contactName:  record['Contact Name']?.toString().trim() || null,
-        contactTitle: record['Job Title']?.toString().trim() || null,
+        contactTitle: record['Job Title']?.toString().trim() || '-',
         contactEmail: record['Email']?.toString().trim().toLowerCase() || null,
         contactPhone: record['Phone']?.toString().trim() || null,
         assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
         leadType:     normaliseLeadType(record['Lead Type']),
         website:      record['Website']?.toString().trim() || null,
-        industry:     record['Industry']?.toString().trim() || null,
-        location:     record['Location']?.toString().trim() || null,
-        notes:        record['Description / Notes']?.toString().trim() || null,
+        industry:     record['Industry']?.toString().trim() || '-',
+        location:     record['Location']?.toString().trim() || '-',
+        notes:        record['Description / Notes']?.toString().trim() || '-',
         followUpDate,
         organizationId,
         createdById:  req.user.id,
@@ -387,7 +387,12 @@ async function importLeadsFromExcel(req, res) {
 
     // ── Row-by-row insert with Phone OR Email duplicate check ─────────────
     let insertedCount = 0;
-    const excelImportErrors = [];
+    const excelImportErrors = skippedRows.map(s => ({
+      row: s.row,
+      missingFields: s.missingFields,
+      error: `Row ${s.row}: Missing required field(s): ${s.missingFields.join(', ')}`,
+      isMissingError: true,
+    }));
 
     for (let i = 0; i < leadsData.length; i++) {
       const leadData = leadsData[i];
@@ -421,27 +426,7 @@ async function importLeadsFromExcel(req, res) {
         });
         continue;
       }
-      const resolvedSource = (rawSource && validSources.has(rawSource)) ? rawSource : (defaultSource ?? 'Excel Import');
-
-      // ── Required field check (all columns must have a value) ──────────────
-      const REQUIRED_FIELDS = [
-        'Company Name', 'Lead Type', 'Contact Name', 'Job Title', 'Email',
-        'Phone', 'Lead Status', 'Lead Source', 'Score', 'Follow-up Date',
-        'Assign Lead To', 'Website', 'Industry', 'Location', 'Description / Notes',
-      ];
-      const missingFields = REQUIRED_FIELDS.filter(f => {
-        const val = record[f];
-        return val === undefined || val === null || String(val).trim() === '';
-      });
-      if (missingFields.length > 0) {
-        excelImportErrors.push({
-          row: i + 2,
-          missingFields,
-          error: `Row ${i + 2}: Missing required field(s): ${missingFields.join(', ')}`,
-          isMissingError: true,
-        });
-        continue;
-      }
+      const resolvedSource = (rawSource && validSources.has(rawSource)) ? rawSource : null;
 
       // ── Field validations (Email, Phone, Score, Date, Website) ───────────
       const fieldErrors = [];
