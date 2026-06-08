@@ -137,7 +137,7 @@ export default function LeadDiscoveryPage() {
   const [selectedDecisionMakers, setSelectedDecisionMakers] = useState<string[]>([]);
   const [contactChannel, setContactChannel] = useState('');
   const [seniorityLevel, setSeniorityLevel] = useState('');
-  const [leadCount, setLeadCount] = useState(50);
+  const [leadCount, setLeadCount] = useState(1);
 
   // Products mode — mandatory
   const [productName, setProductName] = useState('');
@@ -151,7 +151,7 @@ export default function LeadDiscoveryPage() {
   const [productDecisionMakers, setProductDecisionMakers] = useState<string[]>([]);
   const [productContactChannel, setProductContactChannel] = useState('');
   const [productSeniorityLevel, setProductSeniorityLevel] = useState('');
-  const [productLeadCount, setProductLeadCount] = useState(50);
+  const [productLeadCount, setProductLeadCount] = useState(1);
   const [annualRevenue, setAnnualRevenue] = useState('');
 
   // Product supplementary inputs
@@ -634,11 +634,33 @@ export default function LeadDiscoveryPage() {
 
                 <div>
                   <MandatoryLabel>Number of Leads</MandatoryLabel>
-                  <div className="flex items-center gap-3 mt-1">
-                    <input type="range" aria-label="Number of leads" min={10} max={500} step={10} value={leadCount}
-                      onChange={e => setLeadCount(Number(e.target.value))}
-                      className="flex-1 accent-violet-500" />
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 min-w-[80px] text-right">{leadCount} leads</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      aria-label="Decrease lead count"
+                      onClick={() => setLeadCount(c => Math.max(1, c - 1))}
+                      className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
+                    >−</button>
+                    <input
+                      type="number"
+                      aria-label="Number of leads"
+                      min={1}
+                      max={500}
+                      step={1}
+                      value={leadCount}
+                      onChange={e => {
+                        const val = Number(e.target.value);
+                        if (!isNaN(val)) setLeadCount(Math.min(500, Math.max(1, val)));
+                      }}
+                      className="w-24 text-center input text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Increase lead count"
+                      onClick={() => setLeadCount(c => Math.min(500, c + 1))}
+                      className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
+                    >+</button>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">leads (1 – 500)</span>
                   </div>
                 </div>
               </div>
@@ -885,11 +907,33 @@ export default function LeadDiscoveryPage() {
                     <p className="label mb-2">Number of Leads to Generate
                       <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
                     </p>
-                    <div className="flex items-center gap-3">
-                      <input type="range" aria-label="Number of leads" min={10} max={500} step={10} value={productLeadCount}
-                        onChange={e => setProductLeadCount(Number(e.target.value))}
-                        className="flex-1 accent-violet-500" />
-                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 min-w-[80px] text-right">{productLeadCount} leads</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <button
+                        type="button"
+                        aria-label="Decrease lead count"
+                        onClick={() => setProductLeadCount(c => Math.max(1, c - 1))}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
+                      >−</button>
+                      <input
+                        type="number"
+                        aria-label="Number of leads"
+                        min={1}
+                        max={500}
+                        step={1}
+                        value={productLeadCount}
+                        onChange={e => {
+                          const val = Number(e.target.value);
+                          if (!isNaN(val)) setProductLeadCount(Math.min(500, Math.max(1, val)));
+                        }}
+                        className="w-24 text-center input text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <button
+                        type="button"
+                        aria-label="Increase lead count"
+                        onClick={() => setProductLeadCount(c => Math.min(500, c + 1))}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
+                      >+</button>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">leads (1 – 500)</span>
                     </div>
                   </div>
                 </div>

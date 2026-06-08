@@ -540,7 +540,7 @@ export default function LeadsPage() {
                     <td className="px-4 py-3">
                       {(l.leadType === 'product' || l.subSource === 'product') ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20">Product</span>
-                      ) : (l.leadType === 'service' || l.leadType === 'services' || l.subSource === 'service') ? (
+                      ) : (l.leadType === 'service' || l.leadType === 'services' || l.leadType === 'position' || l.subSource === 'service' || l.subSource === 'position') ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Services</span>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
