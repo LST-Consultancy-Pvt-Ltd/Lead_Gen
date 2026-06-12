@@ -8,7 +8,7 @@
 
 const prisma = require('../utils/prisma');
 const { success, error } = require('../utils/response');
-const { runProductDiscoveryScan, generateProductPrompt } = require('../services/productDiscoveryService');
+const { runProductDiscoveryScan, generateProductPrompt, normJobTitle } = require('../services/productDiscoveryService');
 const { runBackgroundEnrichment, runApolloEnrichmentBackground } = require('../services/leadEnrichmentPipeline');
 const { analyzeLeadIntent, parseUserPrompt } = require('../services/aiService');
 const logger = require('../utils/logger');
@@ -16,6 +16,21 @@ const { checkLeadQuota, incrementLeadUsage } = require('../utils/leadQuota');
 
 function cleanValue(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+// Per-field input budgets (chars). Each offer section gets its OWN generous cap
+// so a long Description can never silently push the user's Skills / Exclusions
+// out of the window. The textarea is unbounded; these caps are the only limit,
+// and they apply per field rather than to one shared blob.
+const OFFER_LIMITS = {
+  details:    8000,
+  buyerHints: 4000,
+  exclusions: 2000,
+};
+
+function capValue(value, max) {
+  const v = cleanValue(value);
+  return v.length > max ? v.slice(0, max) : v;
 }
 
 function joinOfferSections(sections = []) {
@@ -26,13 +41,15 @@ function buildServiceOfferInput(payload = {}) {
   const offerName = cleanValue(payload.serviceName)
     || cleanValue(payload.positionTitle)
     || cleanValue(payload.offerName);
-  const details = cleanValue(payload.offerDetails)
-    || cleanValue(payload.description)
-    || cleanValue(payload.valueProp);
-  const buyerHints = cleanValue(payload.buyerHint)
-    || cleanValue(payload.skillsRequired)
-    || cleanValue(payload.keywords);
-  const exclusions = cleanValue(payload.excludeList);
+  const details = capValue(
+    cleanValue(payload.offerDetails) || cleanValue(payload.description) || cleanValue(payload.valueProp),
+    OFFER_LIMITS.details,
+  );
+  const buyerHints = capValue(
+    cleanValue(payload.buyerHint) || cleanValue(payload.skillsRequired) || cleanValue(payload.keywords),
+    OFFER_LIMITS.buyerHints,
+  );
+  const exclusions = capValue(payload.excludeList, OFFER_LIMITS.exclusions);
 
   return {
     type: 'service',
@@ -54,8 +71,11 @@ function buildServiceOfferInput(payload = {}) {
 
 function buildProductOfferInput(payload = {}) {
   const productName = cleanValue(payload.productName);
-  const details = cleanValue(payload.valueProposition) || cleanValue(payload.productDescription);
-  const buyerHints = cleanValue(payload.buyerHint);
+  const details = capValue(
+    cleanValue(payload.valueProposition) || cleanValue(payload.productDescription),
+    OFFER_LIMITS.details,
+  );
+  const buyerHints = capValue(payload.buyerHint, OFFER_LIMITS.buyerHints);
   const docText = cleanValue(payload.productDocumentText);
   const productUrl = cleanValue(payload.productUrl);
 
@@ -286,10 +306,10 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       },
       select: { id: true, jobPostings: true },
     });
-    const titleLower = jobTitle.toLowerCase();
+    const titleNorm = normJobTitle(jobTitle);
     const hasSameJob = allCompanyLeads.some(lead =>
       Array.isArray(lead.jobPostings) && lead.jobPostings.some(
-        jp => (jp.title || '').toLowerCase() === titleLower
+        jp => normJobTitle(jp.title || '') === titleNorm
       )
     );
     if (hasSameJob) {

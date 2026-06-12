@@ -40,6 +40,18 @@ const TEST_MAX_PAGES = 1;
 function normName(n = '') {
   return n.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
+// Normalize a job title for dedup so the same role reworded across portals
+// ("Senior NetSuite Developer" vs "Sr. NetSuite Developer (Remote)") collapses to
+// one key, while genuinely different roles stay distinct.
+function normJobTitle(t = '') {
+  return t
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')                                   // drop "(remote)", "(US)" …
+    .replace(/\b(senior|sr|jr|junior|principal|staff)\b\.?/g, ' ') // seniority noise
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 function normDomain(url = '') {
   return url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase().trim();
 }
@@ -58,10 +70,147 @@ const AGGREGATOR_DOMAINS = [
   'jobstreet.com', 'totaljobs.com', 'reed.co.uk', 'lever.co', 'greenhouse.io',
   'workday.com', 'myworkdayjobs.com', 'wellfound.com', 'angel.co', 'crunchbase.com',
   'techcrunch.com', 'reddit.com', 'twitter.com', 'x.com', 'facebook.com', 'wikipedia.org',
+  // job aggregators that re-post listings — the "company" on these is the portal, not a real employer
+  'shine.com', 'bebee.com', 'theirstack.com', 'jora.com', 'talent.com', 'jooble.org',
+  'jobrapido.com', 'learn4good.com', 'glassdoor.co.in', 'foundit.in', 'whatjobs.com',
+  'jobsora.com', 'adzuna.com', 'jobcase.com', 'snagajob.com', 'builtin.com',
 ];
 function isAggregator(url = '') {
   const d = normDomain(url);
   return AGGREGATOR_DOMAINS.some(jb => d.includes(jb));
+}
+// Aggregator brand names (domain minus TLD) — used to reject leads whose COMPANY
+// NAME is itself a job board/portal (e.g. Google Jobs reports the employer as
+// "Shine.com" for a re-posted listing). Catches the case where there's no website.
+const AGGREGATOR_NAMES = new Set(
+  AGGREGATOR_DOMAINS.map(d => d.split('.')[0]).concat(['google jobs', 'jobs'])
+);
+function isAggregatorName(name = '') {
+  const raw = (name || '').toLowerCase().trim();
+  if (!raw) return false;
+  // A name that looks like a bare domain ("shine.com", "bebee") is a portal artifact,
+  // never a real employer. Real company names don't carry a TLD.
+  if (/\.(com|io|net|org|co|in|us|uk|me|ai)\b/.test(raw)) return true;
+  const n = normName(name);
+  // Exact whole-name match against a known portal brand (avoids flagging
+  // multi-word real names like "Shine Lawyers").
+  return AGGREGATOR_NAMES.has(n);
+}
+
+// Is this company the platform VENDOR itself (e.g. "Salesforce, Inc." for a
+// Salesforce-consulting offer)? The maker of the platform never buys its own
+// ecosystem service, so it must be excluded. Whole-word/phrase match so we don't
+// flag unrelated names that merely contain the token.
+function isVendorCompany(name, profile) {
+  const n = normName(name);
+  if (!n) return false;
+  return (profile?.vendorNames || []).some(v => {
+    const nv = normName(v);
+    if (!nv) return false;
+    return n === nv || n.startsWith(nv + ' ') || n.endsWith(' ' + nv) || n.includes(' ' + nv + ' ');
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Source routing — when the user names specific portals, search each of them.
+//   jobboard  → Google Jobs engine, results filtered to that board's `via`/domain
+//   site      → Google organic `site:<domain>` + AI extraction of company + intent
+// Unknown portals fall back to a best-effort organic keyword search.
+// ─────────────────────────────────────────────────────────────────────────────
+const SOURCE_REGISTRY = [
+  // Job boards (Google Jobs aggregates these; we keep only matching `via`)
+  { key: 'linkedin',     category: 'jobboard', domains: ['linkedin.com'],                       aliases: ['linkedin jobs', 'linkedin'] },
+  { key: 'indeed',       category: 'jobboard', domains: ['indeed.com'],                         aliases: ['indeed'] },
+  { key: 'glassdoor',    category: 'jobboard', domains: ['glassdoor.com', 'glassdoor.co.in'],   aliases: ['glassdoor'] },
+  { key: 'dice',         category: 'jobboard', domains: ['dice.com'],                           aliases: ['dice'] },
+  { key: 'wellfound',    category: 'jobboard', domains: ['wellfound.com', 'angel.co'],          aliases: ['wellfound', 'angellist', 'angel list'] },
+  { key: 'builtin',      category: 'jobboard', domains: ['builtin.com'],                        aliases: ['builtin', 'built in'] },
+  { key: 'ziprecruiter', category: 'jobboard', domains: ['ziprecruiter.com'],                   aliases: ['ziprecruiter', 'zip recruiter'] },
+  { key: 'monster',      category: 'jobboard', domains: ['monster.com'],                        aliases: ['monster'] },
+  { key: 'naukri',       category: 'jobboard', domains: ['naukri.com'],                         aliases: ['naukri'] },
+  // Community & discussion (site: organic + AI extraction)
+  { key: 'reddit',       category: 'site', domains: ['reddit.com'],                aliases: ['reddit', 'r/'] },
+  { key: 'quora',        category: 'site', domains: ['quora.com'],                 aliases: ['quora'] },
+  { key: 'hackernews',   category: 'site', domains: ['news.ycombinator.com'],      aliases: ['hacker news', 'hackernews', 'ycombinator'] },
+  { key: 'spiceworks',   category: 'site', domains: ['community.spiceworks.com', 'spiceworks.com'], aliases: ['spiceworks'] },
+  { key: 'stackoverflow',category: 'site', domains: ['stackoverflow.com'],         aliases: ['stack overflow', 'stackoverflow'] },
+  { key: 'devto',        category: 'site', domains: ['dev.to'],                    aliases: ['dev.to', 'dev to', 'devto'] },
+  { key: 'medium',       category: 'site', domains: ['medium.com'],               aliases: ['medium'] },
+  { key: 'hashnode',     category: 'site', domains: ['hashnode.com', 'hashnode.dev'], aliases: ['hashnode'] },
+  { key: 'dzone',        category: 'site', domains: ['dzone.com'],                 aliases: ['dzone'] },
+  { key: 'sitepoint',    category: 'site', domains: ['sitepoint.com'],             aliases: ['sitepoint'] },
+  // NetSuite ecosystem (best-effort)
+  { key: 'oraclecommunity', category: 'site', domains: ['community.oracle.com'],   aliases: ['oracle netsuite community', 'oracle community', 'netsuite community'] },
+  // Social (gated — low yield, attempted best-effort)
+  { key: 'linkedinposts',category: 'site', domains: ['linkedin.com/posts', 'linkedin.com/pulse'], aliases: ['linkedin posts', 'linkedin articles', 'linkedin groups'] },
+  { key: 'twitter',      category: 'site', domains: ['twitter.com', 'x.com'],      aliases: ['x (twitter)', 'twitter', ' x '] },
+  { key: 'facebook',     category: 'site', domains: ['facebook.com'],              aliases: ['facebook professional groups', 'facebook groups', 'facebook'] },
+];
+
+// Match one free-text source string to a registry entry. Unknown strings become
+// a best-effort site source (if they look like a domain) or a keyword source.
+function matchSource(str = '') {
+  const s = (str || '').toLowerCase().trim();
+  if (!s) return null;
+  for (const entry of SOURCE_REGISTRY) {
+    if (entry.aliases.some(a => s.includes(a) || a.includes(s))) return entry;
+  }
+  const domainMatch = s.match(/([a-z0-9-]+\.)+[a-z]{2,}/);
+  if (domainMatch) return { key: domainMatch[0], category: 'site', domains: [domainMatch[0]], aliases: [] };
+  return { key: s.slice(0, 40), category: 'keyword', domains: [], aliases: [] };
+}
+
+// Merge AI-extracted (from the description) + UI-provided sources into a deduped
+// list of registry entries. Empty → caller falls back to the default engine.
+function resolveSources(profile, filters = {}) {
+  const raw = [
+    ...(Array.isArray(profile?.requestedSources) ? profile.requestedSources : []),
+    ...(Array.isArray(filters?.sources) ? filters.sources : []),
+  ].map(s => (typeof s === 'string' ? s : s?.name || '')).filter(Boolean);
+
+  const seen = new Set();
+  const out  = [];
+  for (const s of raw) {
+    const entry = matchSource(s);
+    if (!entry || seen.has(entry.key)) continue;
+    seen.add(entry.key);
+    out.push(entry);
+  }
+  return out;
+}
+
+// Relevance guard: does the job posting actually mention the technology/service?
+// Prevents generic role searches (e.g. "CRM Manager") from attaching unrelated
+// companies as leads. Safeguards keep it generic:
+//   - physical products: the ROLE is the proxy (a "Plant Engineer" posting won't
+//     contain "diesel generator"), so don't require a keyword mention.
+//   - no terms to match: can't filter, pass through (e.g. "offshore dev team").
+function jobMentionsCore(jr, terms = [], isPhysical = false) {
+  if (isPhysical) return true;
+  if (!terms.length) return true;
+  const hay = `${jr.title || ''} ${jr.description || ''} ${jr.company_name || ''}`.toLowerCase();
+  return terms.some(k => k && hay.includes(k.toLowerCase()));
+}
+
+// Is this posting a recruiter / staffing agency hiring for a CLIENT rather than
+// itself? Such postings aren't end-customer demand. Uses AI-generated phrases —
+// no static lists. Empty signals → never filters.
+function isStaffingPosting(jr, profile) {
+  const sig = profile?.staffingSignals || [];
+  if (!sig.length) return false;
+  const hay = `${jr.description || ''} ${jr.company_name || ''}`.toLowerCase();
+  return sig.some(p => p && hay.includes(p.toLowerCase()));
+}
+
+// Does a Google Jobs result originate from one of the requested job boards?
+function jobMatchesBoard(jr, boardDomains) {
+  const via = (jr.via || '').toLowerCase();
+  if (boardDomains.some(d => via.includes(d.split('.')[0]))) return true;
+  const links = [
+    ...(jr.apply_options || []).map(o => o.link || ''),
+    ...(jr.related_links || []).map(l => l.link || ''),
+  ];
+  return links.some(href => boardDomains.some(d => href.toLowerCase().includes(d)));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,6 +256,18 @@ Return ONLY valid JSON, no markdown:
   "isPhysicalProduct": true or false,
   "buyerType": "B2B" or "B2C" or "BOTH",
   "buyerDescription": "one sentence: who buys this and why",
+
+  "platformKeywords": [
+    "the SPECIFIC, uniquely-identifying brand/product/technology names — proper nouns someone would search by (e.g. Salesforce, NetSuite, SuiteCommerce, AWS, Snowflake, LangChain, Shopify, Kubernetes). MOST precise. Empty array if the offer has no specific named platform."
+  ],
+
+  "categoryKeywords": [
+    "GENERIC category / concept terms around the offer (e.g. CRM, ERP, cloud, AI, DevOps, ecommerce, data warehouse). Broader than platformKeywords — used for forum recall and as a fallback, NOT as the primary job filter. NOT full sentences. NOT the user's prompt title."
+  ],
+
+  "vendorNames": [
+    "the company/brand(s) that MAKE or OWN this platform/product (e.g. Salesforce, Oracle, NetSuite, Shopify). These are the vendor itself, NOT customers — they must never be returned as leads for an ecosystem service. Empty array if not applicable."
+  ],
 
   "searchStrategy": "APOLLO" or "SERP" or "BOTH",
 
@@ -158,9 +319,17 @@ Return ONLY valid JSON, no markdown:
     "phrase 3"
   ],
 
+  "staffingSignals": [
+    "phrases that appear in a JOB DESCRIPTION when a recruiter / staffing agency / IT body-shop is posting on behalf of a client, NOT hiring for itself (e.g. 'our client', 'on behalf of our client', 'we are recruiting for', 'staffing', 'C2C', 'contract role for our client', 'placement'). These postings are not end-customer demand."
+  ],
+
   "buyerSignals": [
     "phrase confirming a company NEEDS or USES this product",
     "phrase 2"
+  ],
+
+  "requestedSources": [
+    "any specific portal/website/platform the user EXPLICITLY named to search (e.g. LinkedIn, Indeed, Glassdoor, Reddit, Quora, Stack Overflow, Dev.to, Medium, Hacker News). Use the plain platform name. Empty array if the user named none."
   ]
 }
 
@@ -193,7 +362,17 @@ serpProfile: fill ONLY if searchStrategy is SERP or BOTH
   - rfpQueries: RFP/tender/procurement notice searches
   - retailerQueries: ONLY for B2C products — finding retailers/distributors
 
-sellerSignals: phrases that identify COMPETITOR companies to exclude from results`;
+sellerSignals: phrases that identify COMPETITOR companies to exclude from results
+
+staffingSignals: phrases in a JOB DESCRIPTION that reveal a recruiter / staffing agency / IT body-shop posting for a client rather than hiring for itself. These are not end-customer demand and are excluded. Empty array if not applicable.
+
+requestedSources: ONLY list platforms the user EXPLICITLY named in their text (job boards, forums, social, communities). Do NOT invent sources. If the user did not name any specific platform, return an empty array.
+
+platformKeywords: the MOST SPECIFIC, uniquely-identifying names for the technology — proper nouns (Salesforce, NetSuite, AWS, Snowflake, LangChain, Shopify, Kubernetes). Prefer these over generic words. A real buyer's job posting will name the platform. Empty if the offer genuinely has no specific platform (e.g. "offshore dev team").
+
+categoryKeywords: the GENERIC category/concept terms (CRM, ERP, cloud, AI, DevOps, ecommerce). Broader and noisier than platformKeywords — used only for forum recall and as a fallback when there is no platform term. Never put a generic category here AND in platformKeywords. Concise terms only, never sentences or the user's prompt heading.
+
+vendorNames: when the offer is a SERVICE around a third-party platform (e.g. "Salesforce consulting", "AWS migration"), name the platform's OWNER/MAKER (Salesforce, Amazon/AWS, Oracle, NetSuite, Snowflake, OpenAI…). The vendor is never a buyer of its own ecosystem services, so it is excluded from results. Leave empty for generic offers with no single owning vendor.`;
 
 async function buildProductProfile(productInput) {
   let urlText = '';
@@ -201,10 +380,14 @@ async function buildProductProfile(productInput) {
     urlText = (await fetchProductPageText(productInput.url)) || '';
   }
 
+  // The description arrives pre-budgeted per field by the controller (offer details
+  // + buyer hints + exclusions, each capped independently), so keep this cap large
+  // enough to hold the full assembled blob — nothing the user typed gets re-dropped.
+  // Scraped URL text and uploaded docs stay tightly capped; they're noisy by nature.
   const parts = [
     productInput.url         ? `Product URL: ${productInput.url}`                          : '',
     urlText                  ? `Page content:\n${urlText.slice(0, 1500)}`                  : '',
-    productInput.description ? `Description:\n${productInput.description.slice(0, 1500)}`  : '',
+    productInput.description ? `Description:\n${productInput.description.slice(0, 16000)}`  : '',
     productInput.docText     ? `Document:\n${productInput.docText.slice(0, 1500)}`         : '',
     productInput.content && !productInput.description && !productInput.docText
       ? `Info:\n${productInput.content.slice(0, 1000)}` : '',
@@ -265,6 +448,11 @@ async function buildProfileFromText(combined) {
       },
       sellerSignals: [],
       buyerSignals:  [],
+      requestedSources: [],
+      platformKeywords: [],
+      categoryKeywords: words ? [words] : [],
+      staffingSignals:  ['our client', 'on behalf of our client', 'we are recruiting for', 'staffing'],
+      vendorNames:   [],
     };
   }
 }
@@ -864,6 +1052,209 @@ async function runSerpSearch(profile, filters, tryAdd, rawTarget = 125, rawLeads
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SOURCED SEARCH — run ONLY the portals the user named (best-effort, all sources)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Query building blocks for sourced search.
+// A name >5 words is almost certainly the user's prompt heading, not a real term.
+function cleanTerm(t = '') {
+  const s = t.trim();
+  return s && s.split(/\s+/).length <= 5 ? s : '';
+}
+function sourceQueryTerms(profile) {
+  const sp = profile.serpProfile  || {};
+  const ap = profile.apolloProfile || {};
+  const titles = (sp.jobTitleSearches || ap.buyerTitles || []).map(cleanTerm).filter(Boolean).slice(0, 6);
+
+  // platform = SPECIFIC named tech (Salesforce, AWS, Snowflake) — drives precise
+  // job matching. category = GENERIC concepts (CRM, cloud, AI) — recall/fallback.
+  const platform = (profile.platformKeywords || []).map(cleanTerm).filter(Boolean).slice(0, 4);
+  let   category = (profile.categoryKeywords || []).map(cleanTerm).filter(Boolean);
+  // Fallback chain so generic offers with no explicit keywords still search:
+  // Apollo buyer keywords, then a sane slice of the product name (never the heading).
+  if (!platform.length && !category.length) {
+    category = (ap.buyerKeywords || []).map(cleanTerm).filter(Boolean);
+    if (!category.length && profile.productName) category = [profile.productName.split(/\s+/).slice(0, 3).join(' ')];
+  }
+  category = category.slice(0, 4);
+
+  return { titles, platform, category };
+}
+
+// "(SuiteCommerce OR NetSuite OR "Suite Script")" — phrases quoted, words bare.
+function orClause(terms) {
+  const parts = terms.map(t => (t.includes(' ') ? `"${t}"` : t));
+  return parts.length ? `(${parts.join(' OR ')})` : '';
+}
+const INTENT_CLAUSE = '(need OR needs OR looking OR hiring OR consultant OR developer OR help OR recommend OR migration OR implementation OR vendor OR agency OR partner OR issue)';
+
+// AI: pull real companies with buying intent out of organic search snippets.
+async function extractCompaniesFromSnippets(results, profile, sourceLabel) {
+  if (!results.length) return [];
+  const list = results
+    .map((r, i) => `[${i}] Title: ${r.title || ''}\nSnippet: ${r.snippet || ''}\nURL: ${r.link || ''}`)
+    .join('\n\n');
+  const systemPrompt = `You read posts/snippets from ${sourceLabel} about "${profile.productSummary || profile.productName}".
+For each snippet decide if it names a REAL company (not a product, subreddit, username, or generic term) showing BUYING INTENT or a need related to this offer.
+Return ONLY a JSON array: [{"index":0,"companyName":"...","buyingIntent":"why","isValid":true}]. isValid=false when there is no real company or no intent. Empty array if none.`;
+  try {
+    const raw    = await callOpenAI(systemPrompt, list, 800);
+    const m      = raw.match(/\[[\s\S]*\]/);
+    const parsed = m ? JSON.parse(m[0]) : [];
+    const leads  = [];
+    for (const item of parsed) {
+      if (!item.isValid || !item.companyName) continue;
+      const r = results[item.index];
+      if (!r) continue;
+      leads.push({
+        companyName: item.companyName.trim(),
+        website: '', industry: '', location: '', companySize: '',
+        description: (r.snippet || '').slice(0, 200), techStack: [],
+        signalType:  'community_intent',
+        signalText:  `${sourceLabel}: "${r.title || ''}" — ${item.buyingIntent || (r.snippet || '').slice(0, 120)}`,
+        confidence:  70, relevanceScore: 74,
+        contactName: null, contactTitle: null, contactEmail: null,
+        contactLinkedin: null, companyLinkedinUrl: null, jobPostings: [],
+        source:    `${sourceLabel} — ${r.link}`,
+        sourceUrl: r.link,
+        _rawDescription: r.snippet || '', _isJobLead: false,
+      });
+    }
+    return leads;
+  } catch (err) {
+    logger.warn('Source extraction failed', { sourceLabel, err: err.message });
+    return [];
+  }
+}
+
+async function runSourcedSearch(profile, filters, sources, tryAdd, rawTarget = 125, rawLeads = []) {
+  const { titles, platform, category } = sourceQueryTerms(profile);
+  // Job matching prefers the SPECIFIC platform terms (so "Salesforce" matches, a
+  // bare "CRM Manager" doesn't); falls back to category when there's no platform.
+  const matchTerms = platform.length ? platform : category;
+  // Forum/site search uses the broad set for recall.
+  const kw = orClause([...new Set([...platform, ...category])]);
+  // NOTE: region is intentionally NOT appended to organic queries — free-text
+  // "USA, UAE" forces Google to AND-match those tokens and kills results. Job
+  // boards still get location via fetchAllJobPages(filters). Forums aren't local.
+
+  // Fairness cap: no single query/source may contribute more than this slice of
+  // the buffer, so one dominant query (e.g. "Salesforce") can't fill all the
+  // slots and starve the other keywords and forum sources.
+  const PER_PASS_CAP = Math.max(3, Math.ceil(rawTarget / 6));
+
+  const jobBoards = sources.filter(s => s.category === 'jobboard');
+  const sites     = sources.filter(s => s.category === 'site');
+  const keywords  = sources.filter(s => s.category === 'keyword');
+
+  logger.info('Sourced search start', {
+    jobBoards: jobBoards.map(s => s.key),
+    sites:     sites.map(s => s.key),
+    keywords:  keywords.map(s => s.key),
+    platform, category, rawTarget,
+  });
+
+  // ── Job boards ──────────────────────────────────────────────────────────────
+  if (jobBoards.length) {
+    const boardDomains = jobBoards.flatMap(b => b.domains);
+    const maxPages = TEST_MODE ? TEST_MAX_PAGES : 3;
+
+    // (a) Google Jobs — queries are ROLE-anchored, never the bare brand. Searching
+    //     just "Salesforce" returns the vendor's own postings; "Salesforce
+    //     Administrator" / "Salesforce Developer" leans toward companies staffing
+    //     the skill. Keep only jobs that mention the specific tech and aren't
+    //     posted by a staffing agency.
+    const anchorWords = matchTerms.map(k => k.toLowerCase().split(/\s+/)[0]);
+    const techTitles  = titles.filter(t => anchorWords.some(w => w && t.toLowerCase().includes(w)));
+    const brand       = matchTerms[0];
+    let jobQueries    = [...techTitles];
+    if (brand) jobQueries.push(`${brand} developer`, `${brand} administrator`, `${brand} consultant`);
+    if (!jobQueries.length) jobQueries = titles;   // fallback only if we have nothing else
+    jobQueries = [...new Set(jobQueries)].slice(0, TEST_MODE ? 2 : 6);
+
+    for (const q of jobQueries) {
+      if (rawLeads.length >= rawTarget) break;
+      const jobs = await fetchAllJobPages(q, filters, maxPages);  // location via filters
+      let kept = 0;
+      for (const jr of jobs) {
+        if (rawLeads.length >= rawTarget || kept >= PER_PASS_CAP) break;  // fair share per query
+        if (!jobMatchesBoard(jr, boardDomains)) continue;                  // requested board only
+        if (!jobMentionsCore(jr, matchTerms, profile.isPhysicalProduct)) continue;  // must mention the tech
+        if (isStaffingPosting(jr, profile)) continue;                      // skip recruiter/body-shop postings
+        const lead = jobToLead(jr, profile);
+        if (lead && tryAdd(lead)) kept++;
+      }
+      logger.info('Job-board (Google Jobs) pass', { query: q, fetched: jobs.length, kept });
+      await sleep(TEST_MODE ? 300 : 600);
+    }
+
+    // (b) Direct site: search per board — reliable, doesn't depend on Google Jobs
+    //     attribution. Finds the board's own listing/discussion pages.
+    if (kw) {
+      for (const board of jobBoards) {
+        if (rawLeads.length >= rawTarget) break;
+        const root  = board.domains[0].split('/')[0];
+        const siteQ = `site:${board.domains[0]} ${kw} ${INTENT_CLAUSE}`;
+        try {
+          const results = (await searchOrganic(siteQ)).filter(r => (r.link || '').toLowerCase().includes(root));
+          const leads   = await extractCompaniesFromSnippets(results, profile, board.key);
+          let kept = 0;
+          for (const lead of leads) { if (rawLeads.length >= rawTarget || kept >= PER_PASS_CAP) break; if (tryAdd(lead)) kept++; }
+          logger.info('Job-board (site:) pass', { source: board.key, query: siteQ, found: leads.length });
+        } catch (err) {
+          logger.warn('Job-board site: failed', { source: board.key, err: err.message });
+        }
+        await sleep(TEST_MODE ? 300 : 600);
+      }
+    }
+  }
+
+  // ── Site sources (community / forums / social): site:<domain> + AI extraction ──
+  for (const site of sites) {
+    if (rawLeads.length >= rawTarget) break;
+    if (!kw) break;  // nothing meaningful to search for
+    const root = site.domains[0].split('/')[0];
+    // Two queries: brand+intent (high precision), then brand alone (recall).
+    const queries = [`site:${site.domains[0]} ${kw} ${INTENT_CLAUSE}`];
+    if (!TEST_MODE) queries.push(`site:${site.domains[0]} ${kw}`);
+    for (const siteQ of queries) {
+      if (rawLeads.length >= rawTarget) break;
+      try {
+        const results = (await searchOrganic(siteQ)).filter(r => (r.link || '').toLowerCase().includes(root));
+        const leads = await extractCompaniesFromSnippets(results, profile, site.key);
+        let kept = 0;
+        for (const lead of leads) { if (rawLeads.length >= rawTarget || kept >= PER_PASS_CAP) break; if (tryAdd(lead)) kept++; }
+        logger.info('Site-source pass', { source: site.key, query: siteQ, found: leads.length });
+      } catch (err) {
+        logger.warn('Site-source failed', { source: site.key, err: err.message });
+      }
+      await sleep(TEST_MODE ? 300 : 700);
+    }
+  }
+
+  // ── Unknown / keyword sources: plain organic search, best-effort ──
+  for (const src of keywords) {
+    if (rawLeads.length >= rawTarget) break;
+    if (!kw) break;
+    const q = `${src.key} ${kw}`.trim();
+    try {
+      const results = await searchOrganic(q);
+      const leads   = await extractCompaniesFromSnippets(results, profile, src.key);
+      let kept = 0;
+      for (const lead of leads) {
+        if (rawLeads.length >= rawTarget || kept >= PER_PASS_CAP) break;
+        if (tryAdd(lead)) kept++;
+      }
+    } catch (err) {
+      logger.warn('Keyword-source failed', { source: src.key, err: err.message });
+    }
+    await sleep(TEST_MODE ? 300 : 700);
+  }
+
+  logger.info('Sourced search done', { rawCollected: rawLeads.length, rawTarget });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STEP 3 — AI batch scoring: BUYER vs SELLER (10 per AI call)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -876,11 +1267,13 @@ async function scoreBatch(leads, profile) {
   }).join('\n');
 
   const systemPrompt = `Classify each entry as:
-  BUYER = actual company that PURCHASES/USES this product
-  SELLER = company that SELLS/MAKES this product (competitor)  
+  BUYER = actual end-customer company that PURCHASES/USES this product for itself
+  SELLER = company that SELLS/MAKES this product (competitor), OR a staffing agency /
+           recruiting firm / IT body-shop / consultancy hiring this skill on behalf of
+           a client (e.g. TEKsystems, Pentasia, VLink, Innovien) — NOT an end-customer
   AGGREGATOR = listing site, marketplace, RFP portal, job board — NOT an actual company
 
-For AGGREGATOR entries: if the snippet mentions an actual buyer company, 
+For AGGREGATOR entries: if the snippet mentions an actual buyer company,
 extract it in "extractedCompany" field.
 
 Return JSON: {"results":[
@@ -963,32 +1356,71 @@ async function runProductDiscoveryScan(job, productInput, filters = {}, progress
   if (progressCallback) await progressCallback(10, 0);
 
   // Dedup
-  const rawLeads    = [];
-  const seenNames   = new Set();
-  const seenDomains = new Set();
+  const rawLeads      = [];
+  const seenNames     = new Set();
+  const seenDomains   = new Set();
+  const companyCounts = new Map();   // normalized company name → leads kept this scan
+  const MAX_PER_COMPANY = 3;         // one employer can't crowd out everyone else
 
   function tryAdd(lead) {
     if (!lead?.companyName) return false;
+    // Reject leads whose "company" is itself a job board / aggregator (e.g. a
+    // re-posted listing reported by Google Jobs as "Shine.com"). These are never
+    // real employers. Deterministic guard — the LLM scorer misses unfamiliar brands.
+    if (isAggregatorName(lead.companyName)) {
+      logger.debug('Filtered aggregator-as-company', { name: lead.companyName });
+      return false;
+    }
+    // Reject the platform VENDOR itself (e.g. "Salesforce, Inc." for a Salesforce
+    // service) — the maker never buys its own ecosystem service.
+    if (isVendorCompany(lead.companyName, profile)) {
+      logger.debug('Filtered platform vendor', { name: lead.companyName });
+      return false;
+    }
+    // Drop a bogus aggregator domain but keep the lead (the company may be valid,
+    // just with a portal URL instead of its own site).
+    if (lead.website && isAggregator(lead.website)) lead.website = '';
     const nk = normName(lead.companyName);
+    if (!nk) return false;
     const dk = lead.website ? normDomain(lead.website) : '';
-    if (!nk || seenNames.has(nk)) return false;
-    if (dk && seenDomains.has(dk)) return false;
+    // Title-aware dedup: one company may yield multiple leads for DIFFERENT roles
+    // in a single scan, but the same role re-listed across portals collapses to one.
+    const title = lead.jobPostings?.[0]?.title || '';
+    const key   = title ? `${nk}|${normJobTitle(title)}` : nk;
+    if (seenNames.has(key)) return false;
+    // Domain dedup applies ONLY to title-less leads (Apollo / forum). For job leads,
+    // two distinct roles at one company share a domain — keying on company+title is
+    // what distinguishes them, so we must not collapse them on domain here.
+    if (!title && dk && seenDomains.has(dk)) return false;
+    // Per-company cap: a dominant employer (e.g. the vendor's own large hiring
+    // footprint) must not consume the whole buffer and starve other companies/sources.
+    if ((companyCounts.get(nk) || 0) >= MAX_PER_COMPANY) return false;
     if (isCompetitor(lead, profile)) {
       logger.debug('Filtered competitor', { name: lead.companyName });
       return false;
     }
-    seenNames.add(nk);
+    seenNames.add(key);
     if (dk) seenDomains.add(dk);
+    companyCounts.set(nk, (companyCounts.get(nk) || 0) + 1);
     rawLeads.push(lead);
     return true;
   }
 
   function hasEnoughRaw() { return rawLeads.length >= rawTarget; }
 
-  const strategy = (profile.searchStrategy || 'BOTH').toUpperCase();
+  // STEP 2: choose discovery mode — user-named portals override the auto strategy.
+  // No sources given → fall back to the automatic engine (Apollo / Google / both).
+  const sources  = resolveSources(profile, filters);
+  const strategy = sources.length ? 'SOURCED' : (profile.searchStrategy || 'BOTH').toUpperCase();
 
-  // STEP 2: Run the right search strategy
-  if (strategy === 'APOLLO') {
+  if (strategy === 'SOURCED') {
+    logger.info('Sourced discovery — searching user-named portals only', {
+      sources: sources.map(s => `${s.key}(${s.category})`), jobId: job.id,
+    });
+    await runSourcedSearch(profile, filters, sources, tryAdd, rawTarget, rawLeads);
+    if (progressCallback) await progressCallback(75, rawLeads.length);
+
+  } else if (strategy === 'APOLLO') {
     // Software/digital products — Apollo is best
     logger.info('Running Apollo search (software/digital product)', { jobId: job.id });
     await runApolloSearch(profile, filters, tryAdd, rawTarget, rawLeads);
@@ -1051,7 +1483,7 @@ async function generateProductPrompt(productInput, filters = {}) {
   const parts = [
     productInput.url         ? `Product URL: ${productInput.url}`                          : '',
     urlText                  ? `Page content:\n${urlText.slice(0, 1500)}`                  : '',
-    productInput.description ? `Description:\n${productInput.description.slice(0, 1500)}`  : '',
+    productInput.description ? `Description:\n${productInput.description.slice(0, 16000)}`  : '',
     productInput.docText     ? `Document:\n${productInput.docText.slice(0, 1500)}`         : '',
     productInput.content && !productInput.description && !productInput.docText
       ? `Info:\n${productInput.content.slice(0, 1000)}` : '',
@@ -1100,4 +1532,4 @@ Return ONLY valid JSON:
   return JSON.parse(cleaned);
 }
 
-module.exports = { runProductDiscoveryScan, buildProductProfile, generateProductPrompt };
+module.exports = { runProductDiscoveryScan, buildProductProfile, generateProductPrompt, normJobTitle };
