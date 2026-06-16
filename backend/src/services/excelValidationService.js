@@ -1,8 +1,9 @@
 const XLSX = require('xlsx');
 
 const REQUIRED_COLUMNS = [
-  'Company Name',
-  'Email',
+  'Lead Type',
+  'Contact Name',
+  'Lead Status',
 ];
 
 const ALLOWED_COLUMNS = [
@@ -84,7 +85,7 @@ async function validateExcelFile(buffer) {
     return { valid: false, errors: headerErrors };
   }
 
-  const rowErrors = [];
+  const skippedRows = [];
   const records = [];
 
   for (let i = 1; i < allRows.length; i++) {
@@ -110,26 +111,20 @@ async function validateExcelFile(buffer) {
       record[header] = value;
     }
 
-    // All required columns must have a non-empty value in every data row
+    // Required columns must have a non-empty value — skip the row but keep going
     const emptyColumns = REQUIRED_COLUMNS.filter(
       col => String(record[col] ?? '').trim() === ''
     );
 
     if (emptyColumns.length > 0) {
-      rowErrors.push(
-        `Row ${rowNum}: missing required value(s) for: ${emptyColumns.map(c => `"${c}"`).join(', ')}`
-      );
+      skippedRows.push({ row: rowNum, missingFields: emptyColumns });
       continue;
     }
 
     records.push(record);
   }
 
-  if (rowErrors.length > 0) {
-    return { valid: false, errors: rowErrors };
-  }
-
-  return { valid: true, records, headers };
+  return { valid: true, records, headers, skippedRows };
 }
 
 module.exports = { validateExcelFile };

@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, usersApi, dropdownsApi, api } from '../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner, EmptyState } from '../../../components/ui';
@@ -22,6 +23,8 @@ export default function LeadsPage() {
   const [ownerFilter, setOwnerFilter] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignToId, setAssignToId] = useState('');
@@ -280,12 +283,14 @@ export default function LeadsPage() {
   }
 
   function handleDelete(id: string) {
-    if (deleteConfirm === id) {
-      deleteMutation.mutate(id);
-    } else {
-      setDeleteConfirm(id);
-      setTimeout(() => setDeleteConfirm(null), 3000);
-    }
+    // OLD two-click confirm logic - replaced by popup (do not remove)
+    // if (deleteConfirm === id) {
+    //   deleteMutation.mutate(id);
+    // } else {
+    //   setDeleteConfirm(id);
+    //   setTimeout(() => setDeleteConfirm(null), 3000);
+    // }
+    setDeleteConfirm(id);
   }
 
   function toggleSelect(id: string) {
@@ -535,7 +540,7 @@ export default function LeadsPage() {
                     <td className="px-4 py-3">
                       {(l.leadType === 'product' || l.subSource === 'product') ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20">Product</span>
-                      ) : (l.leadType === 'position' || l.subSource === 'position') ? (
+                      ) : (l.leadType === 'service' || l.leadType === 'services' || l.leadType === 'position' || l.subSource === 'service' || l.subSource === 'position') ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Services</span>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
@@ -588,17 +593,10 @@ export default function LeadsPage() {
                         <RoleGuard permission="canDeleteLead">
                           <button
                             onClick={() => handleDelete(l.id)}
-                            className={`btn-ghost text-xs py-1 px-2 ${
-                              deleteConfirm === l.id ? 'bg-red-500/20 text-red-400' : 'text-slate-400'
-                            }`}
+                            className="btn-ghost text-xs py-1 px-2 text-slate-400"
+                            title="Delete"
                           >
-                            {deleteConfirm === l.id ? (
-                              <>
-                                <Trash2 size={12} /> Confirm?
-                              </>
-                            ) : (
-                              <Trash2 size={12} />
-                            )}
+                            <Trash2 size={12} />
                           </button>
                         </RoleGuard>
                       </div>
@@ -820,7 +818,7 @@ export default function LeadsPage() {
               <div>
                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Missing Required Fields</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {missingPopup.rows.length} row{missingPopup.rows.length !== 1 ? 's were' : ' was'} skipped — all fields are required. Fill in the missing values and re-upload.
+                  {missingPopup.rows.length} row{missingPopup.rows.length !== 1 ? 's were' : ' was'} skipped — Lead Type, Contact Name, and Lead Status are required. Fill in the missing values and re-upload.
                 </p>
               </div>
             </div>
@@ -853,7 +851,7 @@ export default function LeadsPage() {
             </div>
 
             <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
-              Every column in the template is required. Please fill all fields for each row before uploading.
+              Only Lead Type, Contact Name, and Lead Status are required. All other fields are optional.
             </p>
             <button
               className="btn-primary w-full"
@@ -1052,6 +1050,40 @@ export default function LeadsPage() {
           </div>
         </div>
       )}
+      {/* ── Delete Lead Popup ── */}
+      {mounted && deleteConfirm && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Delete Lead</h3>
+                <p className="text-sm text-slate-500 mt-1">Are you sure you want to delete this lead? This action cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => setDeleteConfirm(null)}
+              >
+                No, Cancel
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  deleteMutation.mutate(deleteConfirm);
+                  setDeleteConfirm(null);
+                }}
+              >
+                {deleteMutation.isPending ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
     </div>
   );
 }
