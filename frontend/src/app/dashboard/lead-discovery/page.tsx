@@ -137,7 +137,7 @@ export default function LeadDiscoveryPage() {
   const [selectedDecisionMakers, setSelectedDecisionMakers] = useState<string[]>([]);
   const [contactChannel, setContactChannel] = useState('');
   const [seniorityLevel, setSeniorityLevel] = useState('');
-  const [leadCount, setLeadCount] = useState(1);
+  const [leadCount, setLeadCount] = useState<number | ''>(1);
 
   // Products mode — mandatory
   const [productName, setProductName] = useState('');
@@ -151,7 +151,7 @@ export default function LeadDiscoveryPage() {
   const [productDecisionMakers, setProductDecisionMakers] = useState<string[]>([]);
   const [productContactChannel, setProductContactChannel] = useState('');
   const [productSeniorityLevel, setProductSeniorityLevel] = useState('');
-  const [productLeadCount, setProductLeadCount] = useState(1);
+  const [productLeadCount, setProductLeadCount] = useState<number | ''>(1);
   const [annualRevenue, setAnnualRevenue] = useState('');
 
   // Product supplementary inputs
@@ -305,7 +305,8 @@ export default function LeadDiscoveryPage() {
   const positionsMandatoryFilled =
     description.trim().length > 0 &&
     geography.trim().length > 0 &&
-    skillsRequired.trim().length > 0;
+    skillsRequired.trim().length > 0 &&
+    leadCount !== '' && Number(leadCount) >= 1;
 
   const hasProductInputs =
     productName.trim().length > 0 &&
@@ -354,11 +355,11 @@ export default function LeadDiscoveryPage() {
         decisionMakers: selectedDecisionMakers.length > 0 ? selectedDecisionMakers : undefined,
         contactChannel: contactChannel && contactChannel !== 'Any' ? contactChannel : undefined,
         seniorityLevel: seniorityLevel && seniorityLevel !== 'Any' ? seniorityLevel : undefined,
-        numberOfLeads: leadCount,
+        numberOfLeads: Number(leadCount) || 1,
         // Legacy compat
         targetRegion: geography.trim(),
         decisionMakerRoles: selectedDecisionMakers,
-        leadCount,
+        leadCount: Number(leadCount) || 1,
       });
     },
     onSuccess: res => {
@@ -395,7 +396,7 @@ export default function LeadDiscoveryPage() {
         decisionMakers: productDecisionMakers.length > 0 ? productDecisionMakers : undefined,
         preferredContactChannel: productContactChannel && productContactChannel !== 'Any' ? productContactChannel : undefined,
         seniorityLevel: productSeniorityLevel && productSeniorityLevel !== 'Any' ? productSeniorityLevel : undefined,
-        numberOfLeads: productLeadCount || undefined,
+        numberOfLeads: Number(productLeadCount) || undefined,
         annualRevenueRange: annualRevenue && annualRevenue !== 'Any' ? annualRevenue : undefined,
       });
     },
@@ -638,7 +639,7 @@ export default function LeadDiscoveryPage() {
                     <button
                       type="button"
                       aria-label="Decrease lead count"
-                      onClick={() => setLeadCount(c => Math.max(1, c - 1))}
+                      onClick={() => setLeadCount(c => Math.max(1, (Number(c) || 1) - 1))}
                       className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
                     >−</button>
                     <input
@@ -649,19 +650,25 @@ export default function LeadDiscoveryPage() {
                       step={1}
                       value={leadCount}
                       onChange={e => {
-                        const val = Number(e.target.value);
-                        if (!isNaN(val)) setLeadCount(Math.min(500, Math.max(1, val)));
+                        const raw = e.target.value;
+                        if (raw === '') { setLeadCount(''); return; }
+                        const val = Number(raw);
+                        if (!isNaN(val)) setLeadCount(Math.min(500, val));
                       }}
+                      onBlur={() => setLeadCount(c => (c === '' || Number(c) < 1 ? 1 : c))}
                       className="w-24 text-center input text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <button
                       type="button"
                       aria-label="Increase lead count"
-                      onClick={() => setLeadCount(c => Math.min(500, c + 1))}
+                      onClick={() => setLeadCount(c => Math.min(500, (Number(c) || 0) + 1))}
                       className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
                     >+</button>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">leads (1 – 500)</span>
+                    {/* <span className="text-xs text-slate-400 dark:text-slate-500">leads (1 – 500)</span> */}
                   </div>
+                  {(leadCount === '' || Number(leadCount) < 1) && (
+                    <p className="text-xs text-red-500 mt-1">Number of leads should be at least one.</p>
+                  )}
                 </div>
               </div>
             </SectionCard>
@@ -911,7 +918,7 @@ export default function LeadDiscoveryPage() {
                       <button
                         type="button"
                         aria-label="Decrease lead count"
-                        onClick={() => setProductLeadCount(c => Math.max(1, c - 1))}
+                        onClick={() => setProductLeadCount(c => Math.max(1, (Number(c) || 1) - 1))}
                         className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
                       >−</button>
                       <input
@@ -922,19 +929,25 @@ export default function LeadDiscoveryPage() {
                         step={1}
                         value={productLeadCount}
                         onChange={e => {
-                          const val = Number(e.target.value);
-                          if (!isNaN(val)) setProductLeadCount(Math.min(500, Math.max(1, val)));
+                          const raw = e.target.value;
+                          if (raw === '') { setProductLeadCount(''); return; }
+                          const val = Number(raw);
+                          if (!isNaN(val)) setProductLeadCount(Math.min(500, val));
                         }}
+                        onBlur={() => setProductLeadCount(c => (c === '' || Number(c) < 1 ? 1 : c))}
                         className="w-24 text-center input text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <button
                         type="button"
                         aria-label="Increase lead count"
-                        onClick={() => setProductLeadCount(c => Math.min(500, c + 1))}
+                        onClick={() => setProductLeadCount(c => Math.min(500, (Number(c) || 0) + 1))}
                         className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
                       >+</button>
-                      <span className="text-xs text-slate-400 dark:text-slate-500">leads (1 – 500)</span>
+                      {/* <span className="text-xs text-slate-400 dark:text-slate-500">leads (1 – 500)</span> */}
                     </div>
+                    {(productLeadCount === '' || Number(productLeadCount) < 1) && (
+                      <p className="text-xs text-red-500 mt-1">Number of leads should be at least one.</p>
+                    )}
                   </div>
                 </div>
               </SectionCard>
