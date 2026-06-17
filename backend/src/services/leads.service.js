@@ -84,7 +84,7 @@ class LeadsService {
    * Uses buildOrganizationFilter for role-scoped data visibility.
    */
   async buildLeadFilters(user, queryParams) {
-    const { status, intent, search, assignedTo, assignedToMe, unassigned } = queryParams;
+    const { status, intent, search, assignedTo, assignedToMe, unassigned, scanJobId } = queryParams;
 
     const baseFilter = await buildOrganizationFilter(user);
     const where = Object.assign({}, baseFilter);
@@ -94,6 +94,9 @@ class LeadsService {
 
     // Intent level filter
     if (intent) where.intentLevel = intent;
+
+    // Restrict to leads produced by a specific scan (Scan History → expand)
+    if (scanJobId) where.scanJobId = scanJobId;
 
     // Assigned-to-me filter (sales users or explicit filter)
     if (assignedToMe === 'true' || assignedToMe === true) {

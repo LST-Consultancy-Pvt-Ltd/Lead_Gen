@@ -275,7 +275,7 @@ async function startProductScan(req, res) {
   }
 }
 
-async function saveDiscoveredLead(organizationId, dl, services) {
+async function saveDiscoveredLead(organizationId, dl, services, meta = {}) {
   const quota = await checkLeadQuota(organizationId);
   if (!quota.allowed) {
     logger.info('Lead quota exhausted - skipping discovered lead', {
@@ -356,6 +356,8 @@ async function saveDiscoveredLead(organizationId, dl, services) {
       sourceUrl: dl.sourceUrl,
       subSource: dl.subSource || null,
       leadType: dl.leadType || null,
+      scanJobId: meta.scanJobId || null,
+      keyword: meta.keyword || null,
     },
   });
 
@@ -422,6 +424,24 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
       offerInput.productName,
     ].filter(Boolean);
 
+    // The platform keyword(s) this scan searched for — shown in Scan History and on
+    // each lead so the user knows which description/skill produced the lead. Falls
+    // back to category keywords, then the offer name.
+    const scanKeyword = (
+      (profile?.platformKeywords || []).join(', ')
+      || (profile?.categoryKeywords || []).join(', ')
+      || profile?.productName
+      || offerInput.productName
+      || ''
+    ).slice(0, 255);
+
+    if (scanKeyword) {
+      await prisma.scanJob.update({
+        where: { id: jobId },
+        data: { keyword: scanKeyword },
+      }).catch(() => {});
+    }
+
     for (const dl of discovered) {
       try {
         if (savedIds.length >= maxLeads) break;
@@ -429,7 +449,7 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
         dl.subSource = leadType;
         dl.leadType = leadType;
 
-        const id = await saveDiscoveredLead(orgId, dl, keywords);
+        const id = await saveDiscoveredLead(orgId, dl, keywords, { scanJobId: jobId, keyword: scanKeyword });
         if (!id) continue;
 
         if (minScore > 0) {

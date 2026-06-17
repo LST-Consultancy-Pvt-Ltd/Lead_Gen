@@ -11,9 +11,50 @@ import {
   Sparkles, ArrowRight, RotateCcw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Link from 'next/link';
 import { formatDate } from '../../../lib/utils';
 
 const ACTIVE_SCAN_KEY = 'lf_active_scan_id';
+
+// Inline panel that loads the leads belonging to a single scan (expandable row in
+// Scan History). Fetches only when rendered (i.e. when the row is expanded).
+function ScanLeadsPanel({ scanId }: { scanId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['scan-leads', scanId],
+    queryFn: () => leadsApi.list({ scanJobId: scanId, limit: 100 }).then(r => r.data),
+  });
+  const leads = (data?.data as any[]) ?? [];
+  if (isLoading) return <div className="px-3 py-2 text-xs text-slate-500">Loading leads…</div>;
+  if (!leads.length) return <div className="px-3 py-2 text-xs text-slate-500">No leads stored for this scan.</div>;
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-white/[0.06] overflow-hidden">
+      <table className="w-full text-xs">
+        <thead className="bg-slate-200/60 dark:bg-slate-900/60 text-slate-500">
+          <tr>
+            <th className="text-left font-semibold px-3 py-2">Company</th>
+            <th className="text-left font-semibold px-3 py-2">Score</th>
+            <th className="text-left font-semibold px-3 py-2">Keyword</th>
+            <th className="text-left font-semibold px-3 py-2">Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {leads.map((l: any) => (
+            <tr key={l.id} className="border-t border-slate-200 dark:border-white/[0.04]">
+              <td className="px-3 py-2">
+                <Link href={`/dashboard/leads/${l.id}`} className="font-medium text-slate-800 dark:text-slate-200 hover:underline">
+                  {l.companyName || l.contactName || '—'}
+                </Link>
+              </td>
+              <td className="px-3 py-2">{l.leadScore ?? 0}</td>
+              <td className="px-3 py-2 text-slate-500 truncate max-w-[180px]">{l.keyword || '—'}</td>
+              <td className="px-3 py-2 text-slate-500 truncate max-w-[180px]">{l.source || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 const DEFAULT_INDUSTRIES = [
   'Any Industry',
@@ -233,6 +274,7 @@ export default function LeadDiscoveryPage() {
       items: Array.isArray(r.data.data) ? r.data.data : (r.data.data?.items ?? []),
     })),
   });
+  const [expandedScan, setExpandedScan] = useState<string | null>(null);
 
   const { data: quota } = useQuery({
     queryKey: ['lead-quota'],
@@ -1087,45 +1129,65 @@ export default function LeadDiscoveryPage() {
           <div className="space-y-2">
             {(scansData!.items as any[]).slice(0, 8).map((scan: any) => {
               const isProduct = scan.sources?.scanType === 'product';
+              const expanded = expandedScan === scan.id;
               return (
-                <div key={scan.id} className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-950 rounded-xl gap-3">
-                  <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    <Badge color={
-                      scan.status === 'completed' ? 'green' :
-                        scan.status === 'running' ? 'blue' :
-                          scan.status === 'failed' ? 'red' : 'gray'
-                    }>{scan.status}</Badge>
-                    <span className={cn('text-xs rounded px-1.5 py-0.5 border',
-                      isProduct ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                        : 'bg-blue-500/10 text-blue-400 border-blue-500/20')}>
-                      {isProduct ? 'product' : 'positions'}
-                    </span>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{scan.leadsFound ?? 0} leads</span>
-                    {(scan.geography || scan.targetRegion) && (
-                      <span className="text-xs text-slate-500">· {scan.geography || scan.targetRegion}</span>
-                    )}
-                    {scan.avgMatchScore != null && (
-                      <span className={cn(
-                        'text-xs font-semibold px-2 py-0.5 rounded-full border',
-                        scan.avgMatchScore >= 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                          scan.avgMatchScore >= 50 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                            'bg-red-500/10 text-red-400 border-red-500/20'
-                      )}>
-                        {scan.avgMatchScore}% match
+                <div key={scan.id} className="bg-slate-100 dark:bg-slate-950 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedScan(expanded ? null : scan.id)}
+                    className="w-full flex items-center justify-between p-3 gap-3 text-left"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      {expanded
+                        ? <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        : <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+                      <Badge color={
+                        scan.status === 'completed' ? 'green' :
+                          scan.status === 'running' ? 'blue' :
+                            scan.status === 'failed' ? 'red' : 'gray'
+                      }>{scan.status}</Badge>
+                      <span className={cn('text-xs rounded px-1.5 py-0.5 border',
+                        isProduct ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20')}>
+                        {isProduct ? 'product' : 'positions'}
                       </span>
-                    )}
-                    {!isProduct && (scan.positionTitle || (scan.services ?? []).length > 0) && (
-                      <span className="text-xs text-slate-500 truncate hidden sm:inline">
-                        · {scan.positionTitle || (scan.services as string[]).slice(0, 2).join(', ')}
-                      </span>
-                    )}
-                    {isProduct && (scan.sources?.productName || scan.sources?.productDescriptionSnippet) && (
-                      <span className="text-xs text-slate-500 truncate hidden sm:inline">
-                        · {scan.sources.productName || scan.sources.productDescriptionSnippet?.slice(0, 50)}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-slate-500 flex-shrink-0">{formatDate(scan.createdAt)}</span>
+                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{scan.leadsFound ?? 0} leads</span>
+                      {(scan.geography || scan.targetRegion) && (
+                        <span className="text-xs text-slate-500">· {scan.geography || scan.targetRegion}</span>
+                      )}
+                      {scan.avgMatchScore != null && (
+                        <span className={cn(
+                          'text-xs font-semibold px-2 py-0.5 rounded-full border',
+                          scan.avgMatchScore >= 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                            scan.avgMatchScore >= 50 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                              'bg-red-500/10 text-red-400 border-red-500/20'
+                        )}>
+                          {scan.avgMatchScore}% match
+                        </span>
+                      )}
+                      {!isProduct && (scan.positionTitle || (scan.services ?? []).length > 0) && (
+                        <span className="text-xs text-slate-500 truncate hidden sm:inline">
+                          · {scan.positionTitle || (scan.services as string[]).slice(0, 2).join(', ')}
+                        </span>
+                      )}
+                      {isProduct && (scan.sources?.productName || scan.sources?.productDescriptionSnippet) && (
+                        <span className="text-xs text-slate-500 truncate hidden sm:inline">
+                          · {scan.sources.productName || scan.sources.productDescriptionSnippet?.slice(0, 50)}
+                        </span>
+                      )}
+                      {scan.keyword && (
+                        <span className="text-xs rounded px-1.5 py-0.5 border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 truncate max-w-[220px]" title={scan.keyword}>
+                          {scan.keyword}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-500 flex-shrink-0">{formatDate(scan.createdAt)}</span>
+                  </button>
+                  {expanded && (
+                    <div className="px-3 pb-3">
+                      <ScanLeadsPanel scanId={scan.id} />
+                    </div>
+                  )}
                 </div>
               );
             })}

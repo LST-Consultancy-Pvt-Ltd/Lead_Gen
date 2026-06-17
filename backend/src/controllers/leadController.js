@@ -13,12 +13,13 @@ const { checkLeadQuota, incrementLeadUsage, decrementLeadUsage } = require('../u
 
 async function getLeads(req, res) {
   try {
-    const { page=1, limit=20, status, intent, search, assignedTo, sortBy='createdAt', sortDir='desc' } = req.query;
+    const { page=1, limit=20, status, intent, search, assignedTo, scanJobId, sortBy='createdAt', sortDir='desc' } = req.query;
     const skip  = (parseInt(page) - 1) * parseInt(limit);
     const where = { organizationId: req.user.organizationId };
     if (status)     where.status      = status;
     if (intent)     where.intentLevel = intent;
     if (assignedTo) where.assignedToId = assignedTo;
+    if (scanJobId)  where.scanJobId    = scanJobId;   // note: GET /api/leads is served by leads.controller.js → leads.service.js (this handler is legacy)
     if (search) {
       where.OR = [
         { companyName:  { contains: search, mode: 'insensitive' } },

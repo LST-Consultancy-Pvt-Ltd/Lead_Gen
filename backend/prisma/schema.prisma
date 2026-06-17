@@ -198,6 +198,8 @@ model Lead {
   utmCampaign   String?
   utmContent    String?
   subSource     String?
+  scanJobId     String?
+  keyword       String?
   accountId     String?
   importBatchId String?
   lastContactedAt     DateTime?
@@ -298,6 +300,7 @@ model ScanJob {
   targetRegion   String?
   progress       Int        @default(0)
   leadsFound     Int        @default(0)
+  keyword        String?
   sources        Json       @default("{}")
   error          String?
   startedAt      DateTime?

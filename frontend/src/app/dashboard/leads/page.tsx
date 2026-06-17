@@ -487,6 +487,9 @@ export default function LeadsPage() {
                     Product / Services
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    Keyword
+                  </th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Source URL
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
@@ -542,6 +545,17 @@ export default function LeadsPage() {
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20">Product</span>
                       ) : (l.leadType === 'service' || l.leadType === 'services' || l.leadType === 'position' || l.subSource === 'service' || l.subSource === 'position') ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Services</span>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+
+                    {/* Keyword — the platform keyword(s) this lead was discovered for */}
+                    <td className="px-4 py-3">
+                      {l.keyword ? (
+                        <span className="text-xs text-slate-600 dark:text-slate-300 truncate inline-block max-w-[160px] align-middle" title={l.keyword}>
+                          {l.keyword}
+                        </span>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
