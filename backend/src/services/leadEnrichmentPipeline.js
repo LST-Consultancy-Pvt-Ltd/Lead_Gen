@@ -259,18 +259,22 @@ async function enrichViaSignalHire(lead, meta = {}) {
 
   const domain = lead.website ? normDomain(lead.website) : null;
 
-  // SignalHire identifiers are strings: a LinkedIn URL (best), an email, a phone, or
-  // a "Name @ company" style query. Pick the most specific we have.
+  // SignalHire only accepts PERSON identifiers: a personal LinkedIn (/in/), an email,
+  // a phone, a person's name, or a company DOMAIN. It REJECTS company LinkedIn URLs
+  // (/company/…) with "No valid items given" — so we must filter those out.
+  const personLinkedin = (u) => (u && /linkedin\.com\/in\//i.test(u)) ? normalizeLinkedinUrl(u) : null;
+
   let item = null;
-  if (lead.contactLinkedin)      item = normalizeLinkedinUrl(lead.contactLinkedin);
-  else if (lead.linkedinUrl)     item = normalizeLinkedinUrl(lead.linkedinUrl);
-  else if (lead.contactEmail)    item = lead.contactEmail;
-  else if (domain && lead.contactName) item = `${lead.contactName} ${domain}`;
-  else if (domain)               item = domain;
-  else if (lead.companyName)     item = lead.companyName;
+  if (personLinkedin(lead.contactLinkedin))      item = personLinkedin(lead.contactLinkedin);
+  else if (personLinkedin(lead.linkedinUrl))     item = personLinkedin(lead.linkedinUrl);
+  else if (lead.contactEmail)                    item = lead.contactEmail;
+  else if (lead.contactName && domain)           item = `${lead.contactName} ${domain}`;
+  else if (lead.contactName)                     item = lead.contactName;
+  else if (domain)                               item = domain;            // accepted by SignalHire
+  else if (lead.companyName)                     item = lead.companyName;
 
   if (!item) {
-    logger.warn('SignalHire: not enough data', { leadId: lead.id });
+    logger.warn('SignalHire: not enough data (no person identifier or domain)', { leadId: lead.id });
     return { skipped: 'insufficient_data' };
   }
 
