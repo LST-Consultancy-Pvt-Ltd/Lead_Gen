@@ -27,6 +27,7 @@
 const axios  = require('axios');
 const config = require('../config');
 const logger = require('../utils/logger');
+const signalhirePending = require('./signalhirePending');
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -241,75 +242,83 @@ function normalizeLinkedinUrl(url) {
   return `https://www.linkedin.com/${url.replace(/^\//, '')}`;
 }
 
-async function enrichViaSignalHire(lead) {
+// SignalHire is webhook-only: we submit a search WITH a callbackUrl and SignalHire
+// PUSHES the result to that URL (it cannot be polled). So this function submits the
+// search and registers the lead as pending; the actual contact is filled in later by
+// the webhook handler (controllers/webhooks.controller.js). It returns a status
+// object, NOT a contact.
+async function enrichViaSignalHire(lead, meta = {}) {
   if (!config.signalhire?.apiKey) {
     logger.warn('SignalHire: SIGNALHIRE_API_KEY not set — skipping');
-    return null;
+    return { skipped: 'no_api_key' };
+  }
+  if (!config.signalhire?.callbackUrl) {
+    logger.warn('SignalHire: SIGNALHIRE_CALLBACK_URL not set — cannot receive results, skipping');
+    return { skipped: 'no_callback_url' };
   }
 
   const domain = lead.website ? normDomain(lead.website) : null;
 
-  let candidate = null;
-  if (lead.contactLinkedin) {
-    candidate = { linkedin: normalizeLinkedinUrl(lead.contactLinkedin) };
-  } else if (lead.linkedinUrl) {
-    candidate = { linkedin: normalizeLinkedinUrl(lead.linkedinUrl) };
-  } else if (domain && lead.contactName) {
-    candidate = { name: lead.contactName, current_employer: domain };
-  } else if (domain) {
-    candidate = { current_employer: domain };
-  } else if (lead.companyName) {
-    candidate = { name: lead.companyName };
-  }
+  // SignalHire identifiers are strings: a LinkedIn URL (best), an email, a phone, or
+  // a "Name @ company" style query. Pick the most specific we have.
+  let item = null;
+  if (lead.contactLinkedin)      item = normalizeLinkedinUrl(lead.contactLinkedin);
+  else if (lead.linkedinUrl)     item = normalizeLinkedinUrl(lead.linkedinUrl);
+  else if (lead.contactEmail)    item = lead.contactEmail;
+  else if (domain && lead.contactName) item = `${lead.contactName} ${domain}`;
+  else if (domain)               item = domain;
+  else if (lead.companyName)     item = lead.companyName;
 
-  if (!candidate) {
+  if (!item) {
     logger.warn('SignalHire: not enough data', { leadId: lead.id });
-    return null;
+    return { skipped: 'insufficient_data' };
   }
 
-  logger.info('SignalHire: starting search', { candidate, leadId: lead.id });
+  logger.info('SignalHire: submitting search', { item, leadId: lead.id, callbackUrl: config.signalhire.callbackUrl });
 
   try {
-    const initRes = await axios.post(
+    const res = await axios.post(
       'https://www.signalhire.com/api/v1/candidate/search',
-      { items: [candidate], callback_url: null },
+      { items: [item], callbackUrl: config.signalhire.callbackUrl },
       { headers: { apikey: config.signalhire.apiKey, 'Content-Type': 'application/json' }, timeout: 15000 }
     );
 
-    const requestId = initRes.data?.requestId;
-    if (!requestId) return null;
-
-    for (let attempt = 0; attempt < 8; attempt++) {
-      await sleep(5000);
-      try {
-        const pollRes = await axios.get(
-          `https://www.signalhire.com/api/v1/request/${requestId}`,
-          { headers: { apikey: config.signalhire.apiKey }, timeout: 10000 }
-        );
-
-        const item = pollRes.data?.items?.[0];
-        if (!item) continue;
-        if (item.status === 'notFound') return null;
-
-        if (item.contacts?.length > 0) {
-          const contacts = item.contacts;
-          return {
-            email:       contacts.find(c => c.type === 'email')?.value  ?? null,
-            phone:       contacts.find(c => c.type === 'phone' || c.type === 'mobile')?.value ?? null,
-            linkedinUrl: contacts.find(c => c.type === 'linkedin')?.value ?? null,
-            name:        item.fullName ?? item.name ?? null,
-            title:       item.title ?? item.position ?? null,
-            source:      'signalhire',
-          };
-        }
-      } catch (pollErr) {
-        logger.warn('SignalHire: poll attempt failed', { attempt, err: pollErr.message });
-      }
+    const requestId = res.data?.requestId;
+    if (!requestId) {
+      logger.warn('SignalHire: no requestId returned', { leadId: lead.id, data: res.data });
+      return { skipped: 'no_request_id' };
     }
-    return null;
+
+    // Optional synchronous wait: register a resolver the webhook will call when the
+    // result arrives, then await it (bounded). If it times out we still return
+    // submitted — the webhook updates the lead asynchronously as a fallback.
+    const waitMs = Number(meta.waitMs) || 0;
+    let resolveResult = null;
+    const resultPromise = waitMs > 0 ? new Promise((r) => { resolveResult = r; }) : null;
+
+    signalhirePending.register([requestId, item], {
+      leadId: lead.id,
+      organizationId: lead.organizationId,
+      createdById: meta.createdById || null,
+      resolve: resolveResult,   // present only in synchronous mode
+    });
+
+    logger.info('SignalHire: search submitted, awaiting webhook', { leadId: lead.id, requestId, item, waitMs });
+
+    if (waitMs > 0) {
+      const contact = await Promise.race([
+        resultPromise,
+        sleep(waitMs).then(() => null),
+      ]);
+      if (contact) return { submitted: true, found: true, requestId, contact };
+      return { submitted: true, found: false, pending: true, requestId };
+    }
+
+    return { submitted: true, requestId };
   } catch (err) {
-    logger.error('SignalHire: search failed', { err: err.message, leadId: lead.id });
-    return null;
+    const detail = err.response?.data || err.message;
+    logger.error('SignalHire: submit failed', { err: detail, leadId: lead.id });
+    return { skipped: 'submit_error', error: typeof detail === 'string' ? detail : JSON.stringify(detail) };
   }
 }
 

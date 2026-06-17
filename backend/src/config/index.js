@@ -32,6 +32,10 @@ module.exports = {
   },
   signalhire: {
     apiKey: process.env.SIGNALHIRE_API_KEY,
+    // Public URL SignalHire POSTs results to (it pushes, you cannot poll).
+    // In dev, expose the backend via a tunnel (e.g. ngrok) and set this to
+    // https://<tunnel>/api/webhooks/signalhire
+    callbackUrl: process.env.SIGNALHIRE_CALLBACK_URL,
   },
   apollo: {
     apiKey: process.env.APOLLO_API_KEY,

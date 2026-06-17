@@ -82,16 +82,29 @@ function InfoRow({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EnrichPanel({
-  enrichState, onApollo, hasContact,
+  enrichState, onApollo, onSignalHire, signalhireSubmitting = false, hasContact,
 }: {
-  enrichState: EnrichState; onApollo: () => void; hasContact: boolean;
+  enrichState: EnrichState; onApollo: () => void; onSignalHire: () => void;
+  signalhireSubmitting?: boolean; hasContact: boolean;
 }) {
   const { status } = enrichState;
+
+  // SignalHire submit button (async — result arrives via webhook). Shared by both
+  // the compact "has contact" view and the main "no contact yet" view.
+  const signalhireButton = (
+    <button
+      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-60"
+      onClick={() => onSignalHire()} disabled={signalhireSubmitting}>
+      {signalhireSubmitting
+        ? <><Loader2 size={11} className="animate-spin" /> Submitting…</>
+        : <><Search size={11} /> Enrich via SignalHire</>}
+    </button>
+  );
   const isApolloLoading = status === 'searching_apollo';
 
   if (hasContact && (status === 'idle' || status === 'apollo_found' || status === 'apollo_failed')) {
     return (
-      <div className="pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3">
+      <div className="pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3 space-y-2">
         <button
           className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
           onClick={() => onApollo()} disabled={isApolloLoading}>
@@ -99,6 +112,7 @@ function EnrichPanel({
             ? <><Loader2 size={11} className="animate-spin" /> Searching…</>
             : <><Search size={11} /> Search Apollo for More Contacts</>}
         </button>
+        {signalhireButton}
       </div>
     );
   }
@@ -136,6 +150,27 @@ function EnrichPanel({
             : <><Search size={12} /> Search Apollo</>}
         </button>
       </div>
+
+      {/* SignalHire — async (result arrives via webhook) */}
+      <div className="rounded-xl border p-3.5 bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06]">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-6 h-6 rounded-lg bg-sky-500/20 flex items-center justify-center">
+            <Search size={12} className="text-sky-400" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">SignalHire</p>
+            <p className="text-[10px] text-slate-500">Email &amp; phone finder · async</p>
+          </div>
+        </div>
+        <button
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 transition-colors disabled:opacity-60"
+          onClick={() => onSignalHire()} disabled={signalhireSubmitting}>
+          {signalhireSubmitting ? <><Loader2 size={12} className="animate-spin" /> Submitting…</>
+            : <><Search size={12} /> Enrich via SignalHire</>}
+        </button>
+        <p className="text-[10px] text-slate-500 mt-1.5 text-center">Result arrives shortly via webhook.</p>
+      </div>
+
       {status === 'apollo_failed' && (
         <div className="p-3 bg-amber-500/[0.06] border border-amber-500/20 rounded-xl">
           <p className="text-xs text-amber-400 text-center">
@@ -286,6 +321,32 @@ export default function LeadDetailPage() {
       }
     },
     onError: () => { setEnrichState({ status: 'apollo_failed' }); toast.error('Apollo search failed.'); },
+  });
+
+  // SignalHire is webhook-based: this only SUBMITS the search; the contact is filled
+  // in asynchronously when SignalHire pushes the result to our webhook. So we toast
+  // "submitted" and refetch the lead a few times to pick up the async update.
+  const signalhireMutation = useMutation({
+    mutationFn: () => leadsApi.enrichSignalHire(id),
+    onSuccess: (res) => {
+      const d = res.data.data;
+      if (d?.found) {
+        // Synchronous hit — contact already written to the lead.
+        qc.invalidateQueries({ queryKey: ['lead', id] });
+        qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+        toast.success('Contact found via SignalHire!');
+      } else if (d?.pending || d?.submitted) {
+        // Timed out the sync wait — webhook will still fill it in; refetch a few times.
+        toast('SignalHire is still processing — the contact will appear shortly.', { icon: '⏳' });
+        [8000, 20000, 40000].forEach(ms => setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ['lead', id] });
+          qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+        }, ms));
+      } else {
+        toast.error(`SignalHire not run: ${d?.reason || 'unknown'}`);
+      }
+    },
+    onError: () => toast.error('SignalHire request failed.'),
   });
 
   const generateEmailMutation = useMutation({
@@ -1151,6 +1212,8 @@ export default function LeadDetailPage() {
             <EnrichPanel
               enrichState={enrichState}
               onApollo={() => apolloMutation.mutate()}
+              onSignalHire={() => signalhireMutation.mutate()}
+              signalhireSubmitting={signalhireMutation.isPending}
               hasContact={hasContact}
             />
           </div>
