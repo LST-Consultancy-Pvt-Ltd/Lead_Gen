@@ -335,6 +335,8 @@ export default function LeadDetailPage() {
         qc.invalidateQueries({ queryKey: ['lead', id] });
         qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
         toast.success('Contact found via SignalHire!');
+      } else if (d?.noContact) {
+        toast.error('SignalHire found no contact — needs a person name or personal LinkedIn (a company/domain alone often returns nothing).');
       } else if (d?.pending || d?.submitted) {
         // Timed out the sync wait — webhook will still fill it in; refetch a few times.
         toast('SignalHire is still processing — the contact will appear shortly.', { icon: '⏳' });

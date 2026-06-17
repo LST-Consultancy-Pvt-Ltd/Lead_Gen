@@ -52,6 +52,11 @@ async function handleSignalHire(req, res) {
 
       if (!picked.email && !picked.phone && !picked.linkedin) {
         logger.info('SignalHire webhook: matched lead but no contact in result', { leadId: found.leadId, status: it.status });
+        // Unblock a synchronous waiter immediately with a definitive "no contact"
+        // (otherwise it would wait the full timeout for nothing).
+        if (typeof found.resolve === 'function') {
+          try { found.resolve({ found: false, status: it.status || 'failed' }); } catch (_) {}
+        }
         continue;
       }
 
@@ -71,7 +76,7 @@ async function handleSignalHire(req, res) {
 
       // If a synchronous request is waiting on this result, unblock it with the contact.
       if (typeof found.resolve === 'function') {
-        try { found.resolve({ ...picked, name: data.contactName || null, title: data.contactTitle || null }); }
+        try { found.resolve({ found: true, contact: { ...picked, name: data.contactName || null, title: data.contactTitle || null } }); }
         catch (e) { logger.warn('SignalHire webhook: resolve failed', { err: e.message }); }
       }
     }

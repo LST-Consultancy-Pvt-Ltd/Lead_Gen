@@ -254,6 +254,10 @@ async function enrichLeadViaSignalHire(req, res) {
         contactPhone: updated?.contactPhone, lead: updated,
       }, 'Contact found via SignalHire');
     }
+    if (result?.noContact) {
+      return success(res, { found: false, noContact: true, enrichedVia: 'signalhire' },
+        'SignalHire found no contact for this lead (needs a person name or personal LinkedIn — a company/domain alone often returns nothing).');
+    }
     if (result?.submitted) {
       return success(res, { found: false, submitted: true, pending: true, requestId: result.requestId, enrichedVia: 'signalhire' },
         'SignalHire is still processing — the contact will appear on the lead shortly.');

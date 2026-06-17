@@ -310,12 +310,13 @@ async function enrichViaSignalHire(lead, meta = {}) {
     logger.info('SignalHire: search submitted, awaiting webhook', { leadId: lead.id, requestId, item, waitMs });
 
     if (waitMs > 0) {
-      const contact = await Promise.race([
-        resultPromise,
-        sleep(waitMs).then(() => null),
+      const outcome = await Promise.race([
+        resultPromise,                              // { found, contact? } from the webhook
+        sleep(waitMs).then(() => ({ timeout: true })),
       ]);
-      if (contact) return { submitted: true, found: true, requestId, contact };
-      return { submitted: true, found: false, pending: true, requestId };
+      if (outcome?.found)   return { submitted: true, found: true, requestId, contact: outcome.contact };
+      if (outcome?.timeout) return { submitted: true, found: false, pending: true, requestId };
+      return { submitted: true, found: false, noContact: true, requestId, status: outcome?.status };
     }
 
     return { submitted: true, requestId };
