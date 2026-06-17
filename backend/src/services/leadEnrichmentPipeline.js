@@ -242,11 +242,43 @@ function normalizeLinkedinUrl(url) {
   return `https://www.linkedin.com/${url.replace(/^\//, '')}`;
 }
 
-// SignalHire is webhook-only: we submit a search WITH a callbackUrl and SignalHire
-// PUSHES the result to that URL (it cannot be polled). So this function submits the
-// search and registers the lead as pending; the actual contact is filled in later by
-// the webhook handler (controllers/webhooks.controller.js). It returns a status
-// object, NOT a contact.
+// Decision-maker title keywords (rough priority) for choosing which person at a
+// company to reveal when the lead has no contact yet.
+const SIGNALHIRE_TITLE_PRIORITY = [
+  'ceo', 'founder', 'owner', 'president', 'chief', 'cto', 'cio', 'cfo', 'coo',
+  'vp', 'vice president', 'director', 'head', 'principal', 'partner',
+  'procurement', 'operations', 'manager',
+];
+
+// SignalHire Search API (SYNCHRONOUS): find people at a company. Returns profiles[]
+// (uid, fullName, experience[]). No contacts — revealing those is a separate step.
+async function signalhireSearchByCompany(company) {
+  const res = await axios.post(
+    'https://www.signalhire.com/api/v1/candidate/searchByQuery',
+    { currentCompany: company },
+    { headers: { apikey: config.signalhire.apiKey, 'Content-Type': 'application/json' }, timeout: 20000 }
+  );
+  return Array.isArray(res.data?.profiles) ? res.data.profiles : [];
+}
+
+// Pick the most decision-maker-like profile by current title; else the first.
+function pickSignalhireProfile(profiles) {
+  if (!profiles.length) return null;
+  let best = profiles[0], bestRank = 999;
+  for (const p of profiles) {
+    const title = (p.experience?.[0]?.title || '').toLowerCase();
+    let rank = SIGNALHIRE_TITLE_PRIORITY.findIndex(t => title.includes(t));
+    if (rank === -1) rank = 998;
+    if (rank < bestRank) { bestRank = rank; best = p; }
+  }
+  return best;
+}
+
+// SignalHire is webhook-only for the REVEAL step: we submit a person identifier WITH
+// a callbackUrl and SignalHire PUSHES the contact to that URL (cannot be polled).
+// If the lead has no person yet, we first use the synchronous Search API to find a
+// person at the company, then reveal them. The contact is written by the webhook
+// (controllers/webhooks.controller.js); this returns a status object.
 async function enrichViaSignalHire(lead, meta = {}) {
   if (!config.signalhire?.apiKey) {
     logger.warn('SignalHire: SIGNALHIRE_API_KEY not set — skipping');
@@ -264,21 +296,44 @@ async function enrichViaSignalHire(lead, meta = {}) {
   // (/company/…) with "No valid items given" — so we must filter those out.
   const personLinkedin = (u) => (u && /linkedin\.com\/in\//i.test(u)) ? normalizeLinkedinUrl(u) : null;
 
-  let item = null;
+  let item = null, contactName = null, contactTitle = null;
   if (personLinkedin(lead.contactLinkedin))      item = personLinkedin(lead.contactLinkedin);
   else if (personLinkedin(lead.linkedinUrl))     item = personLinkedin(lead.linkedinUrl);
   else if (lead.contactEmail)                    item = lead.contactEmail;
   else if (lead.contactName && domain)           item = `${lead.contactName} ${domain}`;
   else if (lead.contactName)                     item = lead.contactName;
-  else if (domain)                               item = domain;            // accepted by SignalHire
-  else if (lead.companyName)                     item = lead.companyName;
 
+  // No person on the lead → find one at the company via the synchronous Search API,
+  // then reveal that person's uid. (A bare company/domain can't be revealed directly.)
   if (!item) {
-    logger.warn('SignalHire: not enough data (no person identifier or domain)', { leadId: lead.id });
-    return { skipped: 'insufficient_data' };
+    const company = lead.companyName || domain;
+    if (!company) {
+      logger.warn('SignalHire: no person identifier and no company to search', { leadId: lead.id });
+      return { skipped: 'insufficient_data' };
+    }
+    try {
+      let profiles = await signalhireSearchByCompany(company);
+      if (!profiles.length && domain) {
+        profiles = await signalhireSearchByCompany(domain.split('.')[0]); // fall back to the brand from the domain
+      }
+      const profile = pickSignalhireProfile(profiles);
+      if (!profile) {
+        logger.info('SignalHire: no people found at company', { leadId: lead.id, company });
+        return { skipped: 'no_people_found' };
+      }
+      item         = profile.uid;
+      contactName  = profile.fullName || null;
+      contactTitle = profile.experience?.[0]?.title || null;
+      logger.info('SignalHire: company search picked a person', {
+        leadId: lead.id, company, person: contactName, title: contactTitle, uid: item, totalFound: profiles.length,
+      });
+    } catch (err) {
+      logger.error('SignalHire: company search failed', { leadId: lead.id, err: err.response?.data || err.message });
+      return { skipped: 'search_failed' };
+    }
   }
 
-  logger.info('SignalHire: submitting search', { item, leadId: lead.id, callbackUrl: config.signalhire.callbackUrl });
+  logger.info('SignalHire: submitting reveal', { item, leadId: lead.id, callbackUrl: config.signalhire.callbackUrl });
 
   try {
     const res = await axios.post(
@@ -304,6 +359,8 @@ async function enrichViaSignalHire(lead, meta = {}) {
       leadId: lead.id,
       organizationId: lead.organizationId,
       createdById: meta.createdById || null,
+      contactName,              // from the company search profile (reveal may omit it)
+      contactTitle,
       resolve: resolveResult,   // present only in synchronous mode
     });
 

@@ -64,10 +64,12 @@ async function handleSignalHire(req, res) {
       if (picked.email)    data.contactEmail    = picked.email;
       if (picked.phone)    data.contactPhone    = picked.phone;
       if (picked.linkedin) data.contactLinkedin = picked.linkedin;
-      const fullName = candidate.fullName || candidate.name;
-      if (fullName)        data.contactName     = data.contactName || fullName;
+      // Name/title: prefer the reveal payload, fall back to what the company search found.
+      const fullName = candidate.fullName || candidate.name || found.contactName;
+      if (fullName)        data.contactName     = fullName;
       const title = candidate.title || candidate.position
-        || (Array.isArray(candidate.experience) ? candidate.experience[0]?.position : null);
+        || (Array.isArray(candidate.experience) ? candidate.experience[0]?.title || candidate.experience[0]?.position : null)
+        || found.contactTitle;
       if (title)           data.contactTitle    = title;
 
       await prisma.lead.update({ where: { id: found.leadId }, data })
