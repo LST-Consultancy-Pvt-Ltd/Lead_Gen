@@ -245,6 +245,10 @@ async function enrichLeadViaSignalHire(req, res) {
     // under the 30s frontend axios timeout). If it arrives, return the contact now;
     // if it times out, the webhook still updates the lead asynchronously.
     const result = await enrichViaSignalHire(lead, { createdById: req.user.id, waitMs: 25000 });
+    if (result?.peopleFound) {
+      return success(res, { submitted: true, peopleFound: result.peopleFound, async: true, enrichedVia: 'signalhire' },
+        `SignalHire is revealing ${result.peopleFound} decision-maker${result.peopleFound > 1 ? 's' : ''} — they'll appear in Contacts shortly.`);
+    }
     if (result?.found) {
       const updated = await prisma.lead.findFirst({ where: { id: lead.id, organizationId: req.user.organizationId } });
       return success(res, {

@@ -386,7 +386,15 @@ export default function LeadDetailPage() {
     mutationFn: () => leadsApi.enrichSignalHire(id),
     onSuccess: (res) => {
       const d = res.data.data;
-      if (d?.found) {
+      if (d?.peopleFound) {
+        // Company search → up to 5 decision-makers are being revealed asynchronously
+        // and created as Contact records; refetch the contacts table a few times.
+        toast(`SignalHire is revealing ${d.peopleFound} decision-maker${d.peopleFound > 1 ? 's' : ''} — they'll appear in Contacts shortly.`, { icon: '⏳' });
+        [8000, 20000, 40000].forEach(ms => setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ['lead', id] });
+          qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+        }, ms));
+      } else if (d?.found) {
         // Synchronous hit — contact already written to the lead.
         qc.invalidateQueries({ queryKey: ['lead', id] });
         qc.invalidateQueries({ queryKey: ['lead-contacts', id] });

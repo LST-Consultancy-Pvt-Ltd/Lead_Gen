@@ -17,13 +17,38 @@ function pick(contacts = [], types) {
   return hit ? hit.value : null;
 }
 
-function extractContacts(contacts = []) {
+// LinkedIn can live in `contacts`, in a `social`/`socials`/`links` array, or as a
+// direct field on the candidate — check all of them.
+function extractLinkedin(candidate = {}, contacts = []) {
+  const fromContacts = pick(contacts, ['linkedin'])
+    || (contacts.find(c => String(c.value || '').includes('linkedin.com')) || {}).value;
+  if (fromContacts) return fromContacts;
+
+  const socials = candidate.social || candidate.socials || candidate.links || [];
+  if (Array.isArray(socials)) {
+    for (const s of socials) {
+      const v = typeof s === 'string' ? s : (s.link || s.url || s.value || '');
+      if (String(v).includes('linkedin.com')) return v;
+    }
+  }
+  for (const k of ['linkedinUrl', 'linkedin', 'linkedIn']) {
+    if (candidate[k] && String(candidate[k]).includes('linkedin')) return candidate[k];
+  }
+  return null;
+}
+
+function extractPerson(it, found) {
+  const candidate = it.candidate || it.profile || it;
+  const contacts  = candidate.contacts || it.contacts || [];
+  const title = candidate.title || candidate.position
+    || (Array.isArray(candidate.experience) ? candidate.experience[0]?.title || candidate.experience[0]?.position : null)
+    || found.contactTitle || null;
   return {
     email:    pick(contacts, ['email', 'work_email', 'personal_email']),
     phone:    pick(contacts, ['phone', 'mobile', 'work_phone', 'tel']),
-    linkedin: pick(contacts, ['linkedin'])
-              || (contacts.find(c => String(c.value || '').includes('linkedin.com')) || {}).value
-              || null,
+    linkedin: extractLinkedin(candidate, contacts),
+    name:     candidate.fullName || candidate.name || found.contactName || null,
+    title,
   };
 }
 
@@ -46,39 +71,65 @@ async function handleSignalHire(req, res) {
         continue;
       }
 
-      const candidate = it.candidate || it.profile || it;
-      const contacts  = candidate.contacts || it.contacts || [];
-      const picked    = extractContacts(contacts);
+      const p = extractPerson(it, found);
+      const hasAny = p.email || p.phone || p.linkedin;
 
-      if (!picked.email && !picked.phone && !picked.linkedin) {
+      // ── Multi-contact (company search) → create a Contact record ──
+      if (found.mode === 'contact') {
+        if (!hasAny && !p.name) {
+          logger.info('SignalHire webhook: no usable data for contact', { leadId: found.leadId, status: it.status });
+          continue;
+        }
+        try {
+          let existing = null;
+          if (p.email)     existing = await prisma.contact.findFirst({ where: { leadId: found.leadId, email: p.email } });
+          else if (p.name) existing = await prisma.contact.findFirst({ where: { leadId: found.leadId, name: p.name } });
+          if (!existing) {
+            await prisma.contact.create({
+              data: {
+                leadId:         found.leadId,
+                organizationId: found.organizationId,
+                name:           p.name || 'Unknown',
+                title:          p.title || null,
+                designation:    p.title || null,
+                email:          p.email || null,
+                phone:          p.phone || null,
+                linkedin:       p.linkedin || null,
+                decisionMaker:  true,
+                createdById:    found.createdById || null,
+              },
+            });
+            logger.info('SignalHire webhook: contact created', { leadId: found.leadId, name: p.name, email: p.email, phone: p.phone, linkedin: p.linkedin });
+          } else {
+            logger.info('SignalHire webhook: contact already exists', { leadId: found.leadId, name: p.name });
+          }
+        } catch (e) {
+          logger.error('SignalHire webhook: contact create failed', { leadId: found.leadId, err: e.message });
+        }
+        continue;
+      }
+
+      // ── Single reveal (no company) → update the lead's PRIMARY contact ──
+      if (!hasAny) {
         logger.info('SignalHire webhook: matched lead but no contact in result', { leadId: found.leadId, status: it.status });
-        // Unblock a synchronous waiter immediately with a definitive "no contact"
-        // (otherwise it would wait the full timeout for nothing).
         if (typeof found.resolve === 'function') {
           try { found.resolve({ found: false, status: it.status || 'failed' }); } catch (_) {}
         }
         continue;
       }
-
       const data = {};
-      if (picked.email)    data.contactEmail    = picked.email;
-      if (picked.phone)    data.contactPhone    = picked.phone;
-      if (picked.linkedin) data.contactLinkedin = picked.linkedin;
-      // Name/title: prefer the reveal payload, fall back to what the company search found.
-      const fullName = candidate.fullName || candidate.name || found.contactName;
-      if (fullName)        data.contactName     = fullName;
-      const title = candidate.title || candidate.position
-        || (Array.isArray(candidate.experience) ? candidate.experience[0]?.title || candidate.experience[0]?.position : null)
-        || found.contactTitle;
-      if (title)           data.contactTitle    = title;
+      if (p.email)    data.contactEmail    = p.email;
+      if (p.phone)    data.contactPhone    = p.phone;
+      if (p.linkedin) data.contactLinkedin = p.linkedin;
+      if (p.name)     data.contactName     = p.name;
+      if (p.title)    data.contactTitle    = p.title;
 
       await prisma.lead.update({ where: { id: found.leadId }, data })
-        .then(() => logger.info('SignalHire webhook: lead enriched', { leadId: found.leadId, ...picked }))
+        .then(() => logger.info('SignalHire webhook: lead enriched', { leadId: found.leadId, email: p.email, phone: p.phone, linkedin: p.linkedin }))
         .catch(e => logger.error('SignalHire webhook: lead update failed', { leadId: found.leadId, err: e.message }));
 
-      // If a synchronous request is waiting on this result, unblock it with the contact.
       if (typeof found.resolve === 'function') {
-        try { found.resolve({ found: true, contact: { ...picked, name: data.contactName || null, title: data.contactTitle || null } }); }
+        try { found.resolve({ found: true, contact: p }); }
         catch (e) { logger.warn('SignalHire webhook: resolve failed', { err: e.message }); }
       }
     }
