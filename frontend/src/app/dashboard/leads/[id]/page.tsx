@@ -559,8 +559,8 @@ export default function LeadDetailPage() {
     const emails    = newContact.emails.map(e => e.trim()).filter(Boolean);
     const phones    = newContact.phones.map(p => p.trim()).filter(Boolean);
     const linkedins = newContact.linkedins.map(l => l.trim()).filter(Boolean);
-    if (!emails.length && !phones.length) {
-      toast.error('Enter at least a phone number or email address');
+    if (!emails.length && !phones.length && !linkedins.length && !newContact.name.trim()) {
+      toast.error('Enter at least a name, email, phone, or LinkedIn');
       return;
     }
     addContactMutation.mutate({
@@ -987,7 +987,7 @@ export default function LeadDetailPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
                   Primary Contact
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
                   <InfoRow icon={<User size={12} className="text-slate-400" />}
                     label="Name" value={lead.contactName} />
                   <InfoRow icon={<ChevronRight size={12} className="text-slate-400" />}
@@ -1165,18 +1165,36 @@ export default function LeadDetailPage() {
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2.5 flex items-center gap-1.5">
                   <UserPlus size={12} className="text-blue-400" /> New Contact
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="flex items-center gap-1.5">
-                    <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                    <input className="input text-sm h-8 flex-1" placeholder="Phone number"
-                      value={newContact.phones[0] ?? ''}
-                      onChange={e => setNewContact(c => { const phones = [...c.phones]; phones[0] = e.target.value; return { ...c, phones }; })} />
+                    <User size={11} className="text-slate-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="Full name"
+                      value={newContact.name}
+                      onChange={e => setNewContact(c => ({ ...c, name: e.target.value }))} />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <ChevronRight size={11} className="text-slate-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="Title"
+                      value={newContact.title}
+                      onChange={e => setNewContact(c => ({ ...c, title: e.target.value }))} />
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Mail size={11} className="text-emerald-400 flex-shrink-0" />
                     <input className="input text-sm h-8 flex-1" type="email" placeholder="Email address"
                       value={newContact.emails[0] ?? ''}
                       onChange={e => setNewContact(c => { const emails = [...c.emails]; emails[0] = e.target.value; return { ...c, emails }; })} />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Phone size={11} className="text-amber-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="Phone number"
+                      value={newContact.phones[0] ?? ''}
+                      onChange={e => setNewContact(c => { const phones = [...c.phones]; phones[0] = e.target.value; return { ...c, phones }; })} />
+                  </div>
+                  <div className="flex items-center gap-1.5 sm:col-span-2">
+                    <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="LinkedIn URL"
+                      value={newContact.linkedins[0] ?? ''}
+                      onChange={e => setNewContact(c => { const linkedins = [...c.linkedins]; linkedins[0] = e.target.value; return { ...c, linkedins }; })} />
                   </div>
                 </div>
                 <div className="flex gap-2 mt-2.5">
