@@ -138,11 +138,12 @@ function ContactTableRow({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EnrichPanel({
-  enrichState, onApollo, onSignalHire, signalhireSubmitting = false, hasContact,
+  enrichState, onApollo, onSignalHire, signalhireSubmitting = false, signalhireRevealing = 0, hasContact,
 }: {
   enrichState: EnrichState; onApollo: () => void; onSignalHire: () => void;
-  signalhireSubmitting?: boolean; hasContact: boolean;
+  signalhireSubmitting?: boolean; signalhireRevealing?: number; hasContact: boolean;
 }) {
+  const signalhireBusy = signalhireSubmitting || signalhireRevealing > 0;
   const { status } = enrichState;
 
   // SignalHire submit button (async — result arrives via webhook). Shared by both
@@ -150,10 +151,12 @@ function EnrichPanel({
   const signalhireButton = (
     <button
       className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-60"
-      onClick={() => onSignalHire()} disabled={signalhireSubmitting}>
+      onClick={() => onSignalHire()} disabled={signalhireBusy}>
       {signalhireSubmitting
         ? <><Loader2 size={11} className="animate-spin" /> Submitting…</>
-        : <><Search size={11} /> Enrich via SignalHire</>}
+        : signalhireRevealing > 0
+          ? <><Loader2 size={11} className="animate-spin" /> Revealing {signalhireRevealing} decision-maker{signalhireRevealing > 1 ? 's' : ''}…</>
+          : <><Search size={11} /> Enrich via SignalHire</>}
     </button>
   );
   const isApolloLoading = status === 'searching_apollo';
@@ -220,11 +223,23 @@ function EnrichPanel({
         </div>
         <button
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 transition-colors disabled:opacity-60"
-          onClick={() => onSignalHire()} disabled={signalhireSubmitting}>
-          {signalhireSubmitting ? <><Loader2 size={12} className="animate-spin" /> Submitting…</>
-            : <><Search size={12} /> Enrich via SignalHire</>}
+          onClick={() => onSignalHire()} disabled={signalhireBusy}>
+          {signalhireSubmitting
+            ? <><Loader2 size={12} className="animate-spin" /> Submitting…</>
+            : signalhireRevealing > 0
+              ? <><Loader2 size={12} className="animate-spin" /> Revealing {signalhireRevealing} decision-maker{signalhireRevealing > 1 ? 's' : ''}…</>
+              : <><Search size={12} /> Enrich via SignalHire</>}
         </button>
-        <p className="text-[10px] text-slate-500 mt-1.5 text-center">Result arrives shortly via webhook.</p>
+        {signalhireRevealing > 0 ? (
+          <>
+            <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-sky-500/15">
+              <div className="h-full w-1/2 rounded-full bg-sky-400 animate-pulse" />
+            </div>
+            <p className="text-[10px] text-sky-400/80 mt-1.5 text-center">Fetching contacts from SignalHire… they'll appear in the table below.</p>
+          </>
+        ) : (
+          <p className="text-[10px] text-slate-500 mt-1.5 text-center">Reveals up to 5 decision-makers · arrives via webhook.</p>
+        )}
       </div>
 
       {status === 'apollo_failed' && (
@@ -287,6 +302,8 @@ export default function LeadDetailPage() {
   const [contactDeleteId,  setContactDeleteId]  = useState<string | null>(null);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [editContactData,  setEditContactData]  = useState<{ name: string; title: string; phone: string; email: string; linkedin: string }>({ name: '', title: '', phone: '', email: '', linkedin: '' });
+  // >0 while SignalHire is asynchronously revealing N contacts (shows a progress indicator).
+  const [signalhireRevealing, setSignalhireRevealing] = useState(0);
 
   // Auto-open edit form when navigated with ?edit=1
   useEffect(() => {
@@ -388,12 +405,14 @@ export default function LeadDetailPage() {
       const d = res.data.data;
       if (d?.peopleFound) {
         // Company search → up to 5 decision-makers are being revealed asynchronously
-        // and created as Contact records; refetch the contacts table a few times.
+        // and created as Contact records; show a progress indicator + refetch.
         toast(`SignalHire is revealing ${d.peopleFound} decision-maker${d.peopleFound > 1 ? 's' : ''} — they'll appear in Contacts shortly.`, { icon: '⏳' });
+        setSignalhireRevealing(d.peopleFound);
         [8000, 20000, 40000].forEach(ms => setTimeout(() => {
           qc.invalidateQueries({ queryKey: ['lead', id] });
           qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
         }, ms));
+        setTimeout(() => setSignalhireRevealing(0), 45000);
       } else if (d?.found) {
         // Synchronous hit — contact already written to the lead.
         qc.invalidateQueries({ queryKey: ['lead', id] });
@@ -1189,6 +1208,7 @@ export default function LeadDetailPage() {
               onApollo={() => apolloMutation.mutate()}
               onSignalHire={() => signalhireMutation.mutate()}
               signalhireSubmitting={signalhireMutation.isPending}
+              signalhireRevealing={signalhireRevealing}
               hasContact={hasContact}
             />
           </div>
