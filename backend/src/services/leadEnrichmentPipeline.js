@@ -312,17 +312,20 @@ async function enrichViaSignalHire(lead, meta = {}) {
       }
 
       // Register each person's uid so the webhook knows which lead to attach them to,
-      // and carries name/title from the search (the reveal payload may omit them).
-      for (const p of top) {
+      // and carries name/title + rank (0 = highest-priority decision-maker) from the
+      // search (the reveal payload may omit name/title).
+      top.forEach((p, idx) => {
         signalhirePending.register([p.uid], {
           leadId: lead.id,
           organizationId: lead.organizationId,
           createdById: meta.createdById || null,
           contactName: p.fullName || null,
           contactTitle: p.experience?.[0]?.title || null,
-          mode: 'contact',   // webhook creates a Contact record (not the lead's primary)
+          companyDomain: domain || null,   // to prefer corporate (company-domain) emails
+          mode: 'contact',   // webhook creates a Contact record
+          rank: idx,         // used to promote the top person to the lead's primary
         });
-      }
+      });
 
       const uids = top.map(p => p.uid);
       const res = await axios.post(
@@ -373,6 +376,7 @@ async function enrichViaSignalHire(lead, meta = {}) {
       organizationId: lead.organizationId,
       createdById: meta.createdById || null,
       contactName, contactTitle,
+      companyDomain: domain || null,
       mode: 'primary',   // webhook updates the lead's primary contact fields
       resolve: resolveResult,
     });
