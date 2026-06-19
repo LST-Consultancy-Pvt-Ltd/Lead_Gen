@@ -760,7 +760,7 @@ function jobToLead(jr, profile) {
     jobPostings: [{
       title:    jr.title || '',
       url:      jr.apply_options?.[0]?.link || '',
-      snippet:  (jr.description || '').slice(0, 300),
+      snippet:  (jr.description || '').slice(0, 1200),   // longer excerpt → richer AI scoring
       postedAt,
       platform: jr.via || '',
     }],
