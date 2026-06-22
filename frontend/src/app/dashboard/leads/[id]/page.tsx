@@ -257,6 +257,17 @@ function EnrichPanel({
 // Main page
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Contact field validation ──────────────────────────────────────────────
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidEmail(v: string) { return EMAIL_RE.test(v.trim()); }
+function isValidPhone(v: string) {
+  const s = v.trim();
+  const digits = (s.match(/\d/g) || []).length;
+  return digits >= 7 && /^[+\d][\d\s().+-]*$/.test(s);   // digits + common phone chars only
+}
+function isValidLinkedin(v: string) { return /linkedin\.com\//i.test(v.trim()); }
+function isValidName(v: string) { return /[a-zA-Z]/.test(v); }   // must contain at least one letter
+
 export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc     = useQueryClient();
@@ -635,17 +646,31 @@ export default function LeadDetailPage() {
 
   function handleSaveContact() {
     if (!editingContactId) return;
-    updateContactMutation.mutate({ contactId: editingContactId, data: editContactData });
+    const d = editContactData;
+    if (d.name && !isValidName(d.name))         { toast.error('Enter a valid name (letters required)'); return; }
+    if (d.email && !isValidEmail(d.email))      { toast.error('Invalid email address'); return; }
+    if (d.phone && !isValidPhone(d.phone))      { toast.error('Invalid phone number'); return; }
+    if (d.linkedin && !isValidLinkedin(d.linkedin)) { toast.error('LinkedIn must be a linkedin.com URL'); return; }
+    updateContactMutation.mutate({ contactId: editingContactId, data: d });
   }
 
   function handleAddContact() {
+    const name      = newContact.name.trim();
     const emails    = newContact.emails.map(e => e.trim()).filter(Boolean);
     const phones    = newContact.phones.map(p => p.trim()).filter(Boolean);
     const linkedins = newContact.linkedins.map(l => l.trim()).filter(Boolean);
-    if (!emails.length && !phones.length && !linkedins.length && !newContact.name.trim()) {
+    if (!emails.length && !phones.length && !linkedins.length && !name) {
       toast.error('Enter at least a name, email, phone, or LinkedIn');
       return;
     }
+    // Per-field format validation
+    if (name && !isValidName(name))                 { toast.error('Enter a valid name (letters required)'); return; }
+    const badEmail = emails.find(e => !isValidEmail(e));
+    if (badEmail)                                   { toast.error(`Invalid email: ${badEmail}`); return; }
+    const badPhone = phones.find(p => !isValidPhone(p));
+    if (badPhone)                                   { toast.error(`Invalid phone number: ${badPhone}`); return; }
+    const badLi = linkedins.find(l => !isValidLinkedin(l));
+    if (badLi)                                      { toast.error('LinkedIn must be a linkedin.com URL'); return; }
     addContactMutation.mutate({
       name:    newContact.name,
       title:   newContact.title,
@@ -1095,6 +1120,18 @@ export default function LeadDetailPage() {
                           <td colSpan={canEditThisLead ? 6 : 5} className="p-3">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
+                                <label className="label mb-1 block">Name</label>
+                                <input className="input text-xs h-8 w-full" placeholder="Full name"
+                                  value={editContactData.name}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, name: e.target.value }))} />
+                              </div>
+                              <div>
+                                <label className="label mb-1 block">Title</label>
+                                <input className="input text-xs h-8 w-full" placeholder="Job title"
+                                  value={editContactData.title}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, title: e.target.value }))} />
+                              </div>
+                              <div>
                                 <label className="label mb-1 block">Email</label>
                                 <input className="input text-xs h-8 w-full" type="email" placeholder="name@company.com"
                                   value={editContactData.email}
@@ -1105,6 +1142,12 @@ export default function LeadDetailPage() {
                                 <input className="input text-xs h-8 w-full" placeholder="+1 ..."
                                   value={editContactData.phone}
                                   onChange={e => setEditContactData((d: any) => ({ ...d, phone: e.target.value }))} />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="label mb-1 block">LinkedIn URL</label>
+                                <input className="input text-xs h-8 w-full" placeholder="https://www.linkedin.com/in/…"
+                                  value={editContactData.linkedin}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, linkedin: e.target.value }))} />
                               </div>
                             </div>
                             <div className="flex gap-2 pt-2">
