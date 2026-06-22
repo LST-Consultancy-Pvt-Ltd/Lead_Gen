@@ -914,16 +914,16 @@ export default function LeadDetailPage() {
               <div key={i} className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{jp.title}</p>
-                  {jp.postedAt && <span className="text-xs text-slate-500 flex-shrink-0">{jp.postedAt}</span>}
+                  {/* {jp.postedAt && <span className="text-xs text-slate-500 flex-shrink-0">{jp.postedAt}</span>} */}
                 </div>
-                {jp.snippet && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{jp.snippet}</p>}
+                {/* {jp.snippet && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{jp.snippet}</p>} */}
                 <div className="flex items-center gap-3 mt-2">
-                  {jp.workArrangement && (
+                  {/* {jp.workArrangement && (
                     <span className="text-[10px] text-slate-500">{jp.workArrangement}</span>
-                  )}
-                  {jp.salary && (
+                  )} */}
+                  {/* {jp.salary && (
                     <span className="text-[10px] text-emerald-400">{jp.salary}</span>
-                  )}
+                  )} */}
                   {jp.url && (
                     <a href={jp.url} target="_blank" rel="noopener noreferrer"
                       className="text-[10px] text-blue-400 hover:underline flex items-center gap-0.5">
