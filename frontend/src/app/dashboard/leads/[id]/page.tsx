@@ -164,13 +164,13 @@ function EnrichPanel({
   if (hasContact && (status === 'idle' || status === 'apollo_found' || status === 'apollo_failed')) {
     return (
       <div className="pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3 space-y-2">
-        <button
+        {/* <button
           className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
           onClick={() => onApollo()} disabled={isApolloLoading}>
           {isApolloLoading
             ? <><Loader2 size={11} className="animate-spin" /> Searching…</>
             : <><Search size={11} /> Search Apollo for More Contacts</>}
-        </button>
+        </button> */}
         {signalhireButton}
       </div>
     );
@@ -261,11 +261,11 @@ function EnrichPanel({
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function isValidEmail(v: string) { return EMAIL_RE.test(v.trim()); }
 function isValidPhone(v: string) {
-  const s = v.trim();
-  const digits = (s.match(/\d/g) || []).length;
-  return digits >= 7 && /^[+\d][\d\s().+-]*$/.test(s);   // digits + common phone chars only
+  return /^\d{3,16}$/.test(v.trim());   // digits only, min 3, max 16
 }
-function isValidLinkedin(v: string) { return /linkedin\.com\//i.test(v.trim()); }
+// Accepts linkedin.com/in/<handle> with or without https:// and www.
+const LINKEDIN_RE = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[a-zA-Z0-9-_%]+\/?$/;
+function isValidLinkedin(v: string) { return LINKEDIN_RE.test(v.trim()); }
 function isValidName(v: string) { return /[a-zA-Z]/.test(v); }   // must contain at least one letter
 
 export default function LeadDetailPage() {
@@ -648,9 +648,9 @@ export default function LeadDetailPage() {
     if (!editingContactId) return;
     const d = editContactData;
     if (d.name && !isValidName(d.name))         { toast.error('Enter a valid name (letters required)'); return; }
-    if (d.email && !isValidEmail(d.email))      { toast.error('Invalid email address'); return; }
-    if (d.phone && !isValidPhone(d.phone))      { toast.error('Invalid phone number'); return; }
-    if (d.linkedin && !isValidLinkedin(d.linkedin)) { toast.error('LinkedIn must be a linkedin.com URL'); return; }
+    if (d.email && !isValidEmail(d.email))      { toast.error('Please enter a valid email address'); return; }
+    if (d.phone && !isValidPhone(d.phone))      { toast.error('Phone must be numbers only, 3 to 16 digits'); return; }
+    if (d.linkedin && !isValidLinkedin(d.linkedin)) { toast.error('Enter a valid LinkedIn profile URL (linkedin.com/in/…)'); return; }
     updateContactMutation.mutate({ contactId: editingContactId, data: d });
   }
 
@@ -666,11 +666,11 @@ export default function LeadDetailPage() {
     // Per-field format validation
     if (name && !isValidName(name))                 { toast.error('Enter a valid name (letters required)'); return; }
     const badEmail = emails.find(e => !isValidEmail(e));
-    if (badEmail)                                   { toast.error(`Invalid email: ${badEmail}`); return; }
+    if (badEmail)                                   { toast.error(`Please enter a valid email address: ${badEmail}`); return; }
     const badPhone = phones.find(p => !isValidPhone(p));
-    if (badPhone)                                   { toast.error(`Invalid phone number: ${badPhone}`); return; }
+    if (badPhone)                                   { toast.error('Phone must be numbers only, 3 to 16 digits'); return; }
     const badLi = linkedins.find(l => !isValidLinkedin(l));
-    if (badLi)                                      { toast.error('LinkedIn must be a linkedin.com URL'); return; }
+    if (badLi)                                      { toast.error('Enter a valid LinkedIn profile URL (linkedin.com/in/…)'); return; }
     addContactMutation.mutate({
       name:    newContact.name,
       title:   newContact.title,
@@ -684,12 +684,8 @@ export default function LeadDetailPage() {
   }
 
   function handleContactDelete(contactId: string) {
-    if (contactDeleteId === contactId) {
-      deleteContactMutation.mutate(contactId);
-    } else {
-      setContactDeleteId(contactId);
-      setTimeout(() => setContactDeleteId(null), 3000);
-    }
+    // Open the confirmation popup; actual delete happens from the modal.
+    setContactDeleteId(contactId);
   }
 
   async function handleSend() {
@@ -866,15 +862,29 @@ export default function LeadDetailPage() {
             )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* <div>
+            <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Status</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.status?.replace(/_/g, ' ') || '—'}</p>
-            </div> */}
+              <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{lead.status?.replace(/_/g, ' ') || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Job Title</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead type</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">
+                {lead.leadType ? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1) : '—'}
+              </p>
+            </div>
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Follow-up Date</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">
                 {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
               </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Assigned To</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.assignedTo?.name || '—'}</p>
             </div>
             {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Name</p>
@@ -896,20 +906,6 @@ export default function LeadDetailPage() {
                 <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
               )}
             </div> */}
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Job Title</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Assigned To</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.assignedTo?.name || '—'}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead type</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">
-                {lead.leadType ? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1) : '—'}
-              </p>
-            </div>
             {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source URL</p>
               {(() => {
@@ -926,7 +922,7 @@ export default function LeadDetailPage() {
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead Source</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.source || '—'}</p>
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
               <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{lead.notes || '—'}</p>
             </div>
@@ -944,7 +940,7 @@ export default function LeadDetailPage() {
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* <div>
+            <div>
               <label className="label">Status</label>
               <select
                 className="input"
@@ -958,28 +954,7 @@ export default function LeadDetailPage() {
                   </option>
                 ))}
               </select>
-            </div> */}
-            <div>
-              <label className="label">Follow-up Date</label>
-              <input
-                className="input"
-                type="date"
-                title="Follow-up date"
-                value={editData.followUpDate || ''}
-                onChange={(e) => setEditData((d: any) => ({ ...d, followUpDate: e.target.value }))}
-              />
             </div>
-            {editData.status === 'disqualified' && (
-              <div className="sm:col-span-2">
-                <label className="label">Disqualification Reason <span className="text-red-400">*</span></label>
-                <textarea
-                  className="input h-20 resize-none"
-                  value={editData.disqualificationReason || ''}
-                  onChange={(e) => setEditData((d: any) => ({ ...d, disqualificationReason: e.target.value }))}
-                  placeholder="Explain why this lead is disqualified (min 10 characters)..."
-                />
-              </div>
-            )}
             {/* <div>
               <label className="label">Contact Name</label>
               <input
@@ -1034,6 +1009,16 @@ export default function LeadDetailPage() {
               </select>
             </div>
             <div>
+              <label className="label">Follow-up Date</label>
+              <input
+                className="input"
+                type="date"
+                title="Follow-up date"
+                value={editData.followUpDate || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, followUpDate: e.target.value }))}
+              />
+            </div>
+            <div>
               <label className="label">Source URL</label>
               <input
                 className="input"
@@ -1052,6 +1037,17 @@ export default function LeadDetailPage() {
                 placeholder="Internal notes..."
               />
             </div>
+            {editData.status === 'disqualified' && (
+              <div className="sm:col-span-2">
+                <label className="label">Disqualification Reason <span className="text-red-400">*</span></label>
+                <textarea
+                  className="input h-20 resize-none"
+                  value={editData.disqualificationReason || ''}
+                  onChange={(e) => setEditData((d: any) => ({ ...d, disqualificationReason: e.target.value }))}
+                  placeholder="Explain why this lead is disqualified (min 10 characters)..."
+                />
+              </div>
+            )}
           </div>
           <div className="flex gap-2 mt-4">
             <button
@@ -1176,9 +1172,10 @@ export default function LeadDetailPage() {
                               </div>
                               <div>
                                 <label className="label mb-1 block">Phone</label>
-                                <input className="input text-xs h-8 w-full" placeholder="+1 ..."
+                                <input className="input text-xs h-8 w-full" placeholder="Digits only (3–16)"
+                                  inputMode="numeric" maxLength={16}
                                   value={editContactData.phone}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, phone: e.target.value }))} />
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, phone: e.target.value.replace(/\D/g, '').slice(0, 16) }))} />
                               </div>
                               <div className="col-span-2">
                                 <label className="label mb-1 block">LinkedIn URL</label>
@@ -1204,7 +1201,7 @@ export default function LeadDetailPage() {
                           canEdit={canEditThisLead}
                           onEdit={() => startEditContact(c)}
                           onDelete={() => handleContactDelete(c.id)}
-                          deleteArmed={contactDeleteId === c.id}
+                          deleteArmed={false}
                         />
                       )
                     ))}
@@ -1240,9 +1237,10 @@ export default function LeadDetailPage() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                    <input className="input text-sm h-8 flex-1" placeholder="Phone number"
+                    <input className="input text-sm h-8 flex-1" placeholder="Digits only (3–16)"
+                      inputMode="numeric" maxLength={16}
                       value={newContact.phones[0] ?? ''}
-                      onChange={e => setNewContact(c => { const phones = [...c.phones]; phones[0] = e.target.value; return { ...c, phones }; })} />
+                      onChange={e => setNewContact(c => { const phones = [...c.phones]; phones[0] = e.target.value.replace(/\D/g, '').slice(0, 16); return { ...c, phones }; })} />
                   </div>
                   <div className="flex items-center gap-1.5 sm:col-span-2">
                     <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
@@ -1688,6 +1686,38 @@ export default function LeadDetailPage() {
                 }}
               >
                 Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
+
+      {/* ── Contact Delete Confirmation Modal ──────────────────────────────── */}
+      {mounted && contactDeleteId && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Delete Contact</h3>
+                <p className="text-sm text-slate-500 mt-1">Are you sure you want to delete this contact? This action cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => setContactDeleteId(null)}
+              >
+                No, Cancel
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+                disabled={deleteContactMutation.isPending}
+                onClick={() => deleteContactMutation.mutate(contactDeleteId)}
+              >
+                {deleteContactMutation.isPending ? <><Loader2 size={13} className="animate-spin" /> Deleting…</> : 'Yes, Delete'}
               </button>
             </div>
           </div>
