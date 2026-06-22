@@ -763,7 +763,7 @@ export default function LeadDetailPage() {
           <Avatar initials={getInitials(lead.companyName)} size="lg" />
           <div>
             <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">{lead.companyName}</h1>
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <div className="flex flex-col items-start gap-1.5 mt-1.5">
               {/* Domain badge */}
               {domainName && (
                 <span className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-400 px-2.5 py-1 rounded-lg font-mono">
@@ -780,7 +780,7 @@ export default function LeadDetailPage() {
               {/* Website link */}
               {websiteUrl && (
                 <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-blue-400 transition-colors">
+                  className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 px-2.5 py-1 rounded-lg hover:text-blue-400 transition-colors">
                   <Globe size={11} /> Visit site
                 </a>
               )}
@@ -788,19 +788,52 @@ export default function LeadDetailPage() {
               {lead.linkedinUrl && (
                 <a href={lead.linkedinUrl.startsWith('http') ? lead.linkedinUrl : `https://${lead.linkedinUrl}`}
                   target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-blue-400 transition-colors">
+                  className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 px-2.5 py-1 rounded-lg hover:text-blue-400 transition-colors">
                   <Linkedin size={11} /> LinkedIn
                 </a>
               )}
             </div>
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button className="btn-primary" onClick={() => generateEmailMutation.mutate()}
+        {/* Job Postings — between lead name and AI Email button */}
+        {lead.jobPostings?.length > 0 && (
+          <div className="flex-1 min-w-[280px] space-y-2">
+            {(lead.jobPostings as any[]).map((jp: any, i: number) => (
+              <div key={i} className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{jp.title}</p>
+                  {jp.postedAt && <span className="text-xs text-slate-500 flex-shrink-0">{jp.postedAt}</span>}
+                </div>
+                {jp.snippet && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{jp.snippet}</p>}
+                <div className="flex items-center gap-3 mt-2">
+                  {jp.workArrangement && (
+                    <span className="text-[10px] text-slate-500">{jp.workArrangement}</span>
+                  )}
+                  {jp.salary && (
+                    <span className="text-[10px] text-emerald-400">{jp.salary}</span>
+                  )}
+                  {jp.url && (
+                    <a href={jp.url} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] text-blue-400 hover:underline flex items-center gap-0.5">
+                      View posting <ExternalLink size={9} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-col items-end gap-3">
+          {/* <button className="btn-primary" onClick={() => generateEmailMutation.mutate()}
             disabled={generateEmailMutation.isPending}>
             {generateEmailMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
             AI Email
-          </button>
+          </button> */}
+          <div className="flex flex-col items-center gap-1">
+            <ScoreRing score={lead.leadScore} size={44} />
+            <p className="text-xs text-slate-500">Lead Score</p>
+          </div>
         </div>
       </div>
 
@@ -833,39 +866,43 @@ export default function LeadDetailPage() {
             )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+            {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Status</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.status?.replace(/_/g, ' ') || '—'}</p>
-            </div>
+            </div> */}
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Follow-up Date</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">
                 {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
               </p>
             </div>
-            <div>
+            {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Name</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactName || '—'}</p>
-            </div>
-            <div>
+            </div> */}
+            {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Email</p>
               {lead.contactEmail ? (
                 <a href={`mailto:${lead.contactEmail}`} className="text-sm text-blue-400 hover:underline">{lead.contactEmail}</a>
               ) : (
                 <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
               )}
-            </div>
-            <div>
+            </div> */}
+            {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Phone</p>
               {lead.contactPhone ? (
                 <a href={`tel:${lead.contactPhone}`} className="text-sm text-blue-400 hover:underline">{lead.contactPhone}</a>
               ) : (
                 <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
               )}
-            </div>
+            </div> */}
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Job Title</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Assigned To</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.assignedTo?.name || '—'}</p>
             </div>
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead type</p>
@@ -873,7 +910,7 @@ export default function LeadDetailPage() {
                 {lead.leadType ? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1) : '—'}
               </p>
             </div>
-            <div>
+            {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source URL</p>
               {(() => {
                 const url = lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '');
@@ -884,7 +921,7 @@ export default function LeadDetailPage() {
                   <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
                 );
               })()}
-            </div>
+            </div> */}
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead Source</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.source || '—'}</p>
@@ -907,7 +944,7 @@ export default function LeadDetailPage() {
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            {/* <div>
               <label className="label">Status</label>
               <select
                 className="input"
@@ -921,7 +958,7 @@ export default function LeadDetailPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </div> */}
             <div>
               <label className="label">Follow-up Date</label>
               <input
@@ -943,7 +980,7 @@ export default function LeadDetailPage() {
                 />
               </div>
             )}
-            <div>
+            {/* <div>
               <label className="label">Contact Name</label>
               <input
                 className="input"
@@ -951,8 +988,8 @@ export default function LeadDetailPage() {
                 onChange={(e) => setEditData((d: any) => ({ ...d, contactName: e.target.value }))}
                 placeholder="Contact full name"
               />
-            </div>
-            <div>
+            </div> */}
+            {/* <div>
               <label className="label">Contact Email</label>
               <input
                 className="input"
@@ -961,8 +998,8 @@ export default function LeadDetailPage() {
                 onChange={(e) => setEditData((d: any) => ({ ...d, contactEmail: e.target.value }))}
                 placeholder="contact@company.com"
               />
-            </div>
-            <div>
+            </div> */}
+            {/* <div>
               <label className="label">Contact Phone</label>
               <input
                 className="input"
@@ -970,7 +1007,7 @@ export default function LeadDetailPage() {
                 onChange={(e) => setEditData((d: any) => ({ ...d, contactPhone: e.target.value }))}
                 placeholder="+91 XXXXX XXXXX"
               />
-            </div>
+            </div> */}
             <div>
               <label className="label">Job Title</label>
               <input
@@ -1478,38 +1515,6 @@ export default function LeadDetailPage() {
             </div>
           )}
 
-          {/* ── Job Postings ─────────────────────────────────────────────── */}
-          {lead.jobPostings?.length > 0 && (
-            <div className="card p-5">
-              <h2 className="section-title mb-3">Job Postings</h2>
-              <div className="space-y-2">
-                {(lead.jobPostings as any[]).map((jp: any, i: number) => (
-                  <div key={i} className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{jp.title}</p>
-                      {jp.postedAt && <span className="text-xs text-slate-500 flex-shrink-0">{jp.postedAt}</span>}
-                    </div>
-                    {jp.snippet && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{jp.snippet}</p>}
-                    <div className="flex items-center gap-3 mt-2">
-                      {jp.workArrangement && (
-                        <span className="text-[10px] text-slate-500">{jp.workArrangement}</span>
-                      )}
-                      {jp.salary && (
-                        <span className="text-[10px] text-emerald-400">{jp.salary}</span>
-                      )}
-                      {jp.url && (
-                        <a href={jp.url} target="_blank" rel="noopener noreferrer"
-                          className="text-[10px] text-blue-400 hover:underline flex items-center gap-0.5">
-                          View posting <ExternalLink size={9} />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* ── Activities Timeline ──────────────────────────────────────── */}
           <div className="card p-5">
             <ActivitiesList leadId={id} />
@@ -1519,7 +1524,7 @@ export default function LeadDetailPage() {
         {/* ── Right sidebar ─────────────────────────────────────────────── */}
         <div className="space-y-4">
           {/* Scores */}
-          <div className="card p-5">
+          {/* <div className="card p-5">
             <h2 className="section-title mb-4">AI Scores</h2>
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs text-slate-500">Lead Score</p>
@@ -1534,10 +1539,10 @@ export default function LeadDetailPage() {
                 {lead.intentScore}%
               </span>
             </div>
-          </div>
+          </div> */}
 
           {/* Status */}
-          <div className="card p-5">
+          {/* <div className="card p-5">
             <h2 className="section-title mb-3">Status</h2>
             <Badge color={statusColors[lead.status] ?? 'gray'}>{lead.status?.replace('_', ' ')}</Badge>
             {lead.assignedTo?.name && (
@@ -1565,7 +1570,7 @@ export default function LeadDetailPage() {
                 </span>
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* AI Panel */}
           <div className="card p-5">

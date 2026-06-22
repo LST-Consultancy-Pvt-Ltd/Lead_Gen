@@ -55,6 +55,7 @@ export interface Lead {
   subSource?: string;
   accountId?: string;
   importBatchId?: string;
+  scanJobId?: string;
   createdAt: string;
   updatedAt: string;
 }

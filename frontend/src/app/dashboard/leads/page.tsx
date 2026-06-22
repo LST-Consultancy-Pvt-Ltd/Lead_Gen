@@ -493,6 +493,9 @@ export default function LeadsPage() {
                     Source URL
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    Origin
+                  </th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Next Follow-up
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
@@ -579,6 +582,15 @@ export default function LeadsPage() {
                           <span className="text-xs text-slate-400">—</span>
                         );
                       })()}
+                    </td>
+
+                    {/* Origin — Generated (from a discovery scan) vs Imported */}
+                    <td className="px-4 py-3">
+                      {l.scanJobId ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Generated</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-500/10 text-slate-400 border border-slate-500/20">Imported</span>
+                      )}
                     </td>
 
                     <td className="px-4 py-3">
