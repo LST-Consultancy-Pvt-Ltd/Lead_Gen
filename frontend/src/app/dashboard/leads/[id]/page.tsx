@@ -78,15 +78,19 @@ function InfoRow({
 }
 
 // One contact rendered as a table row: Name · Title · Email · Phone · LinkedIn (+ actions).
+// `emails`/`phones` accept one or many values — all are listed one below another.
 function ContactTableRow({
-  name, title, email, phone, linkedin, badge, canEdit, onEdit, onDelete, deleteArmed,
+  name, title, emails, phones, linkedin, badge, canEdit, onEdit, onDelete, deleteArmed,
 }: {
-  name?: string | null; title?: string | null; email?: string | null;
-  phone?: string | null; linkedin?: string | null; badge?: string;
+  name?: string | null; title?: string | null;
+  emails?: (string | null | undefined)[]; phones?: (string | null | undefined)[];
+  linkedin?: string | null; badge?: string;
   canEdit?: boolean; onEdit?: () => void; onDelete?: () => void; deleteArmed?: boolean;
 }) {
   const liHref = linkedin ? (linkedin.startsWith('http') ? linkedin : `https://${linkedin}`) : undefined;
   const copy = (v: string) => { navigator.clipboard.writeText(v); toast.success('Copied!'); };
+  const emailList = (emails || []).map(e => (e || '').trim()).filter(Boolean);
+  const phoneList = (phones || []).map(p => (p || '').trim()).filter(Boolean);
   return (
     <tr className="border-t border-slate-200 dark:border-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors align-top">
       <td className="px-3 py-2.5">
@@ -97,19 +101,27 @@ function ContactTableRow({
       </td>
       <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300">{title || '—'}</td>
       <td className="px-3 py-2.5">
-        {email ? (
-          <span className="group/cell inline-flex items-center gap-1.5">
-            <a href={`mailto:${email}`} className="text-sm text-blue-400 hover:underline break-all">{email}</a>
-            <button onClick={() => copy(email)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy email"><Copy size={11} className="text-slate-400" /></button>
-          </span>
+        {emailList.length ? (
+          <div className="space-y-1">
+            {emailList.map((email, i) => (
+              <span key={i} className="group/cell flex items-center gap-1.5">
+                <a href={`mailto:${email}`} className="text-sm text-blue-400 hover:underline break-all">{email}</a>
+                <button onClick={() => copy(email)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy email"><Copy size={11} className="text-slate-400" /></button>
+              </span>
+            ))}
+          </div>
         ) : <span className="text-sm text-slate-400">—</span>}
       </td>
       <td className="px-3 py-2.5">
-        {phone ? (
-          <span className="group/cell inline-flex items-center gap-1.5">
-            <a href={`tel:${phone}`} className="text-sm text-slate-700 dark:text-slate-300 hover:text-blue-400 whitespace-nowrap">{phone}</a>
-            <button onClick={() => copy(phone)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy phone"><Copy size={11} className="text-slate-400" /></button>
-          </span>
+        {phoneList.length ? (
+          <div className="space-y-1">
+            {phoneList.map((phone, i) => (
+              <span key={i} className="group/cell flex items-center gap-1.5">
+                <a href={`tel:${phone}`} className="text-sm text-slate-700 dark:text-slate-300 hover:text-blue-400 whitespace-nowrap">{phone}</a>
+                <button onClick={() => copy(phone)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy phone"><Copy size={11} className="text-slate-400" /></button>
+              </span>
+            ))}
+          </div>
         ) : <span className="text-sm text-slate-400">—</span>}
       </td>
       <td className="px-3 py-2.5">
@@ -130,6 +142,93 @@ function ContactTableRow({
         </td>
       )}
     </tr>
+  );
+}
+
+// A vertical list of text inputs with a "+" to add rows and an "×" to remove
+// them — used for the Email and Phone fields so a contact can hold several of each.
+function MultiFieldList({
+  label, icon, values, onChange, placeholder, type, numeric, addLabel,
+  inputClassName = 'input text-xs h-8 flex-1',
+}: {
+  label?: string; icon?: React.ReactNode; values: string[];
+  onChange: (next: string[]) => void; placeholder?: string;
+  type?: string; numeric?: boolean; addLabel: string; inputClassName?: string;
+}) {
+  const [confirmIdx, setConfirmIdx] = useState<number | null>(null);
+  const fieldLabel = (label || 'entry').toLowerCase();
+  const update = (i: number, v: string) => {
+    const next = [...values];
+    next[i] = numeric ? v.replace(/\D/g, '').slice(0, 16) : v;
+    onChange(next);
+  };
+  const add = () => onChange([...values, '']);
+  const remove = (i: number) => {
+    const next = values.filter((_, idx) => idx !== i);
+    onChange(next.length ? next : ['']);
+    setConfirmIdx(null);
+  };
+  return (
+    <div>
+      {label && <label className="label mb-1 block">{label}</label>}
+      <div className="space-y-1.5">
+        {values.map((val, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            {icon}
+            <input
+              className={inputClassName}
+              type={type}
+              inputMode={numeric ? 'numeric' : undefined}
+              maxLength={numeric ? 16 : undefined}
+              placeholder={placeholder}
+              value={val}
+              onChange={e => update(i, e.target.value)}
+            />
+            {values.length > 1 && (
+              <button type="button" onClick={() => setConfirmIdx(i)}
+                className="btn-ghost p-1 text-slate-400 hover:text-red-400 flex-shrink-0" title="Remove">
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={add}
+          className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 font-medium">
+          <Plus size={12} /> {addLabel}
+        </button>
+      </div>
+
+      {/* Confirm before removing a row */}
+      {confirmIdx !== null && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Remove {fieldLabel}</h3>
+                <p className="text-sm text-slate-500 mt-1">Are you sure you want to remove this {fieldLabel}?</p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button type="button"
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => setConfirmIdx(null)}
+              >
+                No, Cancel
+              </button>
+              <button type="button"
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-semibold text-white transition-colors"
+                onClick={() => remove(confirmIdx)}
+              >
+                Yes, Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
+    </div>
   );
 }
 
@@ -312,7 +411,7 @@ export default function LeadDetailPage() {
   const [newContact,       setNewContact]       = useState({ name: '', title: '', emails: [''], phones: [''], linkedins: [''] });
   const [contactDeleteId,  setContactDeleteId]  = useState<string | null>(null);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
-  const [editContactData,  setEditContactData]  = useState<{ name: string; title: string; phone: string; email: string; linkedin: string }>({ name: '', title: '', phone: '', email: '', linkedin: '' });
+  const [editContactData,  setEditContactData]  = useState<{ name: string; title: string; phones: string[]; emails: string[]; linkedin: string }>({ name: '', title: '', phones: [''], emails: [''], linkedin: '' });
   // >0 while SignalHire is asynchronously revealing N contacts (shows a progress indicator).
   const [signalhireRevealing, setSignalhireRevealing] = useState(0);
 
@@ -635,11 +734,13 @@ export default function LeadDetailPage() {
 
   function startEditContact(c: any) {
     setEditingContactId(c.id);
+    const emails = [c.email || c.contactEmail || '', ...(Array.isArray(c.additionalEmails) ? c.additionalEmails : [])].filter(Boolean);
+    const phones = [c.phone || c.contactPhone || '', ...(Array.isArray(c.additionalPhones) ? c.additionalPhones : [])].filter(Boolean);
     setEditContactData({
       name:     c.name     || c.contactName     || '',
       title:    c.title    || c.contactTitle    || '',
-      phone:    c.phone    || c.contactPhone    || '',
-      email:    c.email    || c.contactEmail    || '',
+      phones:   phones.length ? phones : [''],
+      emails:   emails.length ? emails : [''],
       linkedin: c.linkedin || c.contactLinkedin || '',
     });
   }
@@ -647,11 +748,26 @@ export default function LeadDetailPage() {
   function handleSaveContact() {
     if (!editingContactId) return;
     const d = editContactData;
+    const emails = d.emails.map(e => e.trim()).filter(Boolean);
+    const phones = d.phones.map(p => p.trim()).filter(Boolean);
     if (d.name && !isValidName(d.name))         { toast.error('Enter a valid name (letters required)'); return; }
-    if (d.email && !isValidEmail(d.email))      { toast.error('Please enter a valid email address'); return; }
-    if (d.phone && !isValidPhone(d.phone))      { toast.error('Phone must be numbers only, 3 to 16 digits'); return; }
+    const badEmail = emails.find(e => !isValidEmail(e));
+    if (badEmail)                               { toast.error(`Please enter a valid email address: ${badEmail}`); return; }
+    const badPhone = phones.find(p => !isValidPhone(p));
+    if (badPhone)                               { toast.error('Phone must be numbers only, 3 to 16 digits'); return; }
     if (d.linkedin && !isValidLinkedin(d.linkedin)) { toast.error('Enter a valid LinkedIn profile URL (linkedin.com/in/…)'); return; }
-    updateContactMutation.mutate({ contactId: editingContactId, data: d });
+    updateContactMutation.mutate({
+      contactId: editingContactId,
+      data: {
+        name:             d.name,
+        title:            d.title,
+        linkedin:         d.linkedin,
+        email:            emails[0] || null,
+        phone:            phones[0] || null,
+        additionalEmails: emails.slice(1),
+        additionalPhones: phones.slice(1),
+      },
+    });
   }
 
   function handleAddContact() {
@@ -1143,7 +1259,7 @@ export default function LeadDetailPage() {
                     {hasContact && (
                       <ContactTableRow
                         name={lead.contactName} title={lead.contactTitle}
-                        email={lead.contactEmail} phone={lead.contactPhone} linkedin={lead.contactLinkedin}
+                        emails={[lead.contactEmail]} phones={[lead.contactPhone]} linkedin={lead.contactLinkedin}
                         badge="Primary"
                       />
                     )}
@@ -1164,19 +1280,14 @@ export default function LeadDetailPage() {
                                   value={editContactData.title}
                                   onChange={e => setEditContactData((d: any) => ({ ...d, title: e.target.value }))} />
                               </div>
-                              <div>
-                                <label className="label mb-1 block">Email</label>
-                                <input className="input text-xs h-8 w-full" type="email" placeholder="name@company.com"
-                                  value={editContactData.email}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, email: e.target.value }))} />
-                              </div>
-                              <div>
-                                <label className="label mb-1 block">Phone</label>
-                                <input className="input text-xs h-8 w-full" placeholder="Digits only (3–16)"
-                                  inputMode="numeric" maxLength={16}
-                                  value={editContactData.phone}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, phone: e.target.value.replace(/\D/g, '').slice(0, 16) }))} />
-                              </div>
+                              <MultiFieldList
+                                label="Email" type="email" placeholder="name@company.com" addLabel="Add email"
+                                values={editContactData.emails}
+                                onChange={emails => setEditContactData((d: any) => ({ ...d, emails }))} />
+                              <MultiFieldList
+                                label="Phone" numeric placeholder="Digits only (3–16)" addLabel="Add phone"
+                                values={editContactData.phones}
+                                onChange={phones => setEditContactData((d: any) => ({ ...d, phones }))} />
                               <div className="col-span-2">
                                 <label className="label mb-1 block">LinkedIn URL</label>
                                 <input className="input text-xs h-8 w-full" placeholder="https://www.linkedin.com/in/…"
@@ -1196,7 +1307,8 @@ export default function LeadDetailPage() {
                         <ContactTableRow
                           key={c.id}
                           name={c.name || c.contactName} title={c.title || c.contactTitle}
-                          email={c.email || c.contactEmail} phone={c.phone || c.contactPhone}
+                          emails={[c.email || c.contactEmail, ...(Array.isArray(c.additionalEmails) ? c.additionalEmails : [])]}
+                          phones={[c.phone || c.contactPhone, ...(Array.isArray(c.additionalPhones) ? c.additionalPhones : [])]}
                           linkedin={c.linkedin || c.contactLinkedin || (Array.isArray(c.additionalLinkedinUrls) ? c.additionalLinkedinUrls[0] : null)}
                           canEdit={canEditThisLead}
                           onEdit={() => startEditContact(c)}
@@ -1229,19 +1341,18 @@ export default function LeadDetailPage() {
                       value={newContact.title}
                       onChange={e => setNewContact(c => ({ ...c, title: e.target.value }))} />
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Mail size={11} className="text-emerald-400 flex-shrink-0" />
-                    <input className="input text-sm h-8 flex-1" type="email" placeholder="Email address"
-                      value={newContact.emails[0] ?? ''}
-                      onChange={e => setNewContact(c => { const emails = [...c.emails]; emails[0] = e.target.value; return { ...c, emails }; })} />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                    <input className="input text-sm h-8 flex-1" placeholder="Digits only (3–16)"
-                      inputMode="numeric" maxLength={16}
-                      value={newContact.phones[0] ?? ''}
-                      onChange={e => setNewContact(c => { const phones = [...c.phones]; phones[0] = e.target.value.replace(/\D/g, '').slice(0, 16); return { ...c, phones }; })} />
-                  </div>
+                  <MultiFieldList
+                    icon={<Mail size={11} className="text-emerald-400 flex-shrink-0" />}
+                    type="email" placeholder="Email address" addLabel="Add email"
+                    inputClassName="input text-sm h-8 flex-1"
+                    values={newContact.emails}
+                    onChange={emails => setNewContact(c => ({ ...c, emails }))} />
+                  <MultiFieldList
+                    icon={<Phone size={11} className="text-amber-400 flex-shrink-0" />}
+                    numeric placeholder="Digits only (3–16)" addLabel="Add phone"
+                    inputClassName="input text-sm h-8 flex-1"
+                    values={newContact.phones}
+                    onChange={phones => setNewContact(c => ({ ...c, phones }))} />
                   <div className="flex items-center gap-1.5 sm:col-span-2">
                     <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
                     <input className="input text-sm h-8 flex-1" placeholder="LinkedIn URL"

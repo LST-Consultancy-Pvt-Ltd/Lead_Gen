@@ -481,6 +481,9 @@ async function exportLeads(req, res) {
         sourceUrl:    l.sourceUrl || '',
         createdAt:    formatDate(l.createdAt),
       };
+      // Company-level fields appear only on the lead's first (Primary) row;
+      // additional rows blank them so the data isn't repeated.
+      const emptyBase = Object.fromEntries(Object.keys(base).map(k => [k, '']));
 
       // Primary contact row
       rows.push({
@@ -493,18 +496,27 @@ async function exportLeads(req, res) {
         contactLinkedin: l.contactLinkedin || '',
       });
 
-      // Additional contact rows
+      // Additional contact rows — one row per email/phone value. The contact's
+      // name/title/linkedin appear only on its first row; extra emails/phones
+      // spill onto their own rows so each value gets its own cell.
       if (l.leadContacts && l.leadContacts.length > 0) {
         for (const c of l.leadContacts) {
-          rows.push({
-            ...base,
-            contactType:    'Additional',
-            contactName:    c.name || '',
-            contactTitle:   c.title || c.designation || '',
-            contactEmail:   c.email || '',
-            contactPhone:   c.phone || '',
-            contactLinkedin: c.linkedin || '',
-          });
+          const emails = [c.email, ...(Array.isArray(c.additionalEmails) ? c.additionalEmails : [])]
+            .map(v => (v || '').trim()).filter(Boolean);
+          const phones = [c.phone, ...(Array.isArray(c.additionalPhones) ? c.additionalPhones : [])]
+            .map(v => (v || '').trim()).filter(Boolean);
+          const rowCount = Math.max(emails.length, phones.length, 1);
+          for (let i = 0; i < rowCount; i++) {
+            rows.push({
+              ...emptyBase,
+              contactType:    'Additional',
+              contactName:    i === 0 ? (c.name || '') : '',
+              contactTitle:   i === 0 ? (c.title || c.designation || '') : '',
+              contactEmail:   emails[i] || '',
+              contactPhone:   phones[i] || '',
+              contactLinkedin: i === 0 ? (c.linkedin || '') : '',
+            });
+          }
         }
       }
     }
@@ -515,9 +527,11 @@ async function exportLeads(req, res) {
       'linkedinUrl','leadScore','intentLevel','status','intentSignals','source','sourceUrl','createdAt',
     ]});
     const csv = parser.parse(rows);
-    res.setHeader('Content-Type','text/csv');
+    // Prepend a UTF-8 BOM so Excel decodes em-dashes/accents correctly
+    // (without it Excel reads the file as Windows-1252 and shows "â€"" etc.)
+    res.setHeader('Content-Type','text/csv; charset=utf-8');
     res.setHeader('Content-Disposition','attachment; filename=leads.csv');
-    res.send(csv);
+    res.send('﻿' + csv);
   } catch (err) {
     return error(res, 'Export failed', 500);
   }
