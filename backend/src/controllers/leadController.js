@@ -241,13 +241,33 @@ async function enrichLeadViaSignalHire(req, res) {
     const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!lead) return error(res, 'Lead not found', 404);
     logger.info('Enriching via SignalHire', { leadId: lead.id, company: lead.companyName, website: lead.website, linkedinUrl: lead.linkedinUrl });
-    const contact = await enrichViaSignalHire(lead);
-    if (!hasContact(contact)) return success(res, { found: false, enrichedVia: 'signalhire' }, 'SignalHire: no contact found');
-    const updated = await _saveContact(lead, contact, req.user.id, req.user.organizationId);
-    return success(res, { found: true, enrichedVia: 'signalhire',
-      contactEmail: updated.contactEmail, contactName: updated.contactName,
-      contactTitle: updated.contactTitle, contactLinkedin: updated.contactLinkedin,
-      contactPhone: updated.contactPhone, lead: updated }, 'Contact found via SignalHire');
+    // Synchronous wrapper: submit + wait up to 25s for the webhook to deliver (kept
+    // under the 30s frontend axios timeout). If it arrives, return the contact now;
+    // if it times out, the webhook still updates the lead asynchronously.
+    const result = await enrichViaSignalHire(lead, { createdById: req.user.id, waitMs: 25000 });
+    if (result?.peopleFound) {
+      return success(res, { submitted: true, peopleFound: result.peopleFound, async: true, enrichedVia: 'signalhire' },
+        `SignalHire is revealing ${result.peopleFound} decision-maker${result.peopleFound > 1 ? 's' : ''} — they'll appear in Contacts shortly.`);
+    }
+    if (result?.found) {
+      const updated = await prisma.lead.findFirst({ where: { id: lead.id, organizationId: req.user.organizationId } });
+      return success(res, {
+        found: true, async: false, enrichedVia: 'signalhire',
+        contactEmail: updated?.contactEmail, contactName: updated?.contactName,
+        contactTitle: updated?.contactTitle, contactLinkedin: updated?.contactLinkedin,
+        contactPhone: updated?.contactPhone, lead: updated,
+      }, 'Contact found via SignalHire');
+    }
+    if (result?.noContact) {
+      return success(res, { found: false, noContact: true, enrichedVia: 'signalhire' },
+        'SignalHire found no contact for this lead (needs a person name or personal LinkedIn — a company/domain alone often returns nothing).');
+    }
+    if (result?.submitted) {
+      return success(res, { found: false, submitted: true, pending: true, requestId: result.requestId, enrichedVia: 'signalhire' },
+        'SignalHire is still processing — the contact will appear on the lead shortly.');
+    }
+    return success(res, { submitted: false, reason: result?.skipped || 'unknown', enrichedVia: 'signalhire' },
+      `SignalHire not run: ${result?.skipped || 'unknown'}`);
   } catch (err) {
     logger.error('enrichLeadViaSignalHire error', { err: err.message });
     return error(res, 'SignalHire enrichment failed', 500);

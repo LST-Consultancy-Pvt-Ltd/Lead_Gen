@@ -77,21 +77,93 @@ function InfoRow({
   );
 }
 
+// One contact rendered as a table row: Name · Title · Email · Phone · LinkedIn (+ actions).
+function ContactTableRow({
+  name, title, email, phone, linkedin, badge, canEdit, onEdit, onDelete, deleteArmed,
+}: {
+  name?: string | null; title?: string | null; email?: string | null;
+  phone?: string | null; linkedin?: string | null; badge?: string;
+  canEdit?: boolean; onEdit?: () => void; onDelete?: () => void; deleteArmed?: boolean;
+}) {
+  const liHref = linkedin ? (linkedin.startsWith('http') ? linkedin : `https://${linkedin}`) : undefined;
+  const copy = (v: string) => { navigator.clipboard.writeText(v); toast.success('Copied!'); };
+  return (
+    <tr className="border-t border-slate-200 dark:border-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors align-top">
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-800 dark:text-slate-200">{name || '—'}</span>
+          {badge && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">{badge}</span>}
+        </div>
+      </td>
+      <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300">{title || '—'}</td>
+      <td className="px-3 py-2.5">
+        {email ? (
+          <span className="group/cell inline-flex items-center gap-1.5">
+            <a href={`mailto:${email}`} className="text-sm text-blue-400 hover:underline break-all">{email}</a>
+            <button onClick={() => copy(email)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy email"><Copy size={11} className="text-slate-400" /></button>
+          </span>
+        ) : <span className="text-sm text-slate-400">—</span>}
+      </td>
+      <td className="px-3 py-2.5">
+        {phone ? (
+          <span className="group/cell inline-flex items-center gap-1.5">
+            <a href={`tel:${phone}`} className="text-sm text-slate-700 dark:text-slate-300 hover:text-blue-400 whitespace-nowrap">{phone}</a>
+            <button onClick={() => copy(phone)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy phone"><Copy size={11} className="text-slate-400" /></button>
+          </span>
+        ) : <span className="text-sm text-slate-400">—</span>}
+      </td>
+      <td className="px-3 py-2.5">
+        {liHref
+          ? <a href={liHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-400 hover:underline"><Linkedin size={12} /> Profile</a>
+          : <span className="text-sm text-slate-400">—</span>}
+      </td>
+      {canEdit && (
+        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+          {onEdit && <button onClick={onEdit} className="btn-ghost text-[10px] py-0.5 px-1.5 text-slate-400" title="Edit contact"><Edit2 size={12} /></button>}
+          {onDelete && (
+            <button onClick={onDelete}
+              className={cn('btn-ghost text-[10px] py-0.5 px-1.5 ml-1', deleteArmed ? 'bg-red-500/20 text-red-400' : 'text-slate-400')}
+              title="Delete contact">
+              {deleteArmed ? <><Trash2 size={11} /> Confirm?</> : <Trash2 size={12} />}
+            </button>
+          )}
+        </td>
+      )}
+    </tr>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EnrichPanel — Apollo auto-enriches on scan; this button is a manual retry
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EnrichPanel({
-  enrichState, onApollo, hasContact,
+  enrichState, onApollo, onSignalHire, signalhireSubmitting = false, signalhireRevealing = 0, hasContact,
 }: {
-  enrichState: EnrichState; onApollo: () => void; hasContact: boolean;
+  enrichState: EnrichState; onApollo: () => void; onSignalHire: () => void;
+  signalhireSubmitting?: boolean; signalhireRevealing?: number; hasContact: boolean;
 }) {
+  const signalhireBusy = signalhireSubmitting || signalhireRevealing > 0;
   const { status } = enrichState;
+
+  // SignalHire submit button (async — result arrives via webhook). Shared by both
+  // the compact "has contact" view and the main "no contact yet" view.
+  const signalhireButton = (
+    <button
+      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-60"
+      onClick={() => onSignalHire()} disabled={signalhireBusy}>
+      {signalhireSubmitting
+        ? <><Loader2 size={11} className="animate-spin" /> Submitting…</>
+        : signalhireRevealing > 0
+          ? <><Loader2 size={11} className="animate-spin" /> Revealing {signalhireRevealing} decision-maker{signalhireRevealing > 1 ? 's' : ''}…</>
+          : <><Search size={11} /> Enrich via SignalHire</>}
+    </button>
+  );
   const isApolloLoading = status === 'searching_apollo';
 
   if (hasContact && (status === 'idle' || status === 'apollo_found' || status === 'apollo_failed')) {
     return (
-      <div className="pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3">
+      <div className="pt-3 border-t border-slate-200 dark:border-white/[0.05] mt-3 space-y-2">
         <button
           className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-violet-500/10 border border-violet-500/25 text-violet-400 hover:bg-violet-500/20 transition-colors"
           onClick={() => onApollo()} disabled={isApolloLoading}>
@@ -99,6 +171,7 @@ function EnrichPanel({
             ? <><Loader2 size={11} className="animate-spin" /> Searching…</>
             : <><Search size={11} /> Search Apollo for More Contacts</>}
         </button>
+        {signalhireButton}
       </div>
     );
   }
@@ -136,6 +209,39 @@ function EnrichPanel({
             : <><Search size={12} /> Search Apollo</>}
         </button>
       </div>
+
+      {/* SignalHire — async (result arrives via webhook) */}
+      <div className="rounded-xl border p-3.5 bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06]">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-6 h-6 rounded-lg bg-sky-500/20 flex items-center justify-center">
+            <Search size={12} className="text-sky-400" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">SignalHire</p>
+            <p className="text-[10px] text-slate-500">Email &amp; phone finder · async</p>
+          </div>
+        </div>
+        <button
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 transition-colors disabled:opacity-60"
+          onClick={() => onSignalHire()} disabled={signalhireBusy}>
+          {signalhireSubmitting
+            ? <><Loader2 size={12} className="animate-spin" /> Submitting…</>
+            : signalhireRevealing > 0
+              ? <><Loader2 size={12} className="animate-spin" /> Revealing {signalhireRevealing} decision-maker{signalhireRevealing > 1 ? 's' : ''}…</>
+              : <><Search size={12} /> Enrich via SignalHire</>}
+        </button>
+        {signalhireRevealing > 0 ? (
+          <>
+            <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-sky-500/15">
+              <div className="h-full w-1/2 rounded-full bg-sky-400 animate-pulse" />
+            </div>
+            <p className="text-[10px] text-sky-400/80 mt-1.5 text-center">Fetching contacts from SignalHire… they'll appear in the table below.</p>
+          </>
+        ) : (
+          <p className="text-[10px] text-slate-500 mt-1.5 text-center">Reveals up to 5 decision-makers · arrives via webhook.</p>
+        )}
+      </div>
+
       {status === 'apollo_failed' && (
         <div className="p-3 bg-amber-500/[0.06] border border-amber-500/20 rounded-xl">
           <p className="text-xs text-amber-400 text-center">
@@ -196,6 +302,8 @@ export default function LeadDetailPage() {
   const [contactDeleteId,  setContactDeleteId]  = useState<string | null>(null);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [editContactData,  setEditContactData]  = useState<{ name: string; title: string; phone: string; email: string; linkedin: string }>({ name: '', title: '', phone: '', email: '', linkedin: '' });
+  // >0 while SignalHire is asynchronously revealing N contacts (shows a progress indicator).
+  const [signalhireRevealing, setSignalhireRevealing] = useState(0);
 
   // Auto-open edit form when navigated with ?edit=1
   useEffect(() => {
@@ -286,6 +394,44 @@ export default function LeadDetailPage() {
       }
     },
     onError: () => { setEnrichState({ status: 'apollo_failed' }); toast.error('Apollo search failed.'); },
+  });
+
+  // SignalHire is webhook-based: this only SUBMITS the search; the contact is filled
+  // in asynchronously when SignalHire pushes the result to our webhook. So we toast
+  // "submitted" and refetch the lead a few times to pick up the async update.
+  const signalhireMutation = useMutation({
+    mutationFn: () => leadsApi.enrichSignalHire(id),
+    onSuccess: (res) => {
+      const d = res.data.data;
+      if (d?.peopleFound) {
+        // Company search → up to 5 decision-makers are being revealed asynchronously
+        // and created as Contact records; show a progress indicator + refetch.
+        toast(`SignalHire is revealing ${d.peopleFound} decision-maker${d.peopleFound > 1 ? 's' : ''} — they'll appear in Contacts shortly.`, { icon: '⏳' });
+        setSignalhireRevealing(d.peopleFound);
+        [8000, 20000, 40000].forEach(ms => setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ['lead', id] });
+          qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+        }, ms));
+        setTimeout(() => setSignalhireRevealing(0), 45000);
+      } else if (d?.found) {
+        // Synchronous hit — contact already written to the lead.
+        qc.invalidateQueries({ queryKey: ['lead', id] });
+        qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+        toast.success('Contact found via SignalHire!');
+      } else if (d?.noContact) {
+        toast.error('SignalHire found no contact — needs a person name or personal LinkedIn (a company/domain alone often returns nothing).');
+      } else if (d?.pending || d?.submitted) {
+        // Timed out the sync wait — webhook will still fill it in; refetch a few times.
+        toast('SignalHire is still processing — the contact will appear shortly.', { icon: '⏳' });
+        [8000, 20000, 40000].forEach(ms => setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ['lead', id] });
+          qc.invalidateQueries({ queryKey: ['lead-contacts', id] });
+        }, ms));
+      } else {
+        toast.error(`SignalHire not run: ${d?.reason || 'unknown'}`);
+      }
+    },
+    onError: () => toast.error('SignalHire request failed.'),
   });
 
   const generateEmailMutation = useMutation({
@@ -496,8 +642,8 @@ export default function LeadDetailPage() {
     const emails    = newContact.emails.map(e => e.trim()).filter(Boolean);
     const phones    = newContact.phones.map(p => p.trim()).filter(Boolean);
     const linkedins = newContact.linkedins.map(l => l.trim()).filter(Boolean);
-    if (!emails.length && !phones.length) {
-      toast.error('Enter at least a phone number or email address');
+    if (!emails.length && !phones.length && !linkedins.length && !newContact.name.trim()) {
+      toast.error('Enter at least a name, email, phone, or LinkedIn');
       return;
     }
     addContactMutation.mutate({
@@ -917,184 +1063,75 @@ export default function LeadDetailPage() {
               </div>
             </div>
 
-            {/* ── Enriched / primary contact (from lead record) ── */}
-            {hasContact && (
-              <div className="mb-4">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                  Primary Contact
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <InfoRow icon={<User size={12} className="text-slate-400" />}
-                    label="Name" value={lead.contactName} />
-                  <InfoRow icon={<ChevronRight size={12} className="text-slate-400" />}
-                    label="Title" value={lead.contactTitle} />
-                  <InfoRow icon={<Mail size={12} className="text-emerald-400" />}
-                    label="Email" value={lead.contactEmail}
-                    href={lead.contactEmail ? `mailto:${lead.contactEmail}` : undefined}
-                    copyable />
-                  <InfoRow icon={<Phone size={12} className="text-amber-400" />}
-                    label="Phone" value={lead.contactPhone} copyable />
-                  <InfoRow icon={<Linkedin size={12} className="text-blue-400" />}
-                    label="Personal LinkedIn" value={lead.contactLinkedin}
-                    href={lead.contactLinkedin?.startsWith('http') ? lead.contactLinkedin : lead.contactLinkedin ? `https://${lead.contactLinkedin}` : undefined}
-                    copyable />
-                </div>
-              </div>
-            )}
-
-            {/* ── Saved additional contacts ── */}
+            {/* ── Contacts table (primary + additional) ── */}
             {contactsLoading ? (
               <div className="py-2 flex items-center gap-2 text-xs text-slate-500">
                 <Loader2 size={12} className="animate-spin" /> Loading contacts…
               </div>
-            ) : savedContacts.length > 0 && (
-              <div className="mb-4">
-                {hasContact && (
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-2 mb-2 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-                    Additional Contacts ({savedContacts.length})
-                  </p>
-                )}
-                <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] overflow-hidden">
-                  {/* Column headers */}
-                  <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] bg-slate-100 dark:bg-slate-900">
-                    <div className="px-3 py-2 flex items-center gap-1.5">
-                      <Phone size={10} className="text-amber-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Phone</span>
-                    </div>
-                    <div className="px-3 py-2 flex items-center gap-1.5">
-                      <Mail size={10} className="text-emerald-400" />
-                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Email</span>
-                    </div>
-                  </div>
-
-                  {/* One row per contact */}
-                  {savedContacts.map((c: any) => {
-                    const isEditingThis = editingContactId === c.id;
-                    return (
-                      <div key={c.id} className="border-t border-slate-200 dark:border-white/[0.06] group">
-                        {isEditingThis ? (
-                          /* ── Inline edit row ── */
-                          <div className="p-3 bg-blue-500/[0.04] space-y-2">
+            ) : (hasContact || savedContacts.length > 0) ? (
+              <div className="mb-4 rounded-xl border border-slate-200 dark:border-white/[0.06] overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-500">
+                    <tr>
+                      <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Name</th>
+                      <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Title</th>
+                      <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Email</th>
+                      <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Phone</th>
+                      <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">LinkedIn</th>
+                      {canEditThisLead && <th className="px-3 py-2" />}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hasContact && (
+                      <ContactTableRow
+                        name={lead.contactName} title={lead.contactTitle}
+                        email={lead.contactEmail} phone={lead.contactPhone} linkedin={lead.contactLinkedin}
+                        badge="Primary"
+                      />
+                    )}
+                    {savedContacts.map((c: any) => (
+                      editingContactId === c.id ? (
+                        <tr key={c.id} className="border-t border-slate-200 dark:border-white/[0.06] bg-blue-500/[0.04]">
+                          <td colSpan={canEditThisLead ? 6 : 5} className="p-3">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="label mb-1 block">Email</label>
-                                <div className="flex items-center gap-1.5">
-                                  <Mail size={11} className="text-emerald-400 flex-shrink-0" />
-                                  <input
-                                    className="input text-xs flex-1 h-8"
-                                    type="email"
-                                    placeholder="name@company.com"
-                                    value={editContactData.email}
-                                    onChange={e => setEditContactData((d: any) => ({ ...d, email: e.target.value }))}
-                                  />
-                                </div>
+                                <input className="input text-xs h-8 w-full" type="email" placeholder="name@company.com"
+                                  value={editContactData.email}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, email: e.target.value }))} />
                               </div>
                               <div>
                                 <label className="label mb-1 block">Phone</label>
-                                <div className="flex items-center gap-1.5">
-                                  <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                                  <input
-                                    className="input text-xs flex-1 h-8"
-                                    placeholder="+91 XXXXX XXXXX"
-                                    value={editContactData.phone}
-                                    onChange={e => setEditContactData((d: any) => ({ ...d, phone: e.target.value }))}
-                                  />
-                                </div>
+                                <input className="input text-xs h-8 w-full" placeholder="+1 ..."
+                                  value={editContactData.phone}
+                                  onChange={e => setEditContactData((d: any) => ({ ...d, phone: e.target.value }))} />
                               </div>
                             </div>
-                            <div className="flex gap-2 pt-1">
-                              <button
-                                className="btn-primary text-xs py-1.5 px-3"
-                                onClick={handleSaveContact}
-                                disabled={updateContactMutation.isPending}
-                              >
-                                {updateContactMutation.isPending
-                                  ? <><Loader2 size={11} className="animate-spin" /> Saving…</>
-                                  : <><Save size={11} /> Save</>}
+                            <div className="flex gap-2 pt-2">
+                              <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveContact} disabled={updateContactMutation.isPending}>
+                                {updateContactMutation.isPending ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : <><Save size={11} /> Save</>}
                               </button>
-                              <button
-                                className="btn-ghost text-xs py-1.5 px-3"
-                                onClick={() => setEditingContactId(null)}
-                              >
-                                <X size={11} /> Cancel
-                              </button>
+                              <button className="btn-ghost text-xs py-1.5 px-3" onClick={() => setEditingContactId(null)}><X size={11} /> Cancel</button>
                             </div>
-                          </div>
-                        ) : (
-                          /* ── Read-only row ── */
-                          <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                            {/* Phone */}
-                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
-                              <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                              {(c.phone || c.contactPhone) ? (
-                                <>
-                                  <a href={`tel:${c.phone || c.contactPhone}`}
-                                    className="text-xs text-slate-700 dark:text-slate-300 hover:text-blue-400 truncate">
-                                    {c.phone || c.contactPhone}
-                                  </a>
-                                  <button
-                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
-                                    onClick={() => { navigator.clipboard.writeText(c.phone || c.contactPhone); toast.success('Copied!'); }}
-                                    title="Copy phone">
-                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )}
-                            </div>
-                            {/* Email + actions */}
-                            <div className="px-3 py-2.5 flex items-center gap-2 min-w-0 group/cell">
-                              <Mail size={11} className="text-emerald-400 flex-shrink-0" />
-                              {(c.email || c.contactEmail) ? (
-                                <>
-                                  <a href={`mailto:${c.email || c.contactEmail}`}
-                                    className="text-xs text-slate-700 dark:text-slate-300 hover:text-blue-400 truncate">
-                                    {c.email || c.contactEmail}
-                                  </a>
-                                  <button
-                                    className="opacity-0 group-hover/cell:opacity-100 transition-opacity flex-shrink-0"
-                                    onClick={() => { navigator.clipboard.writeText(c.email || c.contactEmail); toast.success('Copied!'); }}
-                                    title="Copy email">
-                                    <Copy size={10} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )}
-                              {canEditThisLead && (
-                                <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-                                  <button
-                                    onClick={() => startEditContact(c)}
-                                    className="btn-ghost text-[10px] py-0.5 px-1.5 text-slate-400"
-                                    title="Edit contact">
-                                    <Edit2 size={11} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleContactDelete(c.id)}
-                                    className={cn(
-                                      'btn-ghost text-[10px] py-0.5 px-1.5',
-                                      contactDeleteId === c.id ? 'bg-red-500/20 text-red-400' : 'text-slate-400'
-                                    )}
-                                    disabled={deleteContactMutation.isPending}
-                                    title="Delete contact">
-                                    {contactDeleteId === c.id
-                                      ? <><Trash2 size={11} /> Confirm?</>
-                                      : <Trash2 size={11} />}
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <ContactTableRow
+                          key={c.id}
+                          name={c.name || c.contactName} title={c.title || c.contactTitle}
+                          email={c.email || c.contactEmail} phone={c.phone || c.contactPhone}
+                          linkedin={c.linkedin || c.contactLinkedin || (Array.isArray(c.additionalLinkedinUrls) ? c.additionalLinkedinUrls[0] : null)}
+                          canEdit={canEditThisLead}
+                          onEdit={() => startEditContact(c)}
+                          onDelete={() => handleContactDelete(c.id)}
+                          deleteArmed={contactDeleteId === c.id}
+                        />
+                      )
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
+            ) : null}
 
             {/* ── Add new contact form ── */}
             {isAddingContact && (
@@ -1102,18 +1139,36 @@ export default function LeadDetailPage() {
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2.5 flex items-center gap-1.5">
                   <UserPlus size={12} className="text-blue-400" /> New Contact
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="flex items-center gap-1.5">
-                    <Phone size={11} className="text-amber-400 flex-shrink-0" />
-                    <input className="input text-sm h-8 flex-1" placeholder="Phone number"
-                      value={newContact.phones[0] ?? ''}
-                      onChange={e => setNewContact(c => { const phones = [...c.phones]; phones[0] = e.target.value; return { ...c, phones }; })} />
+                    <User size={11} className="text-slate-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="Full name"
+                      value={newContact.name}
+                      onChange={e => setNewContact(c => ({ ...c, name: e.target.value }))} />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <ChevronRight size={11} className="text-slate-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="Title"
+                      value={newContact.title}
+                      onChange={e => setNewContact(c => ({ ...c, title: e.target.value }))} />
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Mail size={11} className="text-emerald-400 flex-shrink-0" />
                     <input className="input text-sm h-8 flex-1" type="email" placeholder="Email address"
                       value={newContact.emails[0] ?? ''}
                       onChange={e => setNewContact(c => { const emails = [...c.emails]; emails[0] = e.target.value; return { ...c, emails }; })} />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Phone size={11} className="text-amber-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="Phone number"
+                      value={newContact.phones[0] ?? ''}
+                      onChange={e => setNewContact(c => { const phones = [...c.phones]; phones[0] = e.target.value; return { ...c, phones }; })} />
+                  </div>
+                  <div className="flex items-center gap-1.5 sm:col-span-2">
+                    <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
+                    <input className="input text-sm h-8 flex-1" placeholder="LinkedIn URL"
+                      value={newContact.linkedins[0] ?? ''}
+                      onChange={e => setNewContact(c => { const linkedins = [...c.linkedins]; linkedins[0] = e.target.value; return { ...c, linkedins }; })} />
                   </div>
                 </div>
                 <div className="flex gap-2 mt-2.5">
@@ -1151,6 +1206,9 @@ export default function LeadDetailPage() {
             <EnrichPanel
               enrichState={enrichState}
               onApollo={() => apolloMutation.mutate()}
+              onSignalHire={() => signalhireMutation.mutate()}
+              signalhireSubmitting={signalhireMutation.isPending}
+              signalhireRevealing={signalhireRevealing}
               hasContact={hasContact}
             />
           </div>

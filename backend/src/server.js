@@ -28,6 +28,7 @@ const dropdownRoutes = require('./routes/dropdowns');
 const notificationRoutes = require('./routes/notifications');
 const searchRoutes = require('./routes/search');
 const settingsRoutes = require('./routes/settings');
+const webhookRoutes = require('./routes/webhooks.routes');
 
 const app = express();
 
@@ -86,6 +87,7 @@ app.use('/api/dropdowns', dropdownRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/webhooks', webhookRoutes); // PUBLIC — provider callbacks (SignalHire), no auth
 
 // ── Error Handling ────────────────────────────────────────────────────────
 app.use(notFound);

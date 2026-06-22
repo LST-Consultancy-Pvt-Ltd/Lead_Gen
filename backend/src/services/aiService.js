@@ -27,26 +27,58 @@ async function analyzeLeadIntent(lead, services) {
   if (!client) return fallbackScoring(lead);
 
   try {
-    const prompt = `You are an expert B2B sales intelligence analyst.
+    const jobText = (lead.jobPostings || []).slice(0, 3).map((j, i) => {
+      const desc = String(j.snippet || j.description || '').slice(0, 1000);
+      const meta = [j.postedAt ? `posted ${j.postedAt}` : '', j.platform ? `via ${j.platform}` : '']
+        .filter(Boolean).join(', ');
+      return `${i + 1}. "${j.title || 'Role'}"${meta ? ` (${meta})` : ''}\n   ${desc || 'no description'}`;
+    }).join('\n') || 'None';
 
+    const signalsText = (lead.intentSignals || []).slice(0, 5)
+      .map(s => `- ${s.text || s}`).join('\n') || 'None';
+
+    const prompt = `You are an expert B2B sales intelligence analyst scoring ONE lead for our offering.
+
+OUR OFFERING / SERVICES: ${services.join(', ') || 'N/A'}
+
+LEAD
 Company: ${lead.companyName}
 Industry: ${lead.industry || 'Unknown'}
-Tech Stack: ${(lead.techStack || []).join(', ')}
-Job Postings: ${JSON.stringify(lead.jobPostings?.slice(0, 3))}
-Signals: ${JSON.stringify(lead.intentSignals?.slice(0, 5))}
+Tech stack: ${(lead.techStack || []).join(', ') || 'Unknown'}
+Job postings (primary evidence of need — read carefully):
+${jobText}
+Other signals:
+${signalsText}
 
-Our Services: ${services.join(', ')}
+Score the lead against OUR OFFERING. Use the FULL 0-100 range and DIFFERENTIATE leads —
+do NOT default to round numbers like 70/75/80. Base the scores PRIMARILY on what the job
+postings/signals actually say. Output exact integers.
 
-Analyze this lead and respond with ONLY valid JSON (no markdown):
+leadScore — overall priority (fit + how active/explicit the need is):
+- 90-100: A posting/signal EXPLICITLY asks for exactly what we offer AND is recent/active.
+- 75-89 : Clear, specific need we serve (hiring the exact skill, explicit pain point, active project).
+- 60-74 : Good fit and plausible need, but the need is implied rather than explicitly stated.
+- 40-59 : Weak/generic fit — adjacent tech or only loosely related to our offering.
+- 0-39  : Poor fit / unlikely to need our offering.
+
+intentScore — urgency of an ACTIVE buying signal right now (ignore long-term fit):
+- 80-100: Actively hiring/requesting this now (recent posting explicitly stating the need).
+- 50-79 : Some active signal, but not a direct request for what we offer.
+- 0-49  : No active signal; only latent/fit-based interest.
+
+matchScore — how well the COMPANY fits our ideal customer for this offering (fit only, ignore timing).
+intentLevel — "hot" if intentScore>=80, "warm" if intentScore 50-79, else "cold".
+
+Respond with ONLY valid JSON (no markdown):
 {
-  "leadScore": <0-100>,
-  "intentScore": <0-100>,
-  "intentLevel": <"hot"|"warm"|"cold">,
-  "matchScore": <0-100, how well this company matches our services/position requirements>,
+  "leadScore": <int 0-100>,
+  "intentScore": <int 0-100>,
+  "intentLevel": "hot"|"warm"|"cold",
+  "matchScore": <int 0-100>,
   "opportunity": "<concise opportunity description>",
-  "aiSummary": "<2-3 sentence company analysis>",
+  "aiSummary": "<2-3 sentence analysis citing the specific evidence>",
   "aiPitch": "<personalized 2-sentence sales pitch>",
-  "reasoning": "<brief scoring reasoning>"
+  "reasoning": "<why these scores, citing the job posting/signal text>"
 }`;
 
     const response = await client.chat.completions.create({
