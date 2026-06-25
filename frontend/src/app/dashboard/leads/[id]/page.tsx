@@ -1034,10 +1034,10 @@ export default function LeadDetailPage() {
                 );
               })()}
             </div> */}
-            <div>
+            {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead Source</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.source || '—'}</p>
-            </div>
+            </div> */}
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
               <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{lead.notes || '—'}</p>
