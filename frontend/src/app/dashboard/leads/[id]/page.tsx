@@ -159,7 +159,9 @@ function MultiFieldList({
   const fieldLabel = (label || 'entry').toLowerCase();
   const update = (i: number, v: string) => {
     const next = [...values];
-    next[i] = numeric ? v.replace(/\D/g, '').slice(0, 16) : v;
+    // For phone fields, allow digits plus +, spaces, parentheses and hyphens
+    // (e.g. "+1 (610) 676-1063"). Cap length to fit a fully formatted number.
+    next[i] = numeric ? v.replace(/[^\d\s()+-]/g, '').slice(0, 25) : v;
     onChange(next);
   };
   const add = () => onChange([...values, '']);
@@ -178,7 +180,7 @@ function MultiFieldList({
             <input
               className={inputClassName}
               type={type}
-              inputMode={numeric ? 'numeric' : undefined}
+              inputMode={numeric ? 'tel' : undefined}
               maxLength={numeric ? 16 : undefined}
               placeholder={placeholder}
               value={val}
@@ -360,7 +362,11 @@ function EnrichPanel({
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function isValidEmail(v: string) { return EMAIL_RE.test(v.trim()); }
 function isValidPhone(v: string) {
-  return /^\d{3,16}$/.test(v.trim());   // digits only, min 3, max 16
+  const trimmed = v.trim();
+  // Allowed characters: digits, spaces, +, -, parentheses (e.g. "+1 (610) 676-1063")
+  if (!/^[\d\s()+-]+$/.test(trimmed)) return false;
+  const digits = trimmed.replace(/\D/g, "");   // count only the digits
+  return digits.length >= 3 && digits.length <= 16;
 }
 // Accepts linkedin.com/in/<handle> with or without https:// and www.
 const LINKEDIN_RE = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[a-zA-Z0-9-_%]+\/?$/;
@@ -754,7 +760,7 @@ export default function LeadDetailPage() {
     const badEmail = emails.find(e => !isValidEmail(e));
     if (badEmail)                               { toast.error(`Please enter a valid email address: ${badEmail}`); return; }
     const badPhone = phones.find(p => !isValidPhone(p));
-    if (badPhone)                               { toast.error('Phone must be numbers only, 3 to 16 digits'); return; }
+    if (badPhone)                               { toast.error('Phone must have 3 to 16 digits (you may use + ( ) - and spaces)'); return; }
     if (d.linkedin && !isValidLinkedin(d.linkedin)) { toast.error('Enter a valid LinkedIn profile URL (linkedin.com/in/…)'); return; }
     updateContactMutation.mutate({
       contactId: editingContactId,
@@ -784,7 +790,7 @@ export default function LeadDetailPage() {
     const badEmail = emails.find(e => !isValidEmail(e));
     if (badEmail)                                   { toast.error(`Please enter a valid email address: ${badEmail}`); return; }
     const badPhone = phones.find(p => !isValidPhone(p));
-    if (badPhone)                                   { toast.error('Phone must be numbers only, 3 to 16 digits'); return; }
+    if (badPhone)                                   { toast.error('Phone must have 3 to 16 digits (you may use + ( ) - and spaces)'); return; }
     const badLi = linkedins.find(l => !isValidLinkedin(l));
     if (badLi)                                      { toast.error('Enter a valid LinkedIn profile URL (linkedin.com/in/…)'); return; }
     addContactMutation.mutate({
@@ -1285,7 +1291,7 @@ export default function LeadDetailPage() {
                                 values={editContactData.emails}
                                 onChange={emails => setEditContactData((d: any) => ({ ...d, emails }))} />
                               <MultiFieldList
-                                label="Phone" numeric placeholder="Digits only (3–16)" addLabel="Add phone"
+                                label="Phone" numeric placeholder="Add Phone" addLabel="Add phone"
                                 values={editContactData.phones}
                                 onChange={phones => setEditContactData((d: any) => ({ ...d, phones }))} />
                               <div className="col-span-2">
@@ -1349,7 +1355,7 @@ export default function LeadDetailPage() {
                     onChange={emails => setNewContact(c => ({ ...c, emails }))} />
                   <MultiFieldList
                     icon={<Phone size={11} className="text-amber-400 flex-shrink-0" />}
-                    numeric placeholder="Digits only (3–16)" addLabel="Add phone"
+                    numeric placeholder="Add Phone" addLabel="Add phone"
                     inputClassName="input text-sm h-8 flex-1"
                     values={newContact.phones}
                     onChange={phones => setNewContact(c => ({ ...c, phones }))} />
