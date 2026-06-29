@@ -290,16 +290,43 @@ async function signalhireSearchByCompany(company) {
   return Array.isArray(res.data?.profiles) ? res.data.profiles : [];
 }
 
-// Rank profiles by how decision-maker-like the CURRENT title is, return the top N.
-// Ties (and anyone whose title we couldn't read) keep their original order.
+// ── Decision-maker gate (policy: "Leadership + Managers") ──
+// We reveal contacts ONLY for leadership and Manager-level titles. Individual
+// contributors (Developer, Analyst, Coordinator, Specialist, …) and people whose
+// current title we couldn't read are excluded — we'd rather return 2 real
+// decision-makers than pad the list to 5 with the wrong people.
+const DM_LEADERSHIP_WORDS = [
+  'ceo', 'cfo', 'coo', 'cto', 'cio', 'cmo', 'ciso', 'cpo', 'cro', 'cdo', 'chro', 'clo', 'cxo',
+  'chief', 'founder', 'co-founder', 'cofounder', 'owner', 'proprietor', 'president',
+  'vice president', 'vp', 'svp', 'evp', 'avp', 'director', 'managing director',
+  'general manager', 'partner', 'principal', 'head', // "head" as a whole word → "Head of Sales"
+];
+function titleHasWord(title, word) {
+  const esc = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${esc}\\b`, 'i').test(title);
+}
+// Leadership match wins outright (so "Director and Sr. NetSuite Consultant" stays
+// despite the "Consultant"); otherwise any standalone "Manager" qualifies.
+function isDecisionMakerTitle(title) {
+  const t = String(title || '').trim();
+  if (!t) return false;
+  if (DM_LEADERSHIP_WORDS.some(w => titleHasWord(t, w))) return true;
+  return /\bmanager\b/i.test(t);
+}
+
+// Keep only decision-maker profiles, rank by seniority, return the top N.
+// Ties (same seniority bucket) keep their original order.
 function pickTopSignalhireProfiles(profiles, n = 5) {
   if (!profiles.length) return [];
-  const ranked = profiles.map((p, i) => {
-    const title = profileCurrentTitle(p).toLowerCase();
-    let rank = title ? SIGNALHIRE_TITLE_PRIORITY.findIndex(t => title.includes(t)) : -1;
-    if (rank === -1) rank = 998;
-    return { p, rank, i };
-  });
+  const ranked = profiles
+    .map((p, i) => ({ p, i, title: profileCurrentTitle(p) }))
+    .filter(x => isDecisionMakerTitle(x.title))
+    .map(({ p, i, title }) => {
+      const t = title.toLowerCase();
+      let rank = SIGNALHIRE_TITLE_PRIORITY.findIndex(k => t.includes(k));
+      if (rank === -1) rank = 998;
+      return { p, rank, i };
+    });
   ranked.sort((a, b) => (a.rank - b.rank) || (a.i - b.i));
   return ranked.slice(0, n).map(x => x.p);
 }
