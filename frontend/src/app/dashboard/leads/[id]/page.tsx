@@ -949,8 +949,8 @@ export default function LeadDetailPage() {
             AI Email
           </button> */}
           <div className="flex flex-col items-center gap-1">
-            <ScoreRing score={lead.leadScore} size={44} />
-            <p className="text-xs text-slate-500">Lead Score</p>
+            <ScoreRing score={lead.leadScore} size={70} />
+            <p className="text-xm text-slate-500">Lead Score</p>
           </div>
         </div>
       </div>
