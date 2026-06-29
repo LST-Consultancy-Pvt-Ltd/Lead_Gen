@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, usersApi, dropdownsApi, api } from '../../../lib/api';
-import { Badge, Avatar, ScoreRing, Spinner, EmptyState } from '../../../components/ui';
+import { Badge, Avatar, ScoreRing, Spinner, EmptyState, Pagination } from '../../../components/ui';
 import { CreateLeadModal } from '../../../components/crm/CreateLeadModal';
 import { RoleGuard } from '../../../components/common/RoleGuard';
 import { usePermissions } from '../../../lib/rbac';
@@ -18,6 +18,7 @@ import toast from 'react-hot-toast';
 
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
@@ -63,7 +64,7 @@ export default function LeadsPage() {
   // Build query params based on role
   const queryParams: any = {
     page,
-    limit: 20,
+    limit,
     search: search || undefined,
     status: statusFilter || undefined,
   };
@@ -636,24 +637,16 @@ export default function LeadsPage() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
+      {total > 0 && (
+        <div className="flex items-center justify-between text-sm flex-wrap gap-3">
           <span className="text-slate-500">{total} total leads</span>
-          <div className="flex gap-1">
-            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(p => (
-              <button
-                key={p}
-                onClick={() => setPage(p)}
-                className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
-                  p === page
-                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                    : 'text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            pageSize={limit}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setLimit(size); setPage(1); }}
+          />
         </div>
       )}
 

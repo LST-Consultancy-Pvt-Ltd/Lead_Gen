@@ -114,3 +114,6 @@ export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; o
 
 // ── SearchableDropdown ─────────────────────────────────────────────────────
 export { SearchableDropdown } from './SearchableDropdown';
+
+// ── Pagination ─────────────────────────────────────────────────────────────
+export { Pagination } from './Pagination';
