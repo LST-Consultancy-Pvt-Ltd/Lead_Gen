@@ -522,7 +522,7 @@ export default function LeadDetailPage() {
       if (d?.peopleFound) {
         // Company search → up to 5 decision-makers are being revealed asynchronously
         // and created as Contact records; show a progress indicator + refetch.
-        toast(`SignalHire is revealing ${d.peopleFound} decision-maker${d.peopleFound > 1 ? 's' : ''} — they'll appear in Contacts shortly.`, { icon: '⏳' });
+        toast(`SignalHire is revealing decision-makers`, { icon: '⏳' });
         setSignalhireRevealing(d.peopleFound);
         [8000, 20000, 40000].forEach(ms => setTimeout(() => {
           qc.invalidateQueries({ queryKey: ['lead', id] });
@@ -1291,7 +1291,7 @@ export default function LeadDetailPage() {
                                 values={editContactData.emails}
                                 onChange={emails => setEditContactData((d: any) => ({ ...d, emails }))} />
                               <MultiFieldList
-                                label="Phone" numeric placeholder="Add Phone" addLabel="Add phone"
+                                label="Phone" numeric placeholder="Add Phone Number" addLabel="Add phone"
                                 values={editContactData.phones}
                                 onChange={phones => setEditContactData((d: any) => ({ ...d, phones }))} />
                               <div className="col-span-2">
@@ -1355,7 +1355,7 @@ export default function LeadDetailPage() {
                     onChange={emails => setNewContact(c => ({ ...c, emails }))} />
                   <MultiFieldList
                     icon={<Phone size={11} className="text-amber-400 flex-shrink-0" />}
-                    numeric placeholder="Add Phone" addLabel="Add phone"
+                    numeric placeholder="Add Phone Number" addLabel="Add phone"
                     inputClassName="input text-sm h-8 flex-1"
                     values={newContact.phones}
                     onChange={phones => setNewContact(c => ({ ...c, phones }))} />
