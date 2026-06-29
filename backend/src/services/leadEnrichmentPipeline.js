@@ -253,6 +253,32 @@ const SIGNALHIRE_TITLE_PRIORITY = [
   'procurement', 'operations', 'manager',
 ];
 
+// Strip legal suffixes / punctuation so a slightly-off company name (common on
+// manually-added leads) still matches SignalHire — "Acme Corp, Inc." → "Acme".
+function cleanCompanyName(name = '') {
+  return name
+    .replace(/\b(inc|llc|l\.l\.c|ltd|limited|corp|corporation|co|company|gmbh|plc|pvt|private|holdings|group|the)\b\.?/gi, ' ')
+    .replace(/[.,&]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Pull the person's CURRENT job title out of a SignalHire search profile. The
+// `experience` array is NOT reliably current-first, so prefer the entry flagged
+// current (or still open-ended), then fall back across the other shapes SignalHire
+// uses. Returns '' when nothing usable is present.
+function profileCurrentTitle(p = {}) {
+  const exp = Array.isArray(p.experience) ? p.experience : [];
+  const current =
+    exp.find(e => e && (e.current === true || e.current === 'true')) ||
+    exp.find(e => e && e.started && (e.ended == null || e.ended === '')) ||
+    exp[0] || {};
+  return String(
+    current.title || current.position || current.role ||
+    p.title || p.position || p.headLine || p.headline || p.jobTitle || ''
+  ).trim();
+}
+
 // SignalHire Search API (SYNCHRONOUS): find people at a company. Returns profiles[]
 // (uid, fullName, experience[]). No contacts — revealing those is a separate step.
 async function signalhireSearchByCompany(company) {
@@ -264,12 +290,13 @@ async function signalhireSearchByCompany(company) {
   return Array.isArray(res.data?.profiles) ? res.data.profiles : [];
 }
 
-// Rank profiles by how decision-maker-like the current title is, return the top N.
+// Rank profiles by how decision-maker-like the CURRENT title is, return the top N.
+// Ties (and anyone whose title we couldn't read) keep their original order.
 function pickTopSignalhireProfiles(profiles, n = 5) {
   if (!profiles.length) return [];
   const ranked = profiles.map((p, i) => {
-    const title = (p.experience?.[0]?.title || '').toLowerCase();
-    let rank = SIGNALHIRE_TITLE_PRIORITY.findIndex(t => title.includes(t));
+    const title = profileCurrentTitle(p).toLowerCase();
+    let rank = title ? SIGNALHIRE_TITLE_PRIORITY.findIndex(t => title.includes(t)) : -1;
     if (rank === -1) rank = 998;
     return { p, rank, i };
   });
@@ -302,9 +329,25 @@ async function enrichViaSignalHire(lead, meta = {}) {
   if (company) {
     try {
       let profiles = await signalhireSearchByCompany(company);
-      if (!profiles.length && domain) {
-        profiles = await signalhireSearchByCompany(domain.split('.')[0]); // brand from the domain
+
+      // Broaden the candidate pool when the exact name returns few people (typical
+      // for manually-added leads): also try the cleaned name and the domain brand,
+      // then merge by uid so we have enough decision-makers to choose the top 5 from.
+      if (profiles.length < MAX_SIGNALHIRE_PEOPLE) {
+        const seen = new Set(profiles.map(p => p.uid));
+        const variants = [];
+        const cleaned = cleanCompanyName(company);
+        if (cleaned && cleaned.toLowerCase() !== company.toLowerCase()) variants.push(cleaned);
+        if (domain) variants.push(domain.split('.')[0]); // brand from the domain
+        for (const v of variants) {
+          const more = await signalhireSearchByCompany(v).catch(() => []);
+          for (const p of more) {
+            if (p.uid && !seen.has(p.uid)) { seen.add(p.uid); profiles.push(p); }
+          }
+          if (profiles.length >= MAX_SIGNALHIRE_PEOPLE) break;
+        }
       }
+
       const top = pickTopSignalhireProfiles(profiles, MAX_SIGNALHIRE_PEOPLE).filter(p => p.uid);
       if (!top.length) {
         logger.info('SignalHire: no people found at company', { leadId: lead.id, company });
@@ -320,7 +363,7 @@ async function enrichViaSignalHire(lead, meta = {}) {
           organizationId: lead.organizationId,
           createdById: meta.createdById || null,
           contactName: p.fullName || null,
-          contactTitle: p.experience?.[0]?.title || null,
+          contactTitle: profileCurrentTitle(p) || null,
           companyDomain: domain || null,   // to prefer corporate (company-domain) emails
           mode: 'contact',   // webhook creates a Contact record
           rank: idx,         // used to promote the top person to the lead's primary
@@ -336,7 +379,7 @@ async function enrichViaSignalHire(lead, meta = {}) {
       logger.info('SignalHire: company reveal submitted', {
         leadId: lead.id, company, people: uids.length, totalFound: profiles.length,
         requestId: res.data?.requestId,
-        picked: top.map(p => ({ name: p.fullName, title: p.experience?.[0]?.title })),
+        picked: top.map(p => ({ name: p.fullName, title: profileCurrentTitle(p) })),
       });
       return { submitted: true, peopleFound: uids.length, requestId: res.data?.requestId };
     } catch (err) {

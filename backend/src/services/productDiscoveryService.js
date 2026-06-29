@@ -553,10 +553,29 @@ function empSize(n = 0) {
   return '';
 }
 
+// Apollo (and other providers) return sentinel placeholders such as
+// "http://www.linkedin.com/company/unavailable" when they have no real handle.
+// Those resolve to LinkedIn's "This Page isn't available" 404 every time, so we
+// drop them — along with anything that isn't a real /in/, /company/, or /school/
+// profile path — to null, so a dead link is never stored or rendered.
+const LINKEDIN_PLACEHOLDER_SLUGS = new Set([
+  'unavailable', 'unknown', 'null', 'undefined', 'none', 'na', 'n-a', 'not-available',
+]);
+function cleanLinkedinUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const u = url.trim();
+  const m = u.match(/linkedin\.com\/(?:in|company|school)\/([^/?#]+)/i);
+  if (!m) return null;
+  const slug = decodeURIComponent(m[1]).toLowerCase();
+  if (LINKEDIN_PLACEHOLDER_SLUGS.has(slug)) return null;
+  return u;
+}
+
 function buildSourceUrl(org) {
   if (org.website_url) return org.website_url;
   if (org.primary_domain) return `https://${org.primary_domain}`;
-  if (org.linkedin_url)   return org.linkedin_url;
+  const li = cleanLinkedinUrl(org.linkedin_url);
+  if (li) return li;
   return '';
 }
 
@@ -580,8 +599,8 @@ function personToLead(person, profile) {
     contactName,
     contactTitle:      person.title        || null,
     contactEmail:      person.email        || null,
-    contactLinkedin:   person.linkedin_url || null,
-    companyLinkedinUrl: org.linkedin_url   || null,
+    contactLinkedin:   cleanLinkedinUrl(person.linkedin_url),
+    companyLinkedinUrl: cleanLinkedinUrl(org.linkedin_url),
     source:    'Apollo People Search',
     sourceUrl: buildSourceUrl(org),
     _rawDescription: org.short_description || '',
@@ -607,7 +626,7 @@ function orgToLead(org, profile) {
     contactTitle:      null,
     contactEmail:      null,
     contactLinkedin:   null,
-    companyLinkedinUrl: org.linkedin_url   || null,
+    companyLinkedinUrl: cleanLinkedinUrl(org.linkedin_url),
     source:    'Apollo Company Search',
     sourceUrl: buildSourceUrl(org),
     _rawDescription: org.short_description || '',

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, contactsApi, dropdownsApi, opportunitiesApi, usersApi } from '../../../../lib/api';
@@ -373,6 +373,28 @@ const LINKEDIN_RE = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[a-zA-Z0-9-_%]+\/
 function isValidLinkedin(v: string) { return LINKEDIN_RE.test(v.trim()); }
 function isValidName(v: string) { return /[a-zA-Z]/.test(v); }   // must contain at least one letter
 
+// ── Compose-window builders ────────────────────────────────────────────────
+// All three open a pre-filled draft for one or more recipients. The user sends
+// it themselves from their own mailbox (no backend send).
+//  · mailto    → opens the OS default mail app (Outlook desktop, Apple Mail, …)
+//  · Gmail     → opens Gmail web compose in a new tab
+//  · Outlook   → opens Outlook on the web compose in a new tab
+function buildMailtoUrl(to: string[], subject: string, body: string) {
+  // mailto needs %20 for spaces (some clients show "+" literally), so encode manually.
+  return `mailto:${to.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+// NOTE: encode with encodeURIComponent (spaces → %20), NOT URLSearchParams
+// (spaces → "+"). Gmail decodes "+" as a space, but Outlook's compose endpoint
+// keeps it literal — so "+" leaks into the draft. %20 is decoded by both.
+function buildGmailUrl(to: string[], subject: string, body: string) {
+  const q = `view=cm&fs=1&to=${to.map(encodeURIComponent).join(',')}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return `https://mail.google.com/mail/?${q}`;
+}
+function buildOutlookUrl(to: string[], subject: string, body: string) {
+  const q = `to=${to.map(encodeURIComponent).join(',')}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return `https://outlook.office.com/mail/deeplink/compose?${q}`;
+}
+
 export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc     = useQueryClient();
@@ -387,6 +409,9 @@ export default function LeadDetailPage() {
   const [aiTab,       setAiTab]       = useState<'analysis' | 'email'>('analysis');
   const [emailData,   setEmailData]   = useState<any>(null);
   const [sendLoading, setSendLoading] = useState(false);
+  // Which contacts (by email) the generated draft will be addressed to.
+  const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
+  const recipInitRef = useRef(false); // default-selects the primary contact once per draft
   const [editingLinkedin, setEditingLinkedin] = useState(false);
   const [linkedinInput,   setLinkedinInput]   = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -589,6 +614,37 @@ export default function LeadDetailPage() {
     staleTime: 5000,
   });
   const savedContacts: any[] = contactsData ?? [];
+
+  // Every contact (primary + saved) that has an email — the choices in the
+  // "Send to" picker. Deduped by email; primary contact comes first.
+  const mailRecipients = useMemo(() => {
+    const list: { id: string; name: string; title?: string | null; email: string; badge?: string }[] = [];
+    if (lead?.contactEmail) {
+      list.push({ id: 'primary', name: lead.contactName || 'Primary contact', title: lead.contactTitle, email: lead.contactEmail, badge: 'Primary' });
+    }
+    for (const c of savedContacts) {
+      const email = c.email || c.contactEmail;
+      if (email) list.push({ id: c.id, name: c.name || c.contactName || 'Contact', title: c.title || c.contactTitle, email });
+    }
+    const seen = new Set<string>();
+    return list.filter(r => {
+      const k = r.email.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [lead?.contactEmail, lead?.contactName, lead?.contactTitle, savedContacts]);
+
+  // When a draft is first generated, pre-select the primary contact (or first
+  // available). After that the user is free to toggle, including deselecting all.
+  useEffect(() => {
+    if (!emailData) { recipInitRef.current = false; return; }
+    if (!recipInitRef.current && mailRecipients.length) {
+      const primary = mailRecipients.find(r => r.id === 'primary') || mailRecipients[0];
+      setSelectedEmails(new Set([primary.email]));
+      recipInitRef.current = true;
+    }
+  }, [emailData, mailRecipients]);
 
   const addContactMutation = useMutation({
     mutationFn: (data: any) => contactsApi.create({ ...data, leadId: id }),
@@ -820,6 +876,30 @@ export default function LeadDetailPage() {
       qc.invalidateQueries({ queryKey: ['dashboard'] });
     } catch { toast.error('Send failed'); }
     finally { setSendLoading(false); }
+  }
+
+  function toggleRecipient(email: string) {
+    setSelectedEmails(prev => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email); else next.add(email);
+      return next;
+    });
+  }
+
+  // Open the AI draft in the chosen mail surface, addressed to every selected
+  // contact. We don't send from the backend — the user sends from their mailbox.
+  function openCompose(kind: 'gmail' | 'outlook' | 'default') {
+    if (!emailData) return;
+    const recipients = mailRecipients.filter(r => selectedEmails.has(r.email)).map(r => r.email);
+    if (!recipients.length) { toast.error('Select at least one contact to send to'); return; }
+    const subject = emailData.subject || '';
+    const body    = emailData.body || '';
+    if (kind === 'default') {
+      window.location.href = buildMailtoUrl(recipients, subject, body);
+      return;
+    }
+    const url = kind === 'gmail' ? buildGmailUrl(recipients, subject, body) : buildOutlookUrl(recipients, subject, body);
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   function handleDelete() {
@@ -1751,14 +1831,53 @@ export default function LeadDetailPage() {
                         value={emailData.body}
                         onChange={e => setEmailData({ ...emailData, body: e.target.value })} />
                     </div>
-                    {/* <button className="btn-primary w-full justify-center" onClick={handleSend}
-                      disabled={sendLoading || !lead.contactEmail}>
-                      {sendLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
-                      Send Email
-                    </button>
-                    {!lead.contactEmail && (
-                      <p className="text-xs text-center text-slate-600">Find a contact email first</p>
-                    )} */}
+                    {/* Recipient picker — pick one or more contacts to address the draft to */}
+                    <div>
+                      <p className="label mb-1 flex items-center justify-between">
+                        <span>Send to</span>
+                        {selectedEmails.size > 0 && (
+                          <span className="text-[10px] font-normal text-slate-400">{selectedEmails.size} selected</span>
+                        )}
+                      </p>
+                      {mailRecipients.length === 0 ? (
+                        <p className="text-xs text-amber-400">No contact email yet — add one in Contact Details first.</p>
+                      ) : (
+                        <div className="space-y-0.5 max-h-40 overflow-y-auto rounded-lg border border-slate-200 dark:border-white/[0.08] p-1.5">
+                          {mailRecipients.map(r => (
+                            <label key={r.id}
+                              className="flex items-start gap-2 px-1.5 py-1 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50">
+                              <input type="checkbox" className="mt-0.5 accent-blue-500 cursor-pointer"
+                                checked={selectedEmails.has(r.email)}
+                                onChange={() => toggleRecipient(r.email)} />
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{r.name}</span>
+                                  {r.badge && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">{r.badge}</span>}
+                                </span>
+                                <span className="block text-[11px] text-slate-400 truncate">{r.email}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Open the draft in Gmail / Outlook web, or the OS default mail app */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                        onClick={() => openCompose('gmail')} disabled={selectedEmails.size === 0}>
+                        <Mail size={13} /> Gmail
+                      </button>
+                      <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-50"
+                        onClick={() => openCompose('outlook')} disabled={selectedEmails.size === 0}>
+                        <Mail size={13} /> Outlook
+                      </button>
+                      <button className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-700 dark:text-slate-200 hover:bg-slate-300/70 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                        onClick={() => openCompose('default')} disabled={selectedEmails.size === 0}>
+                        <Send size={12} /> Default Mail App
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 text-center">Opens a pre-filled draft — you send it from your own mailbox.</p>
                   </>
                 ) : (
                   <button className="btn-ghost w-full justify-center text-xs"
