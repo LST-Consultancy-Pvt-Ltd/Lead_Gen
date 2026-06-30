@@ -152,9 +152,20 @@ const SOURCE_REGISTRY = [
 function matchSource(str = '') {
   const s = (str || '').toLowerCase().trim();
   if (!s) return null;
+  // Pick the MOST SPECIFIC alias across all entries (longest match wins) — not the
+  // first in registry order. Otherwise a broad alias like "linkedin" (job board)
+  // shadows "linkedin posts" (the social source) and the posts source never runs.
+  let best = null, bestScore = -1;
   for (const entry of SOURCE_REGISTRY) {
-    if (entry.aliases.some(a => s.includes(a) || a.includes(s))) return entry;
+    for (const a of entry.aliases) {
+      let score = -1;
+      if (s === a)            score = 1000 + a.length;   // exact alias match
+      else if (s.includes(a)) score = a.length;          // alias inside input → prefer longer alias
+      else if (a.includes(s)) score = s.length - 1;      // short input inside alias → weaker
+      if (score > bestScore) { bestScore = score; best = entry; }
+    }
   }
+  if (best) return best;
   const domainMatch = s.match(/([a-z0-9-]+\.)+[a-z]{2,}/);
   if (domainMatch) return { key: domainMatch[0], category: 'site', domains: [domainMatch[0]], aliases: [] };
   return { key: s.slice(0, 40), category: 'keyword', domains: [], aliases: [] };
@@ -175,6 +186,12 @@ function resolveSources(profile, filters = {}) {
     if (!entry || seen.has(entry.key)) continue;
     seen.add(entry.key);
     out.push(entry);
+  }
+  // When LinkedIn (job board) is requested, also pull LinkedIn posts/articles as a
+  // supplementary buying-intent stream — so "LinkedIn" yields jobs AND posts.
+  if (seen.has('linkedin') && !seen.has('linkedinposts')) {
+    const posts = SOURCE_REGISTRY.find(e => e.key === 'linkedinposts');
+    if (posts) { seen.add('linkedinposts'); out.push(posts); }
   }
   return out;
 }

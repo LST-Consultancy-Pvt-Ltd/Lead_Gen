@@ -9,7 +9,7 @@
 const prisma = require('../utils/prisma');
 const { success, error } = require('../utils/response');
 const { runProductDiscoveryScan, generateProductPrompt, normJobTitle } = require('../services/productDiscoveryService');
-const { runBackgroundEnrichment, runApolloEnrichmentBackground } = require('../services/leadEnrichmentPipeline');
+const { runBackgroundEnrichment, runApolloEnrichmentBackground, companyLinkedinForDomain } = require('../services/leadEnrichmentPipeline');
 const { analyzeLeadIntent, parseUserPrompt } = require('../services/aiService');
 const logger = require('../utils/logger');
 const { checkLeadQuota, incrementLeadUsage } = require('../utils/leadQuota');
@@ -325,6 +325,15 @@ async function saveDiscoveredLead(organizationId, dl, services, meta = {}) {
 
   const analysis = await analyzeLeadIntent(dl, services);
 
+  // Company LinkedIn: Apollo's org URL is domain-matched (trusted); any other
+  // source (KG / organic / AI snippet) is name-based and must pass domain/name
+  // validation or be dropped, so we never store a same-named company's page.
+  const rawCompanyLinkedin = dl.companyLinkedinUrl || dl.linkedinUrl || null;
+  const isApolloSource = (dl.source || '').toLowerCase().includes('apollo');
+  const companyLinkedin = rawCompanyLinkedin
+    ? (isApolloSource ? rawCompanyLinkedin : companyLinkedinForDomain(rawCompanyLinkedin, dl.companyName, dl.website))
+    : null;
+
   const lead = await prisma.lead.create({
     data: {
       organizationId,
@@ -335,7 +344,7 @@ async function saveDiscoveredLead(organizationId, dl, services, meta = {}) {
       companySize: dl.companySize || null,
       description: dl.description || null,
       techStack: dl.techStack || [],
-      linkedinUrl: dl.companyLinkedinUrl || dl.linkedinUrl || null,
+      linkedinUrl: companyLinkedin,
       contactName: dl.contactName || null,
       contactTitle: dl.contactTitle || null,
       contactLinkedin: dl.contactLinkedin || null,

@@ -66,6 +66,54 @@ function extractLinkedinPersonUrl(text) {
   return m ? `https://www.linkedin.com/in/${m[1]}` : null;
 }
 
+// ── Company LinkedIn validation (domain-anchored) ──────────────────────────
+// Name-based lookups (Google Knowledge Graph, organic `site:linkedin.com/company`,
+// AI snippet extraction) frequently return a /company/ page for a DIFFERENT
+// same-named company. We only trust a company LinkedIn URL when its slug is
+// consistent with the lead's company name OR its website-domain brand — otherwise
+// we drop it. No link beats a wrong link.
+const LINKEDIN_NAME_STOPWORDS = new Set([
+  'inc', 'llc', 'ltd', 'limited', 'corp', 'corporation', 'co', 'company', 'group',
+  'holdings', 'the', 'and', 'of', 'services', 'solutions', 'technologies',
+  'technology', 'global', 'international', 'systems', 'consulting', 'partners',
+]);
+function normalizeToken(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function brandFromDomain(domain) {
+  const host = normDomain(domain || '');
+  return host ? normalizeToken(host.split('.')[0]) : '';
+}
+function companyNameTokens(name) {
+  return String(name || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(t => t && !LINKEDIN_NAME_STOPWORDS.has(t));
+}
+function linkedinCompanySlug(url) {
+  const m = String(url || '').match(/linkedin\.com\/company\/([^/?#]+)/i);
+  return m ? normalizeToken(m[1]) : '';
+}
+// True if the /company/<slug> URL plausibly belongs to this company/domain.
+function linkedinMatchesCompany(url, companyName, domain) {
+  const slug = linkedinCompanySlug(url);
+  if (!slug) return false;
+  const brand  = brandFromDomain(domain);
+  const tokens = companyNameTokens(companyName);
+  const joined = tokens.join('');
+  // Strong: the domain brand overlaps the slug (most reliable when we have a domain).
+  if (brand && brand.length >= 4 && (slug.includes(brand) || brand.includes(slug))) return true;
+  // Strong: the full company name (all significant tokens) overlaps the slug.
+  if (joined && joined.length >= 4 && (slug.includes(joined) || joined.includes(slug))) return true;
+  // Weak: a single shared token. Only trust this when there is NO domain to check
+  // against — with a domain present it lets same-first-word companies slip through
+  // (e.g. "Apex Tooling" wrongly matching "apex-systems-inc").
+  if (!brand) return tokens.some(t => t.length >= 4 && slug.includes(t));
+  return false;
+}
+// Returns the URL when it passes domain/name validation, else null.
+function companyLinkedinForDomain(url, companyName, domain) {
+  return linkedinMatchesCompany(url, companyName, domain) ? url : null;
+}
+
 async function serpSearch(query, num = 5) {
   if (!config.serpapi?.key) return [];
   try {
@@ -202,14 +250,16 @@ async function findLinkedinUrl(lead) {
     ? `site:linkedin.com/company "${lead.companyName}"`
     : `"${lead.companyName}" linkedin.com/company`;
 
-  const results = await serpSearch(query, 5);
+  const results = await serpSearch(query, 8);
 
   for (const r of results) {
-    const url = extractLinkedinCompanyUrl(r.link || r.displayed_link || r.snippet || '');
-    if (url) return url;
-    const fromSnippet = extractLinkedinCompanyUrl(r.snippet || '');
-    if (fromSnippet) return fromSnippet;
+    const url = extractLinkedinCompanyUrl(r.link || r.displayed_link || r.snippet || '')
+             || extractLinkedinCompanyUrl(r.snippet || '');
+    // Only accept a result whose /company/ slug is consistent with this company's
+    // name or domain — otherwise it's likely a same-named but different company.
+    if (url && linkedinMatchesCompany(url, lead.companyName, domain)) return url;
   }
+  logger.debug('findLinkedinUrl: no domain/name-consistent company LinkedIn', { company: lead.companyName });
   return null;
 }
 
@@ -844,7 +894,12 @@ async function runBackgroundEnrichment(lead, prisma) {
       if (kg.location    && !cur.location)    patch.location    = kg.location;
       if (kg.companySize && !cur.companySize) patch.companySize = kg.companySize;
       if (kg.description && !cur.description) patch.description = kg.description;
-      if (kg.linkedinUrl && !cur.linkedinUrl) patch.linkedinUrl = kg.linkedinUrl;
+      // Only keep the KG company LinkedIn if its slug matches this company/domain
+      // (Knowledge Graph can attach a same-named but different company's page).
+      if (kg.linkedinUrl && !cur.linkedinUrl &&
+          linkedinMatchesCompany(kg.linkedinUrl, cur.companyName, normDomain(patch.website || cur.website || ''))) {
+        patch.linkedinUrl = kg.linkedinUrl;
+      }
       if (kg.website     && !cur.website)     patch.website     = kg.website;
 
       const extra = {};
@@ -1024,4 +1079,5 @@ module.exports = {
   kgLookup,
   normDomain,
   normalizeLinkedinUrl,
+  companyLinkedinForDomain,
 };
