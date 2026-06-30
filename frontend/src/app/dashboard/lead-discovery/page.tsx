@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronUp, Upload, ExternalLink,
   Target, Users, Edit3,
   Sparkles, ArrowRight, RotateCcw,
+  Eye, Lightbulb, Copy, Check,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
@@ -137,6 +138,109 @@ function MandatoryLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Mandatory label with a "See example" (eye) button on the right that opens a
+// worked example + tips for the field.
+function MandatoryLabelWithHelp({ label, onHelp }: { label: string; onHelp: () => void }) {
+  return (
+    <div className="flex items-center justify-between mb-1.5">
+      <span className="label mb-0 flex items-center gap-1">
+        {label}
+        <span className="text-red-400 text-xs font-bold">*</span>
+      </span>
+      <button type="button" onClick={onHelp}
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-400 hover:text-blue-300 transition-colors">
+        <Eye size={12} /> See example
+      </button>
+    </div>
+  );
+}
+
+// ── "What to enter" examples for the mandatory free-text fields ──
+const DESCRIPTION_EXAMPLE = `We provide NetSuite and SuiteCommerce Advanced (SCA) services: SuiteCommerce/SCA development and customization, SuiteScript and SuiteFlow work, NetSuite implementation, and ecommerce migrations (e.g. replacing Magento or Shopify Plus).
+
+Find companies that already use — or are adopting — NetSuite / SuiteCommerce and need development, customization, integration, or migration help. Ideal targets are mid-market ecommerce, retail, distribution, and manufacturing firms. Treat both active hiring and buying-intent discussions as opportunities.
+
+Buying-intent signals to prioritize: "looking for SuiteCommerce developer", "need NetSuite consultant", "SuiteCommerce migration", "SuiteCommerce performance issues", "SuiteScript help required", "NetSuite integration issues", "replacing Magento", "replacing Shopify Plus", "NetSuite partner recommendation".
+
+Exclude NetSuite and Oracle themselves, and NetSuite/SCA consulting or implementation agencies and staffing firms — they are providers, not buyers.
+
+Sources to search: LinkedIn, Indeed, Glassdoor, Dice, Wellfound, ZipRecruiter, Reddit, Quora, Stack Overflow, Dev.to, Medium, Hacker News.`;
+
+const DESCRIPTION_TIPS = [
+  'Name your exact services and the specific platforms/tech you work with — be concrete, not generic.',
+  'Describe your ideal customer: industry, company size, and region.',
+  'List the buying-intent phrases to prioritize (e.g. "looking for…", "need…", "migrating from…").',
+  "Exclude vendors, competitors, and agencies — they're providers, not buyers.",
+  'Name the sources / portals to search (LinkedIn, Indeed, Reddit, Quora, …).',
+];
+
+const SKILLS_EXAMPLE = `NetSuite, SuiteCommerce, SuiteCommerce Advanced, SCA, SuiteScript, SuiteFlow, SuiteTalk, RESTlets, SDF, NetSuite ecommerce, ecommerce migration`;
+
+const SKILLS_TIPS = [
+  'Comma-separated keywords, technologies, and product names that signal the need.',
+  'Include acronyms and module names (e.g. SCA, SuiteScript, RESTlets, SDF).',
+  'Add adjacent tools and phrases (e.g. "ecommerce migration") to widen matching.',
+  'These anchor the search queries and the AI relevance scoring.',
+];
+
+// Modal showing a worked example + tips, with "Use this example" to auto-fill.
+function HelpExampleModal({
+  title, intro, example, tips, onUse, onClose,
+}: {
+  title: string; intro: string; example: string; tips: string[];
+  onUse: () => void; onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(example);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-10 pb-6 px-4 bg-black/60 overflow-y-auto"
+      onClick={onClose}>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-white/[0.06]">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Lightbulb size={15} className="text-amber-400" /> {title}
+          </h3>
+          <button onClick={onClose} title="Close" className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          <p className="text-xs text-slate-500 leading-relaxed">{intro}</p>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Example</p>
+            <pre className="text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-950 rounded-xl p-3 whitespace-pre-wrap leading-relaxed font-sans">{example}</pre>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Tips</p>
+            <ul className="space-y-1.5">
+              {tips.map((t, i) => (
+                <li key={i} className="text-xs text-slate-600 dark:text-slate-300 flex items-start gap-1.5">
+                  <CheckCircle2 size={12} className="text-emerald-400 mt-0.5 flex-shrink-0" /> {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 p-4 border-t border-slate-200 dark:border-white/[0.06]">
+          <button onClick={copy} className="btn-ghost text-xs flex items-center gap-1.5">
+            {copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
+          </button>
+          <div className="flex-1" />
+          <button onClick={onClose} className="btn-ghost text-xs">Close</button>
+          <button onClick={() => { onUse(); onClose(); }} className="btn-primary text-xs flex items-center gap-1.5">
+            <Sparkles size={13} /> Use this example
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChipSelect({
   options, selected, onToggle, color = 'violet',
 }: { options: string[]; selected: string[]; onToggle: (v: string) => void; color?: string }) {
@@ -170,6 +274,8 @@ export default function LeadDiscoveryPage() {
   const [description, setDescription] = useState('');
   const [geography, setGeography] = useState('');
   const [skillsRequired, setSkillsRequired] = useState('');
+  // Which field's "See example" modal is open (null = none).
+  const [helpField, setHelpField] = useState<null | 'description' | 'skills'>(null);
 
   // Positions mode — optional
   const [targetIndustry, setTargetIndustry] = useState('');
@@ -598,7 +704,7 @@ export default function LeadDiscoveryPage() {
                 </div> */}
 
                 <div>
-                  <MandatoryLabel>Description</MandatoryLabel>
+                  <MandatoryLabelWithHelp label="Description" onHelp={() => setHelpField('description')} />
                   <textarea className="input text-sm resize-none w-full" rows={4}
                     placeholder="Enter a detailed description for quality leads"
                     value={description} onChange={e => setDescription(e.target.value)} />
@@ -612,15 +718,36 @@ export default function LeadDiscoveryPage() {
 
 
                 <div>
-                  <MandatoryLabel>Skills / Key Requirements</MandatoryLabel>
+                  <MandatoryLabelWithHelp label="Skills / Key Requirements" onHelp={() => setHelpField('skills')} />
                   <textarea className="input text-sm resize-none w-full" rows={3}
                     placeholder="e.g. SAP S/4HANA, Oracle ERP, 5+ years experience, implementation skills..."
                     value={skillsRequired} onChange={e => setSkillsRequired(e.target.value)} />
                 </div>
 
-                
+
               </div>
             </SectionCard>
+
+            {helpField === 'description' && (
+              <HelpExampleModal
+                title="Description — what to enter"
+                intro="Describe your offering and your ideal buyer in plain English. The more specific you are about the tech, the customer profile, and the buying-intent phrases, the better the lead quality."
+                example={DESCRIPTION_EXAMPLE}
+                tips={DESCRIPTION_TIPS}
+                onUse={() => setDescription(DESCRIPTION_EXAMPLE)}
+                onClose={() => setHelpField(null)}
+              />
+            )}
+            {helpField === 'skills' && (
+              <HelpExampleModal
+                title="Skills / Key Requirements — what to enter"
+                intro="A comma-separated list of the technologies, product names, and keywords that signal a need for your offering. These anchor the search queries and the relevance scoring."
+                example={SKILLS_EXAMPLE}
+                tips={SKILLS_TIPS}
+                onUse={() => setSkillsRequired(SKILLS_EXAMPLE)}
+                onClose={() => setHelpField(null)}
+              />
+            )}
 
             <SectionCard title="Optional Filters" subtitle="Leave blank for any" defaultOpen={true}>
               <div className="pt-4 space-y-4">
