@@ -1382,14 +1382,53 @@ export default function LeadDetailPage() {
                           value={emailData.body}
                           onChange={e => setEmailData({ ...emailData, body: e.target.value })} />
                       </div>
-                      {/* <button className="btn-primary w-full justify-center" onClick={handleSend}
-                        disabled={sendLoading || !lead.contactEmail}>
-                        {sendLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
-                        Send Email
+                    {/* Recipient picker — pick one or more contacts to address the draft to */}
+                    <div>
+                      <p className="label mb-1 flex items-center justify-between">
+                        <span>Send to</span>
+                        {selectedEmails.size > 0 && (
+                          <span className="text-[10px] font-normal text-slate-400">{selectedEmails.size} selected</span>
+                        )}
+                      </p>
+                      {mailRecipients.length === 0 ? (
+                        <p className="text-xs text-amber-400">No contact email yet — add one in Contact Details first.</p>
+                      ) : (
+                        <div className="space-y-0.5 max-h-40 overflow-y-auto rounded-lg border border-slate-200 dark:border-white/[0.08] p-1.5">
+                          {mailRecipients.map(r => (
+                            <label key={r.id}
+                              className="flex items-start gap-2 px-1.5 py-1 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50">
+                              <input type="checkbox" className="mt-0.5 accent-blue-500 cursor-pointer"
+                                checked={selectedEmails.has(r.email)}
+                                onChange={() => toggleRecipient(r.email)} />
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{r.name}</span>
+                                  {r.badge && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">{r.badge}</span>}
+                                </span>
+                                <span className="block text-[11px] text-slate-400 truncate">{r.email}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Open the draft in Gmail / Outlook web, or the OS default mail app */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                        onClick={() => openCompose('gmail')} disabled={selectedEmails.size === 0}>
+                        <Mail size={13} /> Gmail
                       </button>
-                      {!lead.contactEmail && (
-                        <p className="text-xs text-center text-slate-600">Find a contact email first</p>
-                      )} */}
+                      <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-50"
+                        onClick={() => openCompose('outlook')} disabled={selectedEmails.size === 0}>
+                        <Mail size={13} /> Outlook
+                      </button>
+                      <button className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-700 dark:text-slate-200 hover:bg-slate-300/70 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                        onClick={() => openCompose('default')} disabled={selectedEmails.size === 0}>
+                        <Send size={12} /> Default Mail App
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 text-center">Opens a pre-filled draft — you send it from your own mailbox.</p>
                     </>
                   ) : (
                     <button className="btn-ghost w-full justify-center text-xs"
