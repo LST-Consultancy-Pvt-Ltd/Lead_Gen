@@ -1364,7 +1364,7 @@ export default function LeadDetailPage() {
                       <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Email</th>
                       <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Phone</th>
                       <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">LinkedIn</th>
-                      {canEditThisLead && <th className="px-3 py-2" />}
+                      {canEditThisLead && <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Action</th>}
                     </tr>
                   </thead>
                   <tbody>
