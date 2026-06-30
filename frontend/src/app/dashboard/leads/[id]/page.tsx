@@ -54,10 +54,10 @@ function InfoRow({
       <div className="flex-1 min-w-0">
         <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">{label}</p>
         {href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer"
+          <a href={href} target="_blank" rel="noopener noreferrer" title={value}
             className="text-sm text-blue-400 hover:underline truncate block">{value}</a>
         ) : (
-          <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{value}</p>
+          <p className="text-sm text-slate-800 dark:text-slate-200 truncate" title={value}>{value}</p>
         )}
       </div>
       {copyable && (
@@ -95,17 +95,17 @@ function ContactTableRow({
     <tr className="border-t border-slate-200 dark:border-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors align-top">
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-800 dark:text-slate-200">{name || '—'}</span>
+          <span className="text-sm text-slate-800 dark:text-slate-200" title={name || undefined}>{name || '—'}</span>
           {badge && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">{badge}</span>}
         </div>
       </td>
-      <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300">{title || '—'}</td>
+      <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300" title={title || undefined}>{title || '—'}</td>
       <td className="px-3 py-2.5">
         {emailList.length ? (
           <div className="space-y-1">
             {emailList.map((email, i) => (
               <span key={i} className="group/cell flex items-center gap-1.5">
-                <a href={`mailto:${email}`} className="text-sm text-blue-400 hover:underline break-all">{email}</a>
+                <a href={`mailto:${email}`} title={email} className="text-sm text-blue-400 hover:underline break-all">{email}</a>
                 <button onClick={() => copy(email)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy email"><Copy size={11} className="text-slate-400" /></button>
               </span>
             ))}
@@ -117,7 +117,7 @@ function ContactTableRow({
           <div className="space-y-1">
             {phoneList.map((phone, i) => (
               <span key={i} className="group/cell flex items-center gap-1.5">
-                <a href={`tel:${phone}`} className="text-sm text-slate-700 dark:text-slate-300 hover:text-blue-400 whitespace-nowrap">{phone}</a>
+                <a href={`tel:${phone}`} title={phone} className="text-sm text-slate-700 dark:text-slate-300 hover:text-blue-400 whitespace-nowrap">{phone}</a>
                 <button onClick={() => copy(phone)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy phone"><Copy size={11} className="text-slate-400" /></button>
               </span>
             ))}
@@ -877,14 +877,14 @@ export default function LeadDetailPage() {
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
       <div className="card p-5 flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           <Avatar initials={getInitials(lead.companyName)} size="lg" />
-          <div>
-            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">{lead.companyName}</h1>
+          <div className="min-w-0">
+            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 break-words">{lead.companyName}</h1>
             <div className="flex flex-col items-start gap-1.5 mt-1.5">
               {/* Domain badge */}
               {domainName && (
-                <span className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-400 px-2.5 py-1 rounded-lg font-mono">
+                <span className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-400 px-2.5 py-1 rounded-lg font-mono break-all">
                   {domainName}
                 </span>
               )}
@@ -895,20 +895,25 @@ export default function LeadDetailPage() {
                   {lead.industry || agg.industry}
                 </span>
               )}
-              {/* Website link */}
-              {websiteUrl && (
-                <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 px-2.5 py-1 rounded-lg hover:text-blue-400 transition-colors">
-                  <Globe size={11} /> Visit site
-                </a>
-              )}
-              {/* LinkedIn */}
-              {lead.linkedinUrl && (
-                <a href={lead.linkedinUrl.startsWith('http') ? lead.linkedinUrl : `https://${lead.linkedinUrl}`}
-                  target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 px-2.5 py-1 rounded-lg hover:text-blue-400 transition-colors">
-                  <Linkedin size={11} /> LinkedIn
-                </a>
+              {/* Visit Site + LinkedIn — single horizontal row, wraps if needed */}
+              {(websiteUrl || lead.linkedinUrl) && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {/* Website link */}
+                  {websiteUrl && (
+                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 px-2.5 py-1 rounded-lg hover:text-blue-400 transition-colors">
+                      <Globe size={11} /> Visit site
+                    </a>
+                  )}
+                  {/* LinkedIn */}
+                  {lead.linkedinUrl && (
+                    <a href={lead.linkedinUrl.startsWith('http') ? lead.linkedinUrl : `https://${lead.linkedinUrl}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 px-2.5 py-1 rounded-lg hover:text-blue-400 transition-colors">
+                      <Linkedin size={11} /> LinkedIn
+                    </a>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -954,6 +959,11 @@ export default function LeadDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Two-column layout: left = Lead Details / Company Profile · right = Analysis & Email ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:items-stretch">
+        {/* ───────────────────────────── LEFT COLUMN ───────────────────────────── */}
+        <div className="space-y-5 min-w-0">
 
       {/* ── View Mode Details ────────────────────────────────────────────── */}
       {!isEditing && (
@@ -1046,7 +1056,7 @@ export default function LeadDetailPage() {
             </div> */}
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
-              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{lead.notes || '—'}</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap max-h-[8.75rem] overflow-y-auto pr-1" title={lead.notes || undefined}>{lead.notes || '—'}</p>
             </div>
           </div>
         </div>
@@ -1185,9 +1195,6 @@ export default function LeadDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="space-y-4 lg:col-span-2">
-
           {/* ── Aggregated Company Profile ───────────────────────────────── */}
           <div className="card p-5">
             <h2 className="section-title mb-4">Company Profile</h2>
@@ -1220,11 +1227,109 @@ export default function LeadDetailPage() {
             )}
 
           </div>
+          {/* ─────────────────────────── /LEFT COLUMN ─────────────────────────── */}
+        </div>
 
-          {/* ── Contact Details ──────────────────────────────────────────── */}
-          <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title">Contact Details</h2>
+        {/* ──────────────────── RIGHT COLUMN — Analysis & Email ──────────────────── */}
+        {/* The wrapper stretches to the left column's height (Lead Details + Company
+            Profile); the panel fills it absolutely and scrolls internally, so the page
+            never grows with Analysis content and the panel never exceeds the left side. */}
+        <div className="min-w-0 lg:relative">
+          <div className="card p-5 flex flex-col lg:absolute lg:inset-0">
+            {/* Tabs — pinned to the top of the panel */}
+            <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl">
+              {(['analysis', 'email'] as const).map(tab => (
+                <button key={tab} onClick={() => setAiTab(tab)}
+                  className={cn('flex-1 py-1.5 rounded-lg text-xs font-medium transition-all',
+                    aiTab === tab ? 'bg-blue-500/20 text-blue-300' : 'text-slate-500 hover:text-slate-500 dark:hover:text-slate-300')}>
+                  {tab === 'analysis' ? '🤖 Analysis' : '✉️ Email'}
+                </button>
+              ))}
+            </div>
+
+            {/* Scrollable content — internal vertical scrollbar appears here if content overflows */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {aiTab === 'analysis' && (
+                <div className="space-y-3">
+                  {lead.aiSummary && (
+                    <div className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Summary</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.aiSummary}</p>
+                    </div>
+                  )}
+                  {lead.opportunity && (
+                    <div className="p-3 bg-blue-500/[0.08] border border-blue-500/20 rounded-xl">
+                      <p className="text-[10px] font-semibold text-blue-300 mb-1 uppercase tracking-wider">Opportunity</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.opportunity}</p>
+                    </div>
+                  )}
+                  {lead.aiPitch && (
+                    <div className="p-3 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-xl">
+                      <p className="text-[10px] font-semibold text-emerald-400 mb-1 uppercase tracking-wider">Pitch</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.aiPitch}</p>
+                    </div>
+                  )}
+                  {!lead.aiSummary && (
+                    <button className="btn-ghost w-full justify-center text-xs"
+                      onClick={() => analyzeMutation.mutate()} disabled={analyzeMutation.isPending}>
+                      {analyzeMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+                      Run AI Analysis
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {aiTab === 'email' && (
+                <div className="space-y-3">
+                  {!lead.contactEmail && (
+                    <div className="p-3 bg-amber-500/[0.08] border border-amber-500/20 rounded-xl">
+                      <p className="text-xs text-amber-400">⚠ No email yet — use Contact Details to search Apollo.</p>
+                    </div>
+                  )}
+                  {emailData ? (
+                    <>
+                      <div>
+                        <p className="label mb-1">Subject</p>
+                        <input className="input text-xs" title="Email subject" placeholder="Email subject"
+                          value={emailData.subject}
+                          onChange={e => setEmailData({ ...emailData, subject: e.target.value })} />
+                      </div>
+                      <div>
+                        <p className="label mb-1">Body</p>
+                        <textarea className="input text-xs h-44 resize-none leading-relaxed"
+                          title="Email body" placeholder="Email body"
+                          value={emailData.body}
+                          onChange={e => setEmailData({ ...emailData, body: e.target.value })} />
+                      </div>
+                      {/* <button className="btn-primary w-full justify-center" onClick={handleSend}
+                        disabled={sendLoading || !lead.contactEmail}>
+                        {sendLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
+                        Send Email
+                      </button>
+                      {!lead.contactEmail && (
+                        <p className="text-xs text-center text-slate-600">Find a contact email first</p>
+                      )} */}
+                    </>
+                  ) : (
+                    <button className="btn-ghost w-full justify-center text-xs"
+                      onClick={() => generateEmailMutation.mutate()}
+                      disabled={generateEmailMutation.isPending}>
+                      {generateEmailMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
+                      Generate AI Email
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* ─────────────────────────── /Two-column layout ─────────────────────────── */}
+
+      {/* ── Contact Details (full width) ─────────────────────────────────── */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="section-title">Contact Details</h2>
               <div className="flex items-center gap-2">
                 {enrichState.status === 'apollo_found' && (
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-violet-500/10 text-violet-400 border-violet-500/25">
@@ -1634,145 +1739,6 @@ export default function LeadDetailPage() {
           <div className="card p-5">
             <ActivitiesList leadId={id} />
           </div>
-        </div>
-
-        {/* ── Right sidebar ─────────────────────────────────────────────── */}
-        <div className="space-y-4">
-          {/* Scores */}
-          {/* <div className="card p-5">
-            <h2 className="section-title mb-4">AI Scores</h2>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs text-slate-500">Lead Score</p>
-              <ScoreRing score={lead.leadScore} size={52} />
-            </div>
-            <div className="border-t border-slate-200 dark:border-white/[0.06] pt-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Intent Level</p>
-                <Badge color={intentColors[lead.intentLevel] ?? 'gray'}>{lead.intentLevel}</Badge>
-              </div>
-              <span className={cn('font-display text-2xl font-bold', lead.intentScore >= 80 ? 'text-emerald-400' : 'text-amber-400')}>
-                {lead.intentScore}%
-              </span>
-            </div>
-          </div> */}
-
-          {/* Status */}
-          {/* <div className="card p-5">
-            <h2 className="section-title mb-3">Status</h2>
-            <Badge color={statusColors[lead.status] ?? 'gray'}>{lead.status?.replace('_', ' ')}</Badge>
-            {lead.assignedTo?.name && (
-              <div className="flex items-center gap-1.5 mt-2">
-                <UserCog size={12} className="text-slate-500 flex-shrink-0" />
-                <span className="text-xs text-slate-500">Assigned to:</span>
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-200">{lead.assignedTo.name}</span>
-              </div>
-            )}
-            {lead.source && (
-              <p className="text-xs text-slate-600 mt-2">Source: {lead.source}</p>
-            )}
-            {lead.sourceUrl && (
-              <a href={lead.sourceUrl} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-400 hover:underline mt-1">
-                View source <ExternalLink size={10} />
-              </a>
-            )}
-            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/[0.06]">
-              <div className="flex items-center gap-2 text-xs">
-                <Calendar size={12} className="text-slate-500" />
-                <span className="text-slate-600">Follow-up:</span>
-                <span className="text-slate-600 dark:text-slate-300">
-                  {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                </span>
-              </div>
-            </div>
-          </div> */}
-
-          {/* AI Panel */}
-          <div className="card p-5">
-            <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl">
-              {(['analysis', 'email'] as const).map(tab => (
-                <button key={tab} onClick={() => setAiTab(tab)}
-                  className={cn('flex-1 py-1.5 rounded-lg text-xs font-medium transition-all',
-                    aiTab === tab ? 'bg-blue-500/20 text-blue-300' : 'text-slate-500 hover:text-slate-500 dark:hover:text-slate-300')}>
-                  {tab === 'analysis' ? '🤖 Analysis' : '✉️ Email'}
-                </button>
-              ))}
-            </div>
-
-            {aiTab === 'analysis' && (
-              <div className="space-y-3">
-                {lead.aiSummary && (
-                  <div className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Summary</p>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.aiSummary}</p>
-                  </div>
-                )}
-                {lead.opportunity && (
-                  <div className="p-3 bg-blue-500/[0.08] border border-blue-500/20 rounded-xl">
-                    <p className="text-[10px] font-semibold text-blue-300 mb-1 uppercase tracking-wider">Opportunity</p>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.opportunity}</p>
-                  </div>
-                )}
-                {lead.aiPitch && (
-                  <div className="p-3 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-xl">
-                    <p className="text-[10px] font-semibold text-emerald-400 mb-1 uppercase tracking-wider">Pitch</p>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.aiPitch}</p>
-                  </div>
-                )}
-                {!lead.aiSummary && (
-                  <button className="btn-ghost w-full justify-center text-xs"
-                    onClick={() => analyzeMutation.mutate()} disabled={analyzeMutation.isPending}>
-                    {analyzeMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-                    Run AI Analysis
-                  </button>
-                )}
-              </div>
-            )}
-
-            {aiTab === 'email' && (
-              <div className="space-y-3">
-                {!lead.contactEmail && (
-                  <div className="p-3 bg-amber-500/[0.08] border border-amber-500/20 rounded-xl">
-                    <p className="text-xs text-amber-400">⚠ No email yet — use Contact Details to search Apollo.</p>
-                  </div>
-                )}
-                {emailData ? (
-                  <>
-                    <div>
-                      <p className="label mb-1">Subject</p>
-                      <input className="input text-xs" title="Email subject" placeholder="Email subject"
-                        value={emailData.subject}
-                        onChange={e => setEmailData({ ...emailData, subject: e.target.value })} />
-                    </div>
-                    <div>
-                      <p className="label mb-1">Body</p>
-                      <textarea className="input text-xs h-44 resize-none leading-relaxed"
-                        title="Email body" placeholder="Email body"
-                        value={emailData.body}
-                        onChange={e => setEmailData({ ...emailData, body: e.target.value })} />
-                    </div>
-                    {/* <button className="btn-primary w-full justify-center" onClick={handleSend}
-                      disabled={sendLoading || !lead.contactEmail}>
-                      {sendLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
-                      Send Email
-                    </button>
-                    {!lead.contactEmail && (
-                      <p className="text-xs text-center text-slate-600">Find a contact email first</p>
-                    )} */}
-                  </>
-                ) : (
-                  <button className="btn-ghost w-full justify-center text-xs"
-                    onClick={() => generateEmailMutation.mutate()}
-                    disabled={generateEmailMutation.isPending}>
-                    {generateEmailMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
-                    Generate AI Email
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* ── Opportunity Delete Confirmation Modal ──────────────────────────── */}
       {mounted && oppDeleteConfirmId && createPortal(
