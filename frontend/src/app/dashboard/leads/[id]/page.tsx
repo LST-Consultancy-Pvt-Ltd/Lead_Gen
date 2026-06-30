@@ -161,7 +161,7 @@ function MultiFieldList({
     const next = [...values];
     // For phone fields, allow digits plus +, spaces, parentheses and hyphens
     // (e.g. "+1 (610) 676-1063"). Cap length to fit a fully formatted number.
-    next[i] = numeric ? v.replace(/[^\d\s()+-]/g, '').slice(0, 25) : v;
+    next[i] = numeric ? v.replace(/[^\d\s()+-]/g, '').slice(0, 20) : v;
     onChange(next);
   };
   const add = () => onChange([...values, '']);
@@ -181,7 +181,7 @@ function MultiFieldList({
               className={inputClassName}
               type={type}
               inputMode={numeric ? 'tel' : undefined}
-              maxLength={numeric ? 16 : undefined}
+              maxLength={numeric ? 20 : undefined}
               placeholder={placeholder}
               value={val}
               onChange={e => update(i, e.target.value)}
@@ -365,8 +365,9 @@ function isValidPhone(v: string) {
   const trimmed = v.trim();
   // Allowed characters: digits, spaces, +, -, parentheses (e.g. "+1 (610) 676-1063")
   if (!/^[\d\s()+-]+$/.test(trimmed)) return false;
+  if (trimmed.length > 20) return false;       // cap total length (digits + special chars)
   const digits = trimmed.replace(/\D/g, "");   // count only the digits
-  return digits.length >= 3 && digits.length <= 16;
+  return digits.length >= 3 && digits.length <= 20;
 }
 // Accepts linkedin.com/in/<handle> with or without https:// and www.
 const LINKEDIN_RE = /^(https?:\/\/)?(www\.)?linkedin\.com\/in\/[a-zA-Z0-9-_%]+\/?$/;
@@ -760,7 +761,7 @@ export default function LeadDetailPage() {
     const badEmail = emails.find(e => !isValidEmail(e));
     if (badEmail)                               { toast.error(`Please enter a valid email address: ${badEmail}`); return; }
     const badPhone = phones.find(p => !isValidPhone(p));
-    if (badPhone)                               { toast.error('Phone must have 3 to 16 digits (you may use + ( ) - and spaces)'); return; }
+    if (badPhone)                               { toast.error('Phone must have 3 to 20 digits (you may use + ( ) - and spaces)'); return; }
     if (d.linkedin && !isValidLinkedin(d.linkedin)) { toast.error('Enter a valid LinkedIn profile URL (linkedin.com/in/…)'); return; }
     updateContactMutation.mutate({
       contactId: editingContactId,
@@ -790,7 +791,7 @@ export default function LeadDetailPage() {
     const badEmail = emails.find(e => !isValidEmail(e));
     if (badEmail)                                   { toast.error(`Please enter a valid email address: ${badEmail}`); return; }
     const badPhone = phones.find(p => !isValidPhone(p));
-    if (badPhone)                                   { toast.error('Phone must have 3 to 16 digits (you may use + ( ) - and spaces)'); return; }
+    if (badPhone)                                   { toast.error('Phone must have 3 to 20 digits (you may use + ( ) - and spaces)'); return; }
     const badLi = linkedins.find(l => !isValidLinkedin(l));
     if (badLi)                                      { toast.error('Enter a valid LinkedIn profile URL (linkedin.com/in/…)'); return; }
     addContactMutation.mutate({
