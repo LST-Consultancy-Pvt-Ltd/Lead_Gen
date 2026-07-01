@@ -91,15 +91,18 @@ function ContactTableRow({
   const copy = (v: string) => { navigator.clipboard.writeText(v); toast.success('Copied!'); };
   const emailList = (emails || []).map(e => (e || '').trim()).filter(Boolean);
   const phoneList = (phones || []).map(p => (p || '').trim()).filter(Boolean);
+  // Cap the visible length so a long value can't blow out the layout; the full
+  // text stays reachable via the tooltip on hover.
+  const truncate = (v: string, n: number) => (v.length > n ? v.slice(0, n) + '…' : v);
   return (
     <tr className="border-t border-slate-200 dark:border-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors align-top">
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-800 dark:text-slate-200" title={name || undefined}>{name || '—'}</span>
+          <span className="text-sm text-slate-800 dark:text-slate-200 cursor-default" title={name || undefined}>{name ? truncate(name, 25) : '—'}</span>
           {badge && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">{badge}</span>}
         </div>
       </td>
-      <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300" title={title || undefined}>{title || '—'}</td>
+      <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 cursor-default" title={title || undefined}>{title ? truncate(title, 25) : '—'}</td>
       <td className="px-3 py-2.5">
         {emailList.length ? (
           <div className="space-y-1">
@@ -130,7 +133,7 @@ function ContactTableRow({
           : <span className="text-sm text-slate-400">—</span>}
       </td>
       {canEdit && (
-        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+        <td className="px-3 py-2.5 text-left whitespace-nowrap">
           {onEdit && <button onClick={onEdit} className="btn-ghost text-[10px] py-0.5 px-1.5 text-slate-400" title="Edit contact"><Edit2 size={12} /></button>}
           {onDelete && (
             <button onClick={onDelete}
