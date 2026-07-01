@@ -585,12 +585,14 @@ export default function LeadsPage() {
                       })()}
                     </td>
 
-                    {/* Origin — Generated (from a discovery scan) vs Imported */}
+                    {/* Origin — Generated (discovery scan) | Imported (CSV) | Manual (form) */}
                     <td className="px-4 py-3">
                       {l.scanJobId ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Generated</span>
-                      ) : (
+                      ) : l.source === 'import' ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-500/10 text-slate-400 border border-slate-500/20">Imported</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">Manual</span>
                       )}
                     </td>
 
