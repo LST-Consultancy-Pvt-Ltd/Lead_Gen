@@ -91,21 +91,24 @@ function ContactTableRow({
   const copy = (v: string) => { navigator.clipboard.writeText(v); toast.success('Copied!'); };
   const emailList = (emails || []).map(e => (e || '').trim()).filter(Boolean);
   const phoneList = (phones || []).map(p => (p || '').trim()).filter(Boolean);
+  // Cap the visible length so a long value can't blow out the layout; the full
+  // text stays reachable via the tooltip on hover.
+  const truncate = (v: string, n: number) => (v.length > n ? v.slice(0, n) + '…' : v);
   return (
     <tr className="border-t border-slate-200 dark:border-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors align-top">
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-800 dark:text-slate-200" title={name || undefined}>{name || '—'}</span>
+          <span className="text-sm text-slate-800 dark:text-slate-200 cursor-default" title={name || undefined}>{name ? truncate(name, 25) : '—'}</span>
           {badge && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">{badge}</span>}
         </div>
       </td>
-      <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300" title={title || undefined}>{title || '—'}</td>
+      <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 cursor-default" title={title || undefined}>{title ? truncate(title, 25) : '—'}</td>
       <td className="px-3 py-2.5">
         {emailList.length ? (
           <div className="space-y-1">
             {emailList.map((email, i) => (
               <span key={i} className="group/cell flex items-center gap-1.5">
-                <a href={`mailto:${email}`} title={email} className="text-sm text-blue-400 hover:underline break-all">{email}</a>
+                <a href={`mailto:${email}`} title={email} className="text-sm text-blue-400 hover:underline whitespace-nowrap">{truncate(email, 25)}</a>
                 <button onClick={() => copy(email)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy email"><Copy size={11} className="text-slate-400" /></button>
               </span>
             ))}
@@ -130,7 +133,7 @@ function ContactTableRow({
           : <span className="text-sm text-slate-400">—</span>}
       </td>
       {canEdit && (
-        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+        <td className="px-3 py-2.5 text-left whitespace-nowrap">
           {onEdit && <button onClick={onEdit} className="btn-ghost text-[10px] py-0.5 px-1.5 text-slate-400" title="Edit contact"><Edit2 size={12} /></button>}
           {onDelete && (
             <button onClick={onDelete}
@@ -674,6 +677,33 @@ export default function LeadDetailPage() {
     onError: () => toast.error('Failed to update contact'),
   });
 
+  // The "Primary" contact is stored on the lead itself (contactName/Email/…),
+  // not as a separate contacts record — so editing/deleting it updates the lead.
+  const updatePrimaryMutation = useMutation({
+    mutationFn: (data: any) => leadsApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead', id] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Contact updated');
+      setEditingContactId(null);
+    },
+    onError: () => toast.error('Failed to update contact'),
+  });
+
+  const deletePrimaryMutation = useMutation({
+    mutationFn: () => leadsApi.update(id, {
+      contactName: null, contactEmail: null, contactPhone: null,
+      contactTitle: null, contactLinkedin: null,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead', id] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Contact removed');
+      setContactDeleteId(null);
+    },
+    onError: () => toast.error('Failed to remove contact'),
+  });
+
   // ── Opportunities linked to this lead ─────────────────────────────────────
   const { data: oppData, isLoading: oppLoading } = useQuery({
     queryKey: ['lead-opportunities', id],
@@ -803,9 +833,39 @@ export default function LeadDetailPage() {
     });
   }
 
+  function startEditPrimary() {
+    setEditingContactId('primary');
+    setEditContactData({
+      name:     lead.contactName     || '',
+      title:    lead.contactTitle    || '',
+      phones:   [lead.contactPhone   || ''],
+      emails:   [lead.contactEmail   || ''],
+      linkedin: lead.contactLinkedin || '',
+    });
+  }
+
   function handleSaveContact() {
     if (!editingContactId) return;
     const d = editContactData;
+    // Primary contact lives on the lead record — validate then update the lead.
+    if (editingContactId === 'primary') {
+      const emails = d.emails.map(e => e.trim()).filter(Boolean);
+      const phones = d.phones.map(p => p.trim()).filter(Boolean);
+      if (d.name && !isValidName(d.name))             { toast.error('Enter a valid name (letters required)'); return; }
+      const badEmail = emails.find(e => !isValidEmail(e));
+      if (badEmail)                                   { toast.error(`Please enter a valid email address: ${badEmail}`); return; }
+      const badPhone = phones.find(p => !isValidPhone(p));
+      if (badPhone)                                   { toast.error('Phone must have 3 to 20 digits (you may use + ( ) - and spaces)'); return; }
+      if (d.linkedin && !isValidLinkedin(d.linkedin)) { toast.error('Enter a valid LinkedIn profile URL (linkedin.com/in/…)'); return; }
+      updatePrimaryMutation.mutate({
+        contactName:     d.name,
+        contactTitle:    d.title,
+        contactEmail:    emails[0] || null,
+        contactPhone:    phones[0] || null,
+        contactLinkedin: d.linkedin || null,
+      });
+      return;
+    }
     const emails = d.emails.map(e => e.trim()).filter(Boolean);
     const phones = d.phones.map(p => p.trim()).filter(Boolean);
     if (d.name && !isValidName(d.name))         { toast.error('Enter a valid name (letters required)'); return; }
@@ -860,6 +920,48 @@ export default function LeadDetailPage() {
   function handleContactDelete(contactId: string) {
     // Open the confirmation popup; actual delete happens from the modal.
     setContactDeleteId(contactId);
+  }
+
+  // Inline edit form shared by the primary contact and saved contacts.
+  function renderContactEditor(saving: boolean) {
+    return (
+      <>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="label mb-1 block">Name</label>
+            <input className="input text-xs h-8 w-full" placeholder="Full name"
+              value={editContactData.name}
+              onChange={e => setEditContactData((d: any) => ({ ...d, name: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label mb-1 block">Title</label>
+            <input className="input text-xs h-8 w-full" placeholder="Job title"
+              value={editContactData.title}
+              onChange={e => setEditContactData((d: any) => ({ ...d, title: e.target.value }))} />
+          </div>
+          <MultiFieldList
+            label="Email" type="email" placeholder="name@company.com" addLabel="Add email"
+            values={editContactData.emails}
+            onChange={emails => setEditContactData((d: any) => ({ ...d, emails }))} />
+          <MultiFieldList
+            label="Phone" numeric placeholder="Add Phone Number" addLabel="Add phone"
+            values={editContactData.phones}
+            onChange={phones => setEditContactData((d: any) => ({ ...d, phones }))} />
+          <div className="col-span-2">
+            <label className="label mb-1 block">LinkedIn URL</label>
+            <input className="input text-xs h-8 w-full" placeholder="https://www.linkedin.com/in/…"
+              value={editContactData.linkedin}
+              onChange={e => setEditContactData((d: any) => ({ ...d, linkedin: e.target.value }))} />
+          </div>
+        </div>
+        <div className="flex gap-2 pt-2">
+          <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveContact} disabled={saving}>
+            {saving ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : <><Save size={11} /> Save</>}
+          </button>
+          <button className="btn-ghost text-xs py-1.5 px-3" onClick={() => setEditingContactId(null)}><X size={11} /> Cancel</button>
+        </div>
+      </>
+    );
   }
 
   async function handleSend() {
@@ -1483,50 +1585,29 @@ export default function LeadDetailPage() {
                   </thead>
                   <tbody>
                     {hasContact && (
-                      <ContactTableRow
-                        name={lead.contactName} title={lead.contactTitle}
-                        emails={[lead.contactEmail]} phones={[lead.contactPhone]} linkedin={lead.contactLinkedin}
-                        badge="Primary"
-                      />
+                      editingContactId === 'primary' ? (
+                        <tr className="border-t border-slate-200 dark:border-white/[0.06] bg-blue-500/[0.04]">
+                          <td colSpan={canEditThisLead ? 6 : 5} className="p-3">
+                            {renderContactEditor(updatePrimaryMutation.isPending)}
+                          </td>
+                        </tr>
+                      ) : (
+                        <ContactTableRow
+                          name={lead.contactName} title={lead.contactTitle}
+                          emails={[lead.contactEmail]} phones={[lead.contactPhone]} linkedin={lead.contactLinkedin}
+                          badge="Primary"
+                          canEdit={canEditThisLead}
+                          onEdit={startEditPrimary}
+                          onDelete={() => handleContactDelete('primary')}
+                          deleteArmed={false}
+                        />
+                      )
                     )}
                     {savedContacts.map((c: any) => (
                       editingContactId === c.id ? (
                         <tr key={c.id} className="border-t border-slate-200 dark:border-white/[0.06] bg-blue-500/[0.04]">
                           <td colSpan={canEditThisLead ? 6 : 5} className="p-3">
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="label mb-1 block">Name</label>
-                                <input className="input text-xs h-8 w-full" placeholder="Full name"
-                                  value={editContactData.name}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, name: e.target.value }))} />
-                              </div>
-                              <div>
-                                <label className="label mb-1 block">Title</label>
-                                <input className="input text-xs h-8 w-full" placeholder="Job title"
-                                  value={editContactData.title}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, title: e.target.value }))} />
-                              </div>
-                              <MultiFieldList
-                                label="Email" type="email" placeholder="name@company.com" addLabel="Add email"
-                                values={editContactData.emails}
-                                onChange={emails => setEditContactData((d: any) => ({ ...d, emails }))} />
-                              <MultiFieldList
-                                label="Phone" numeric placeholder="Add Phone Number" addLabel="Add phone"
-                                values={editContactData.phones}
-                                onChange={phones => setEditContactData((d: any) => ({ ...d, phones }))} />
-                              <div className="col-span-2">
-                                <label className="label mb-1 block">LinkedIn URL</label>
-                                <input className="input text-xs h-8 w-full" placeholder="https://www.linkedin.com/in/…"
-                                  value={editContactData.linkedin}
-                                  onChange={e => setEditContactData((d: any) => ({ ...d, linkedin: e.target.value }))} />
-                              </div>
-                            </div>
-                            <div className="flex gap-2 pt-2">
-                              <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveContact} disabled={updateContactMutation.isPending}>
-                                {updateContactMutation.isPending ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : <><Save size={11} /> Save</>}
-                              </button>
-                              <button className="btn-ghost text-xs py-1.5 px-3" onClick={() => setEditingContactId(null)}><X size={11} /> Cancel</button>
-                            </div>
+                            {renderContactEditor(updateContactMutation.isPending)}
                           </td>
                         </tr>
                       ) : (
@@ -1913,10 +1994,12 @@ export default function LeadDetailPage() {
               </button>
               <button
                 className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-semibold text-white transition-colors disabled:opacity-60"
-                disabled={deleteContactMutation.isPending}
-                onClick={() => deleteContactMutation.mutate(contactDeleteId)}
+                disabled={deleteContactMutation.isPending || deletePrimaryMutation.isPending}
+                onClick={() => contactDeleteId === 'primary'
+                  ? deletePrimaryMutation.mutate()
+                  : deleteContactMutation.mutate(contactDeleteId)}
               >
-                {deleteContactMutation.isPending ? <><Loader2 size={13} className="animate-spin" /> Deleting…</> : 'Yes, Delete'}
+                {(deleteContactMutation.isPending || deletePrimaryMutation.isPending) ? <><Loader2 size={13} className="animate-spin" /> Deleting…</> : 'Yes, Delete'}
               </button>
             </div>
           </div>
