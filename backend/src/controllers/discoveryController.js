@@ -7,9 +7,10 @@
  */
 
 const prisma = require('../utils/prisma');
+const config = require('../config');
 const { success, error } = require('../utils/response');
 const { runProductDiscoveryScan, generateProductPrompt, normJobTitle } = require('../services/productDiscoveryService');
-const { runBackgroundEnrichment, runApolloEnrichmentBackground, companyLinkedinForDomain } = require('../services/leadEnrichmentPipeline');
+const { runBackgroundEnrichment, enrichViaSignalHire, companyLinkedinForDomain } = require('../services/leadEnrichmentPipeline');
 const { analyzeLeadIntent, parseUserPrompt } = require('../services/aiService');
 const logger = require('../utils/logger');
 const { checkLeadQuota, incrementLeadUsage } = require('../utils/leadQuota');
@@ -407,7 +408,6 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
     leadType = 'product',
     decisionMakerRoles = [],
     scoreThreshold = '',
-    shouldApolloEnrich = false,
   } = options;
 
   try {
@@ -474,23 +474,13 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
 
         savedIds.push(id);
 
-        if (shouldApolloEnrich) {
+        // Auto-enrich contacts via SignalHire for every discovered lead.
+        // Fires-and-forgets a company search → top-5 DM reveal; contacts
+        // arrive asynchronously via the SignalHire webhook.
+        if (config.signalhire?.apiKey && config.signalhire?.callbackUrl) {
           const savedLead = await prisma.lead.findUnique({ where: { id } }).catch(() => null);
           if (savedLead) {
-            // Phase 1: when user didn't pick decision-maker roles, fall back to the
-            // AI-derived buyerTitles from the profile (not the hardcoded ['CEO','CTO',
-            // 'Founder','Managing Director','Director'] defaults). Generic "Director"
-            // matched "Recreation Director" via word-boundary, attaching irrelevant
-            // contacts. Real buyer titles like "Procurement Manager" disambiguate.
-            const profileBuyerTitles = profile?.apolloProfile?.buyerTitles || [];
-            const effectiveRoles = (Array.isArray(decisionMakerRoles) && decisionMakerRoles.length)
-              ? decisionMakerRoles
-              : profileBuyerTitles;
-            runApolloEnrichmentBackground(savedLead, prisma, {
-              organizationId: orgId,
-              roles: effectiveRoles,
-              filters,
-            }).catch(() => {});
+            enrichViaSignalHire(savedLead, { createdById: savedLead.createdById }).catch(() => {});
           }
         }
       } catch (err) {
@@ -524,7 +514,6 @@ async function processScan(jobId, orgId, offerInput, filters = {}, decisionMaker
     leadType: 'service',
     decisionMakerRoles,
     scoreThreshold,
-    shouldApolloEnrich: true,
   });
 }
 
