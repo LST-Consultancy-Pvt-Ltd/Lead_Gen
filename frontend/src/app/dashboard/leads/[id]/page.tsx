@@ -108,7 +108,7 @@ function ContactTableRow({
           <div className="space-y-1">
             {emailList.map((email, i) => (
               <span key={i} className="group/cell flex items-center gap-1.5">
-                <a href={`mailto:${email}`} title={email} className="text-sm text-blue-400 hover:underline break-all">{email}</a>
+                <a href={`mailto:${email}`} title={email} className="text-sm text-blue-400 hover:underline whitespace-nowrap">{truncate(email, 25)}</a>
                 <button onClick={() => copy(email)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy email"><Copy size={11} className="text-slate-400" /></button>
               </span>
             ))}
