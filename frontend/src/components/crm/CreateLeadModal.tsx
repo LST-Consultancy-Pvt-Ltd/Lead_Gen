@@ -36,6 +36,7 @@ type LeadFormData = Omit<CreateLeadInput, "leadCost" | "temperature"> & {
   disqualificationReason?: string;
   leadType?: string;
   notes?: string;
+  keyword?: string;
 };
 
 const defaultValues: LeadFormData = {
@@ -66,6 +67,7 @@ const defaultValues: LeadFormData = {
   disqualificationReason: "",
   leadType: undefined,
   notes: "",
+  keyword: "",
 };
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
@@ -140,6 +142,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     utmContent: yup.string().optional(),
     leadType: yup.string().required("Lead type is required"),
     notes: yup.string().max(4000).optional(),
+    keyword: yup.string().max(255).optional(),
   }), []);
 
   const {
@@ -558,6 +561,15 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
                 <option key={source} value={source}>{source}</option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* Row 4b: Keyword */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Keyword</label>
+            <input type="text" {...register("keyword")} className="input" placeholder="e.g. NetSuite, SuiteCommerce" />
+            {errors.keyword && <p className="text-xs text-red-400 mt-1">{errors.keyword.message}</p>}
           </div>
         </div>
 

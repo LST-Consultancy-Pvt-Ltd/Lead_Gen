@@ -374,6 +374,7 @@ class LeadsService {
       'accountId','importBatchId','lastContactedAt','firstName','lastName','requirementType',
       'requirementDescription','budgetRange','timeline','temperature','disqualificationReason',
       'lastContactedDate','matchScore','leadType','assignedToId','organizationId','createdById',
+      'keyword',
     ]);
     Object.keys(createData).forEach((k) => {
       if (createData[k] === undefined || !PRISMA_LEAD_FIELDS.has(k)) delete createData[k];

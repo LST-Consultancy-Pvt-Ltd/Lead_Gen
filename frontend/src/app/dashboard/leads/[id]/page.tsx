@@ -502,6 +502,7 @@ export default function LeadDetailPage() {
         notes: lead.notes || '',
         leadType: lead.leadType || '',
         sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
+        keyword: lead.keyword || '',
       });
     }
   }, [isEditing, lead]);
@@ -598,6 +599,7 @@ export default function LeadDetailPage() {
     mutationFn: (data: any) => leadsApi.update(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['lead', id] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Lead updated successfully');
       setIsEditing(false);
@@ -1168,6 +1170,7 @@ export default function LeadDetailPage() {
                     notes: lead.notes || '',
                     leadType: lead.leadType || '',
                     sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
+                    keyword: lead.keyword || '',
                   });
                 }}
               >
@@ -1199,6 +1202,10 @@ export default function LeadDetailPage() {
             <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Assigned To</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.assignedTo?.name || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Keyword</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200 break-words" title={lead.keyword || undefined}>{lead.keyword || '—'}</p>
             </div>
             {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Name</p>
@@ -1340,6 +1347,16 @@ export default function LeadDetailPage() {
                 value={editData.sourceUrl || ''}
                 onChange={(e) => setEditData((d: any) => ({ ...d, sourceUrl: e.target.value }))}
                 placeholder="https://..."
+              />
+            </div>
+            <div>
+              <label className="label">Keyword</label>
+              <input
+                className="input"
+                type="text"
+                value={editData.keyword || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, keyword: e.target.value }))}
+                placeholder="e.g. NetSuite, SuiteCommerce"
               />
             </div>
             <div>

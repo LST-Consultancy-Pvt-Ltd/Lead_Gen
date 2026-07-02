@@ -326,6 +326,16 @@ async function saveDiscoveredLead(organizationId, dl, services, meta = {}) {
 
   const analysis = await analyzeLeadIntent(dl, services);
 
+  // Drop below-threshold leads BEFORE inserting — avoids create-then-delete,
+  // wasted lead-usage increments, and background enrichment on junk leads.
+  const minScore = Number.isFinite(meta.minScore) ? meta.minScore : 0;
+  if ((analysis.leadScore || 0) < minScore) {
+    logger.debug('Lead skipped (below min score)', {
+      company: dl.companyName, score: analysis.leadScore, minScore,
+    });
+    return null;
+  }
+
   // Company LinkedIn: Apollo's org URL is domain-matched (trusted); any other
   // source (KG / organic / AI snippet) is name-based and must pass domain/name
   // validation or be dropped, so we never store a same-named company's page.
@@ -402,6 +412,10 @@ async function saveDiscoveredLead(organizationId, dl, services, meta = {}) {
   return lead.id;
 }
 
+// Baseline score gate applied even when the user picks no threshold — drops
+// pure-junk (near-zero fit) leads automatically. "warm"/"hot" raise it further.
+const DEFAULT_MIN_SCORE = 50;
+
 async function processOfferScan(jobId, orgId, offerInput, filters = {}, options = {}) {
   const {
     maxLeads = 50,
@@ -412,7 +426,7 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
 
   try {
     const savedIds = [];
-    const minScore = scoreThreshold === 'hot' ? 80 : scoreThreshold === 'warm' ? 60 : 0;
+    const minScore = scoreThreshold === 'hot' ? 80 : scoreThreshold === 'warm' ? 60 : DEFAULT_MIN_SCORE;
 
     const { leads: discovered, profile } = await runProductDiscoveryScan(
       { id: jobId },
@@ -458,19 +472,8 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
         dl.subSource = leadType;
         dl.leadType = leadType;
 
-        const id = await saveDiscoveredLead(orgId, dl, keywords, { scanJobId: jobId, keyword: scanKeyword });
-        if (!id) continue;
-
-        if (minScore > 0) {
-          const saved = await prisma.lead.findUnique({
-            where: { id },
-            select: { leadScore: true },
-          }).catch(() => null);
-          if (saved && (saved.leadScore || 0) < minScore) {
-            await prisma.lead.delete({ where: { id } }).catch(() => {});
-            continue;
-          }
-        }
+        const id = await saveDiscoveredLead(orgId, dl, keywords, { scanJobId: jobId, keyword: scanKeyword, minScore });
+        if (!id) continue;  // null → duplicate, quota exhausted, or below minScore
 
         savedIds.push(id);
 
