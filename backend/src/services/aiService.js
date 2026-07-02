@@ -99,14 +99,21 @@ Respond with ONLY valid JSON (no markdown):
 // Outreach email generation
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function generateOutreachEmail(lead, senderName, services) {
+async function generateOutreachEmail(lead, senderName, services, templates = []) {
   const client = getOpenAI();
   if (!client) return fallbackEmail(lead, senderName, services);
 
   try {
     const signals = (lead.intentSignals || []).map(s => s.text || s).join('; ');
-    const prompt = `Write a concise, personalized B2B outreach email.
 
+    const examplesBlock = templates.length > 0
+      ? `\nHere are sample outreach emails our team has written. Match their tone, structure, length, and CTA style. Do NOT copy specific product names (e.g. NetSuite, Salesforce, SAP) from the examples — use the services listed below instead.\n\n${
+          templates.map((t, i) => `--- Example ${i + 1}: ${t.name} ---\n${t.body}`).join('\n\n')
+        }\n`
+      : '';
+
+    const prompt = `Write a concise, personalized B2B outreach email.
+${examplesBlock}
 Target:
 - Name: ${lead.contactName || 'there'}
 - Title: ${lead.contactTitle || 'Decision Maker'}
@@ -125,6 +132,7 @@ Rules:
 - Clear value proposition
 - Single soft CTA (15-min call)
 - No generic openers like "Hope this finds you well"
+${templates.length > 0 ? '- Follow the style and structure of the examples above' : ''}
 
 Respond ONLY with JSON (no markdown):
 {

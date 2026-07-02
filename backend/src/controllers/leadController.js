@@ -383,8 +383,17 @@ async function generateEmail(req, res) {
   try {
     const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!lead) return error(res, 'Lead not found', 404);
-    const services = await prisma.service.findMany({ where: { organizationId: req.user.organizationId } });
-    const emailContent = await generateOutreachEmail(lead, req.user.name, services.map(s => s.name));
+    const [services, templates] = await Promise.all([
+      prisma.service.findMany({ where: { organizationId: req.user.organizationId } }),
+      prisma.emailTemplate.findMany({ where: { organizationId: req.user.organizationId }, orderBy: { createdAt: 'desc' } }),
+    ]);
+    const { name: contactName, title: contactTitle } = req.body || {};
+    const targetLead = {
+      ...lead,
+      contactName: contactName || lead.contactName,
+      contactTitle: contactTitle || lead.contactTitle,
+    };
+    const emailContent = await generateOutreachEmail(targetLead, req.user.name, services.map(s => s.name), templates);
     return success(res, emailContent);
   } catch (err) {
     return error(res, 'Email generation failed', 500);

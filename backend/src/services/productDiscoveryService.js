@@ -762,7 +762,9 @@ function jobToLead(jr, profile) {
   let website = '';
   const boardHints = ['linkedin.com','indeed.com','glassdoor.com','monster.com',
     'ziprecruiter.com','dice.com','seek.com','naukri.com','lever.co',
-    'greenhouse.io','workday.com','wellfound.com'];
+    'greenhouse.io','workday.com','wellfound.com','ashbyhq.com',
+    'smartrecruiters.com','jobvite.com','icims.com','taleo.net',
+    'successfactors.com','brassring.com','jobs.','careers.'];
   for (const link of (jr.related_links || [])) {
     const href = link.link || '';
     if (!boardHints.some(h => href.includes(h)) && href.startsWith('http')) {
@@ -809,7 +811,7 @@ function jobToLead(jr, profile) {
 
 function organicToLead(result, profile) {
   if (!result.link) return null;
-  const website = normDomain(result.link);
+  const website = '';  // search result URL ≠ company website; enrichment fills this later
   const title   = result.title   || '';
   const snippet = result.snippet || '';
   const companyName = title.replace(/[-–|].*$/, '').trim().slice(0, 80);

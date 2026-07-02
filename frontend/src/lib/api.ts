@@ -246,7 +246,7 @@ export const leadsApi = {
   enrich: (id: string) => api.post(`/leads/${id}/enrich`),
   enrichSignalHire: (id: string) => api.post(`/leads/${id}/enrich/signalhire`),
   enrichApollo: (id: string, personTitles?: string[]) => api.post(`/leads/${id}/enrich/apollo`, personTitles?.length ? { personTitles } : {}),
-  generateEmail: (id: string) => api.post(`/leads/${id}/generate-email`),
+  generateEmail: (id: string, contact?: { name?: string; title?: string | null }) => api.post(`/leads/${id}/generate-email`, contact || {}),
   sendOutreach: (id: string, data: any) => api.post(`/leads/${id}/send-outreach`, data),
   export: (params?: any) => api.get('/leads/export', { params, responseType: 'blob' }),
   quota: () => api.get('/leads/quota'),
@@ -257,6 +257,13 @@ export const activitiesApi = {
   create: (data: any) => api.post('/activities', data),
   update: (id: string, data: any) => api.put(`/activities/${id}`, data),
   delete: (id: string) => api.delete(`/activities/${id}`),
+};
+
+export const emailTemplatesApi = {
+  list: () => api.get('/email-templates'),
+  create: (data: { name: string; body: string }) => api.post('/email-templates', data),
+  update: (id: string, data: { name?: string; body?: string }) => api.patch(`/email-templates/${id}`, data),
+  delete: (id: string) => api.delete(`/email-templates/${id}`),
 };
 
 export const usersApi = {

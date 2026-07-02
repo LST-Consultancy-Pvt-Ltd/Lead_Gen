@@ -356,6 +356,8 @@ function jobToLead(jr, service, profile) {
     'linkedin.com', 'indeed.com', 'glassdoor.com', 'monster.com',
     'ziprecruiter.com', 'dice.com', 'seek.com', 'naukri.com',
     'lever.co', 'greenhouse.io', 'workday.com', 'wellfound.com',
+    'ashbyhq.com', 'smartrecruiters.com', 'jobvite.com', 'icims.com',
+    'taleo.net', 'successfactors.com', 'brassring.com',
     'jobs.', 'careers.', 'jobstreet.com', 'totaljobs.com', 'reed.co',
   ];
 

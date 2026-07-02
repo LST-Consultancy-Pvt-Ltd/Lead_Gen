@@ -103,6 +103,7 @@ model Organization {
   auditLogs       AuditLog[]
   dropdownConfigs DropdownConfig[]
   notifications   Notification[]
+  emailTemplates  EmailTemplate[]
 }
 
 model User {
@@ -581,4 +582,15 @@ model PasswordResetOtp {
   tokenExpiresAt DateTime?
   attempts       Int       @default(0)
   createdAt      DateTime  @default(now())
+}
+
+model EmailTemplate {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  body           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
 }

@@ -1,15 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { dropdownsApi, /* settingsApi, */ usersApi } from '../../../lib/api';
+import { dropdownsApi, /* settingsApi, */ usersApi, emailTemplatesApi } from '../../../lib/api';
 import { usePermissions } from '../../../lib/rbac';
 import {
   ChevronDown, ChevronRight, Eye, EyeOff, Loader2,
-  Pencil, Trash2, Users, Settings2, Target, Search, /* LayoutList, */
+  Pencil, Trash2, Users, Settings2, Target, Search, Mail, /* LayoutList, */
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-type MainTab = 'users' | 'dropdowns'; // | 'thresholds';
+type MainTab = 'users' | 'dropdowns' | 'email_templates'; // | 'thresholds';
 type DropdownSubTab = 'lead_discovery' | 'leads';
 type DiscoverySubTab = 'resource' | 'product';
 
@@ -183,6 +183,11 @@ export default function SettingsPage() {
   const [editingValue, setEditingValue] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const [showAddTemplate, setShowAddTemplate] = useState(false);
+  const [templateForm, setTemplateForm] = useState({ name: '', body: '' });
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editTemplateForm, setEditTemplateForm] = useState({ name: '', body: '' });
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
 
   const { data: usersData } = useQuery({
     queryKey: ['settings-users'],
@@ -287,6 +292,40 @@ export default function SettingsPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to seed defaults'),
   });
 
+  const { data: templatesData } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn: () => emailTemplatesApi.list().then((r) => r.data?.data ?? r.data ?? []),
+    enabled: permissions.canAccessSettings && permissions.isAdmin,
+  });
+  const templates: any[] = Array.isArray(templatesData) ? templatesData : [];
+
+  const createTemplateMutation = useMutation({
+    mutationFn: (data: { name: string; body: string }) => emailTemplatesApi.create(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['email-templates'] });
+      setShowAddTemplate(false);
+      setTemplateForm({ name: '', body: '' });
+      toast.success('Template saved');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save template'),
+  });
+
+  const updateTemplateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; body?: string } }) => emailTemplatesApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['email-templates'] });
+      setEditingTemplateId(null);
+      toast.success('Template updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update template'),
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (id: string) => emailTemplatesApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['email-templates'] }); toast.success('Template deleted'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to delete template'),
+  });
+
   // const saveThresholdMutation = useMutation({
   //   mutationFn: (payload: any) => settingsApi.update(payload),
   //   onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings-values'] }); toast.success('Thresholds saved'); },
@@ -325,6 +364,7 @@ export default function SettingsPage() {
         {([
           { id: 'users' as MainTab, label: 'User Management', icon: Users },
           ...(permissions.isAdmin ? [{ id: 'dropdowns' as MainTab, label: 'Dropdown Config', icon: Settings2 }] : []),
+          ...(permissions.isAdmin ? [{ id: 'email_templates' as MainTab, label: 'Email Templates', icon: Mail }] : []),
           // { id: 'thresholds' as MainTab, label: 'Thresholds', icon: LayoutList },
         ] as { id: MainTab; label: string; icon: any }[]).map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setMainTab(id)}
@@ -501,6 +541,128 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ══ EMAIL TEMPLATES ══ */}
+      {permissions.isAdmin && mainTab === 'email_templates' && (
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex items-center justify-between">
+            <div>
+              <h2 className="section-title">Email Templates</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Paste sample outreach emails from your sales team. The AI uses these as style references when generating emails.</p>
+            </div>
+            <button
+              className="btn-primary text-xs flex items-center gap-1.5"
+              onClick={() => { setShowAddTemplate(true); setTemplateForm({ name: '', body: '' }); }}>
+              <Mail size={13} />Add Template
+            </button>
+          </div>
+
+          {showAddTemplate && (
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-slate-900/30 space-y-3">
+              <div>
+                <label className="label mb-1 block">Template Name</label>
+                <input
+                  className="input"
+                  placeholder="e.g. ERP outreach, Short intro, Follow-up"
+                  value={templateForm.name}
+                  onChange={(e) => setTemplateForm((p) => ({ ...p, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label mb-1 block">Sample Email Body</label>
+                <textarea
+                  className="input min-h-[180px] resize-y font-mono text-xs"
+                  placeholder="Paste a sample email here. Subject + body is fine. The AI will match its tone and structure but replace product-specific names with your services."
+                  value={templateForm.body}
+                  onChange={(e) => setTemplateForm((p) => ({ ...p, body: e.target.value }))} />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button className="btn-ghost text-xs" onClick={() => { setShowAddTemplate(false); setTemplateForm({ name: '', body: '' }); }}>Cancel</button>
+                <button
+                  className="btn-primary text-xs"
+                  disabled={createTemplateMutation.isPending || !templateForm.name.trim() || !templateForm.body.trim()}
+                  onClick={() => createTemplateMutation.mutate(templateForm)}>
+                  {createTemplateMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
+                  Save Template
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="divide-y divide-slate-100 dark:divide-white/[0.04]">
+            {templates.length === 0 && !showAddTemplate && (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">
+                No templates yet. Add your first sample email above.
+              </div>
+            )}
+            {templates.map((t: any) => (
+              <div key={t.id} className="px-5 py-4">
+                {editingTemplateId === t.id ? (
+                  <div className="space-y-3">
+                    <input
+                      className="input text-sm"
+                      value={editTemplateForm.name}
+                      onChange={(e) => setEditTemplateForm((p) => ({ ...p, name: e.target.value }))} />
+                    <textarea
+                      className="input min-h-[160px] resize-y font-mono text-xs"
+                      value={editTemplateForm.body}
+                      onChange={(e) => setEditTemplateForm((p) => ({ ...p, body: e.target.value }))} />
+                    <div className="flex gap-2 justify-end">
+                      <button className="btn-ghost text-xs" onClick={() => setEditingTemplateId(null)}>Cancel</button>
+                      <button
+                        className="btn-primary text-xs"
+                        disabled={updateTemplateMutation.isPending || !editTemplateForm.name.trim() || !editTemplateForm.body.trim()}
+                        onClick={() => updateTemplateMutation.mutate({ id: t.id, data: editTemplateForm })}>
+                        {updateTemplateMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-1">{t.name}</p>
+                      <p className="text-xs text-slate-500 font-mono whitespace-pre-wrap line-clamp-3">{t.body}</p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {deletingTemplateId === t.id ? (
+                        <>
+                          <span className="text-xs text-slate-500 mr-1">Delete?</span>
+                          <button
+                            className="text-xs font-medium text-red-500 hover:text-red-600 px-2 py-1 rounded transition-colors"
+                            disabled={deleteTemplateMutation.isPending}
+                            onClick={() => deleteTemplateMutation.mutate(t.id, { onSettled: () => setDeletingTemplateId(null) })}>
+                            {deleteTemplateMutation.isPending ? <Loader2 size={10} className="animate-spin" /> : 'Yes'}
+                          </button>
+                          <button
+                            className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 rounded transition-colors"
+                            onClick={() => setDeletingTemplateId(null)}>
+                            No
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Edit"
+                            onClick={() => { setEditingTemplateId(t.id); setEditTemplateForm({ name: t.name, body: t.body }); }}>
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                            title="Delete"
+                            onClick={() => setDeletingTemplateId(t.id)}>
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

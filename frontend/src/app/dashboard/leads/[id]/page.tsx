@@ -575,7 +575,11 @@ export default function LeadDetailPage() {
   });
 
   const generateEmailMutation = useMutation({
-    mutationFn: () => leadsApi.generateEmail(id),
+    mutationFn: (contact?: { name?: string; title?: string | null }) => {
+      // Use the explicitly passed contact, or the first checked recipient, or the first available.
+      const recipient = contact ?? mailRecipients.find(r => selectedEmails.has(r.email)) ?? mailRecipients[0];
+      return leadsApi.generateEmail(id, recipient ? { name: recipient.name, title: recipient.title } : undefined);
+    },
     onSuccess: (res) => { setEmailData(res.data.data); setAiTab('email'); },
     onError: () => toast.error('Email generation failed'),
   });
@@ -1466,12 +1470,23 @@ export default function LeadDetailPage() {
                   )}
                   {emailData ? (
                     <>
-                      <div>
-                        <p className="label mb-1">Subject</p>
-                        <input className="input text-xs" title="Email subject" placeholder="Email subject"
-                          value={emailData.subject}
-                          onChange={e => setEmailData({ ...emailData, subject: e.target.value })} />
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="label">Subject</p>
+                        <button
+                          className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+                          onClick={() => {
+                            const selected = mailRecipients.find(r => selectedEmails.has(r.email)) ?? mailRecipients[0];
+                            generateEmailMutation.mutate(selected ? { name: selected.name, title: selected.title } : undefined);
+                          }}
+                          disabled={generateEmailMutation.isPending}
+                          title="Regenerate email for the selected contact">
+                          {generateEmailMutation.isPending ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+                          Regenerate
+                        </button>
                       </div>
+                      <input className="input text-xs" title="Email subject" placeholder="Email subject"
+                        value={emailData.subject}
+                        onChange={e => setEmailData({ ...emailData, subject: e.target.value })} />
                       <div>
                         <p className="label mb-1">Body</p>
                         <textarea className="input text-xs h-44 resize-none leading-relaxed"
