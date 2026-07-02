@@ -1544,7 +1544,7 @@ export default function LeadDetailPage() {
                     </>
                   ) : (
                     <button className="btn-ghost w-full justify-center text-xs"
-                      onClick={() => generateEmailMutation.mutate()}
+                      onClick={() => generateEmailMutation.mutate(undefined)}
                       disabled={generateEmailMutation.isPending}>
                       {generateEmailMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
                       Generate AI Email
