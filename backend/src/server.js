@@ -101,6 +101,20 @@ async function start() {
     await prisma.$connect();
     logger.info('Database connected');
 
+    // A scan lives in-memory in the process that started it — if that process
+    // crashed / was killed mid-scan, the DB row stays "running" and the frontend
+    // keeps showing a stuck progress overlay. On boot, nothing can still be
+    // running (this process just started), so mark any stragglers failed.
+    try {
+      const { count } = await prisma.scanJob.updateMany({
+        where: { status: { in: ['running', 'pending'] } },
+        data: { status: 'failed', error: 'Interrupted (backend restart)', completedAt: new Date() },
+      });
+      if (count > 0) logger.info('Cleared stuck scan jobs on startup', { count });
+    } catch (err) {
+      logger.warn('Startup scan-job cleanup failed (non-fatal)', { err: err.message });
+    }
+
     if (config.env === 'production') {
       startScheduler();
     }

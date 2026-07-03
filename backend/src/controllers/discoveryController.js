@@ -10,6 +10,7 @@ const prisma = require('../utils/prisma');
 const config = require('../config');
 const { success, error } = require('../utils/response');
 const { runProductDiscoveryScan, generateProductPrompt, normJobTitle } = require('../services/productDiscoveryService');
+const scanEvents = require('../services/scanEvents');
 const { runBackgroundEnrichment, enrichViaSignalHire, companyLinkedinForDomain } = require('../services/leadEnrichmentPipeline');
 const { analyzeLeadIntent, parseUserPrompt } = require('../services/aiService');
 const logger = require('../utils/logger');
@@ -465,7 +466,13 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
       }).catch(() => {});
     }
 
-    for (const dl of discovered) {
+    // Emit progress 90 → 99 during the save loop so the bar reflects the "Saving
+    // leads" phase, which is the slowest per-item step (dup-check + AI intent
+    // analysis + create + fire-and-forget enrichment). 100 is reserved for the
+    // terminal completion update below.
+    const total = discovered.length || 1;
+    for (let i = 0; i < discovered.length; i++) {
+      const dl = discovered[i];
       try {
         if (savedIds.length >= maxLeads) break;
 
@@ -473,22 +480,30 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
         dl.leadType = leadType;
 
         const id = await saveDiscoveredLead(orgId, dl, keywords, { scanJobId: jobId, keyword: scanKeyword, minScore });
-        if (!id) continue;  // null → duplicate, quota exhausted, or below minScore
 
-        savedIds.push(id);
+        if (id) {
+          savedIds.push(id);
 
-        // Auto-enrich contacts via SignalHire for every discovered lead.
-        // Fires-and-forgets a company search → top-5 DM reveal; contacts
-        // arrive asynchronously via the SignalHire webhook.
-        if (config.signalhire?.apiKey && config.signalhire?.callbackUrl) {
-          const savedLead = await prisma.lead.findUnique({ where: { id } }).catch(() => null);
-          if (savedLead) {
-            enrichViaSignalHire(savedLead, { createdById: savedLead.createdById }).catch(() => {});
+          // Auto-enrich contacts via SignalHire for every discovered lead.
+          // Fires-and-forgets a company search → top-5 DM reveal; contacts
+          // arrive asynchronously via the SignalHire webhook.
+          if (config.signalhire?.apiKey && config.signalhire?.callbackUrl) {
+            const savedLead = await prisma.lead.findUnique({ where: { id } }).catch(() => null);
+            if (savedLead) {
+              enrichViaSignalHire(savedLead, { createdById: savedLead.createdById }).catch(() => {});
+            }
           }
         }
       } catch (err) {
         logger.error('Failed to save discovered lead', { err: err.message, company: dl.companyName });
       }
+
+      // Push progress 90 → 99 as we advance through the buffer.
+      const pct = 90 + Math.min(9, Math.round(((i + 1) / total) * 9));
+      await prisma.scanJob.update({
+        where: { id: jobId },
+        data: { progress: pct, leadsFound: savedIds.length },
+      }).catch(() => {});
     }
 
     await prisma.scanJob.update({
@@ -533,7 +548,10 @@ async function getScanStatus(req, res) {
       where: { id: req.params.jobId, organizationId: req.user.organizationId },
     });
     if (!job) return error(res, 'Scan not found', 404);
-    return success(res, job);
+    // Attach the in-memory activity feed so Discovery Control can render kept /
+    // filtered events. `?since=<ts>` returns only new events for polling deltas.
+    const events = scanEvents.get(job.id, req.query.since);
+    return success(res, { ...job, events });
   } catch (err) {
     return error(res, 'Failed to get scan status', 500);
   }
@@ -561,7 +579,9 @@ async function getActiveScan(req, res) {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return success(res, job ?? null);
+    if (!job) return success(res, null);
+    const events = scanEvents.get(job.id, req.query.since);
+    return success(res, { ...job, events });
   } catch (err) {
     return error(res, 'Failed to fetch active scan', 500);
   }

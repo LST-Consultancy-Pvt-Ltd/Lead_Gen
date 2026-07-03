@@ -11,6 +11,7 @@
 const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
 const signalhirePending = require('../services/signalhirePending');
+const { companyLinkedinForDomain } = require('../services/leadEnrichmentPipeline');
 
 function pick(contacts = [], types) {
   const hit = contacts.find(c => types.includes(String(c.type || '').toLowerCase()));
@@ -79,6 +80,29 @@ function extractLinkedin(candidate = {}, contacts = []) {
   return null;
 }
 
+// SignalHire's payload often carries the current employer's LinkedIn URL either on
+// the current experience entry (companyUrl / companyLinkedInUrl / company.linkedInUrl)
+// or on a top-level organization/company sub-object. We check all of the shapes
+// they've been observed to use and return the first /company/ URL we find.
+function extractCompanyLinkedin(candidate = {}) {
+  const exp = Array.isArray(candidate.experience) ? candidate.experience : [];
+  const current =
+    exp.find(e => e && (e.current === true || e.current === 'true')) ||
+    exp.find(e => e && e.started && (e.ended == null || e.ended === '')) ||
+    exp[0] || {};
+  const urls = [
+    current.companyLinkedInUrl, current.companyLinkedinUrl, current.companyUrl,
+    current.company?.linkedInUrl, current.company?.linkedinUrl, current.company?.url,
+    current.organization?.linkedInUrl, current.organization?.linkedinUrl, current.organization?.url,
+    candidate.organization?.linkedInUrl, candidate.organization?.linkedinUrl, candidate.organization?.url,
+    candidate.company?.linkedInUrl, candidate.company?.linkedinUrl, candidate.company?.url,
+  ];
+  for (const u of urls) {
+    if (u && /linkedin\.com\/company\//i.test(String(u))) return String(u);
+  }
+  return null;
+}
+
 function extractPerson(it, found) {
   const candidate = it.candidate || it.profile || it;
   const contacts  = candidate.contacts || it.contacts || [];
@@ -107,7 +131,9 @@ async function handleSignalHire(req, res) {
 
     // Track revealed company-search contacts so we can promote the highest-ranked one
     // to the lead's PRIMARY contact (so it shows on All Leads + Lead Details).
-    const revealedByLead = new Map(); // leadId -> { organizationId, best: {rank, contact} }
+    // Also carry the first company LinkedIn URL we see, so we can save it on the lead
+    // when the lead doesn't have one yet.
+    const revealedByLead = new Map(); // leadId -> { organizationId, best: {rank, contact}, companyLinkedin }
 
     for (const it of items) {
       // The original query identifier SignalHire echoes back (key for matching).
@@ -155,13 +181,22 @@ async function handleSignalHire(req, res) {
         }
 
         // Remember the best (lowest-rank = highest role) revealed person per lead so
-        // we can promote it to the lead's primary contact after the loop.
-        if (hasAny) {
-          const rank = Number.isFinite(found.rank) ? found.rank : 999;
-          const cur = revealedByLead.get(found.leadId);
-          if (!cur || rank < cur.best.rank) {
-            revealedByLead.set(found.leadId, { organizationId: found.organizationId, best: { rank, contact: p } });
-          }
+        // we can promote it to the lead's primary contact after the loop. Also
+        // capture the first company LinkedIn URL we see from any of this lead's
+        // revealed candidates — SignalHire attaches it to the current-employer entry.
+        const candidate = it.candidate || it.profile || it;
+        const companyLi = extractCompanyLinkedin(candidate);
+        const rank = Number.isFinite(found.rank) ? found.rank : 999;
+        const cur = revealedByLead.get(found.leadId);
+        const nextBest = (hasAny && (!cur || rank < cur.best.rank))
+          ? { rank, contact: p }
+          : (cur?.best || null);
+        if (hasAny || companyLi) {
+          revealedByLead.set(found.leadId, {
+            organizationId: found.organizationId,
+            best: nextBest,
+            companyLinkedin: cur?.companyLinkedin || companyLi || null,
+          });
         }
         continue;
       }
@@ -181,6 +216,29 @@ async function handleSignalHire(req, res) {
       if (p.name)     data.contactName     = p.name;
       if (p.title)    data.contactTitle    = p.title;
 
+      // If SignalHire returned a company LinkedIn URL for the contact's current
+      // employer and the lead doesn't have one yet, save it (validated so a
+      // mis-tagged / previous-employer link can't overwrite anything).
+      const companyLi = extractCompanyLinkedin(it.candidate || it.profile || it);
+      if (companyLi) {
+        try {
+          const lead = await prisma.lead.findUnique({
+            where: { id: found.leadId },
+            select: { linkedinUrl: true, companyName: true, website: true },
+          });
+          if (lead && !lead.linkedinUrl) {
+            const validated = companyLinkedinForDomain(
+              companyLi,
+              lead.companyName || '',
+              lead.website || found.companyDomain || ''
+            );
+            if (validated) data.linkedinUrl = validated;
+          }
+        } catch (e) {
+          logger.warn('SignalHire webhook: company LinkedIn lookup failed', { leadId: found.leadId, err: e.message });
+        }
+      }
+
       await prisma.lead.update({ where: { id: found.leadId }, data })
         .then(() => logger.info('SignalHire webhook: lead enriched', { leadId: found.leadId, email: p.email, phone: p.phone, linkedin: p.linkedin }))
         .catch(e => logger.error('SignalHire webhook: lead update failed', { leadId: found.leadId, err: e.message }));
@@ -192,26 +250,42 @@ async function handleSignalHire(req, res) {
     }
 
     // Promote the highest-ranked revealed person to the lead's PRIMARY contact when
-    // the lead doesn't already have one — so it shows on All Leads + Lead Details.
-    for (const [leadId, { best }] of revealedByLead) {
+    // the lead doesn't already have one, and save the company LinkedIn URL from the
+    // revealed profile if the lead doesn't have one. These are independent — we may
+    // update just linkedinUrl on a lead that already has a primary contact.
+    for (const [leadId, entry] of revealedByLead) {
       try {
         const lead = await prisma.lead.findUnique({ where: { id: leadId } });
         if (!lead) continue;
-        if (lead.contactName || lead.contactEmail) continue; // already has a primary
-        const c = best.contact;
-        await prisma.lead.update({
-          where: { id: leadId },
-          data: {
-            contactName:     c.name || null,
-            contactTitle:    c.title || null,
-            contactEmail:    c.email || null,
-            contactPhone:    c.phone || null,
-            contactLinkedin: c.linkedin || null,
-          },
+        const data = {};
+
+        if (entry.companyLinkedin && !lead.linkedinUrl) {
+          const validated = companyLinkedinForDomain(
+            entry.companyLinkedin,
+            lead.companyName || '',
+            lead.website || ''
+          );
+          if (validated) data.linkedinUrl = validated;
+        }
+
+        if (entry.best && !lead.contactName && !lead.contactEmail) {
+          const c = entry.best.contact;
+          data.contactName     = c.name || null;
+          data.contactTitle    = c.title || null;
+          data.contactEmail    = c.email || null;
+          data.contactPhone    = c.phone || null;
+          data.contactLinkedin = c.linkedin || null;
+        }
+
+        if (Object.keys(data).length === 0) continue;
+        await prisma.lead.update({ where: { id: leadId }, data });
+        logger.info('SignalHire webhook: lead updated post-reveal', {
+          leadId,
+          fields: Object.keys(data),
+          promotedRank: entry.best?.rank,
         });
-        logger.info('SignalHire webhook: promoted primary contact', { leadId, name: c.name, title: c.title, rank: best.rank });
       } catch (e) {
-        logger.error('SignalHire webhook: promote primary failed', { leadId, err: e.message });
+        logger.error('SignalHire webhook: post-reveal update failed', { leadId, err: e.message });
       }
     }
   } catch (err) {

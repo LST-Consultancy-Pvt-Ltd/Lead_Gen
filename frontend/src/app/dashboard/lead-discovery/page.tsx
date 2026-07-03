@@ -1342,9 +1342,94 @@ function cn2(...cls: (string | boolean | undefined | null)[]) {
   return cls.filter(Boolean).join(' ');
 }
 
+type ScanEvent = {
+  ts: number;
+  type: 'kept' | 'filtered' | 'phase';
+  reason?: string;
+  company?: string;
+  source?: string;
+  detail?: string;
+  count?: number;
+};
+
+const FILTER_REASON_LABEL: Record<string, string> = {
+  aggregator: 'aggregator / job board',
+  vendor:     'platform vendor',
+  competitor: 'competitor',
+  seller:     'seller (not a buyer)',
+  agency:     'staffing agency',
+};
+
+function ScanActivity({ events }: { events: ScanEvent[] }) {
+  const [open, setOpen] = useState(false);
+
+  // Latest events at the top — the feed is more useful reverse-chronological.
+  const ordered = [...events].reverse();
+  const kept = events.filter(e => e.type === 'kept').length;
+  const filtered = events.filter(e => e.type === 'filtered').length;
+
+  if (!events.length) return null;
+
+  return (
+    <div className="border border-slate-800 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs bg-slate-900/40 hover:bg-slate-900/60 transition-colors"
+      >
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        <span className="font-semibold text-slate-300">Activity</span>
+        <span className="text-emerald-400">{kept} kept</span>
+        <span className="text-slate-600">·</span>
+        <span className="text-amber-400">{filtered} filtered</span>
+      </button>
+      {open && (
+        <div className="max-h-64 overflow-y-auto divide-y divide-slate-800/60">
+          {ordered.map((e, i) => {
+            if (e.type === 'phase') {
+              return (
+                <div key={i} className="px-3 py-1.5 text-[11px] text-slate-500 italic">
+                  {e.reason === 'scoring-start' ? `AI scoring ${e.count ?? ''} companies…` : e.reason}
+                </div>
+              );
+            }
+            const isKept = e.type === 'kept';
+            return (
+              <div key={i} className="px-3 py-1.5 flex items-start gap-2 text-[11px]">
+                <span className={cn2('mt-[3px] flex-shrink-0', isKept ? 'text-emerald-400' : 'text-amber-400')}>
+                  {isKept ? '✓' : '✗'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className={cn2('font-medium truncate', isKept ? 'text-slate-200' : 'text-slate-400')}>
+                      {e.company || '(unknown)'}
+                    </span>
+                    {e.source && (
+                      <span className="text-slate-600">· {e.source}</span>
+                    )}
+                    {!isKept && (
+                      <span className="text-amber-500/80">
+                        · {FILTER_REASON_LABEL[e.reason || ''] || e.reason || 'filtered'}
+                      </span>
+                    )}
+                  </div>
+                  {!isKept && e.detail && (
+                    <div className="text-slate-500 mt-0.5 line-clamp-2">{e.detail}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScanProgress({ activeScan, scanProgress, steps, color = 'blue' }: {
   activeScan: any; scanProgress: number; steps: string[]; scanning?: boolean; color?: string;
 }) {
+  const events: ScanEvent[] = Array.isArray(activeScan?.events) ? activeScan.events : [];
   return (
     <div className="space-y-4">
       <div className={`p-4 bg-${color}-500/[0.06] border border-${color}-500/20 rounded-xl`}>
@@ -1374,6 +1459,7 @@ function ScanProgress({ activeScan, scanProgress, steps, color = 'blue' }: {
           );
         })}
       </div>
+      <ScanActivity events={events} />
       <p className="text-xs text-slate-600 text-center">Progress saved — safe to navigate away</p>
     </div>
   );

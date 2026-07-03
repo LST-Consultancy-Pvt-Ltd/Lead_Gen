@@ -30,6 +30,7 @@ const axios  = require('axios');
 const config = require('../config');
 const logger = require('../utils/logger');
 const { callOpenAI } = require('./aiService');
+const scanEvents = require('./scanEvents');
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -1296,7 +1297,7 @@ async function runSourcedSearch(profile, filters, sources, tryAdd, rawTarget = 1
 // STEP 3 — AI batch scoring: BUYER vs SELLER (10 per AI call)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function scoreBatch(leads, profile) {
+async function scoreBatch(leads, profile, jobId = null) {
   if (!leads.length) return leads;
 
   const list = leads.map((l, i) => {
@@ -1338,6 +1339,13 @@ ${list}`;
         buyers.push({ ...lead, relevanceScore: Math.min(95, lead.relevanceScore + 10) });
       } else {
         logger.debug('Filtered seller', { name: lead.companyName, reason: r.reason });
+        scanEvents.push(jobId, {
+          type: 'filtered',
+          reason: (r.classification || 'seller').toLowerCase(),
+          company: lead.companyName,
+          detail: r.reason || null,
+          source: lead.source || null,
+        });
       }
     }
     logger.info('Batch scored', { total: leads.length, buyers: buyers.length });
@@ -1348,11 +1356,11 @@ ${list}`;
   }
 }
 
-async function scoreAllLeads(leads, profile) {
+async function scoreAllLeads(leads, profile, jobId = null) {
   const BATCH = 10;
   const out   = [];
   for (let i = 0; i < leads.length; i += BATCH) {
-    const result = await scoreBatch(leads.slice(i, i + BATCH), profile);
+    const result = await scoreBatch(leads.slice(i, i + BATCH), profile, jobId);
     out.push(...result);
     if (i + BATCH < leads.length) await sleep(300);
   }
@@ -1407,12 +1415,14 @@ async function runProductDiscoveryScan(job, productInput, filters = {}, progress
     // real employers. Deterministic guard — the LLM scorer misses unfamiliar brands.
     if (isAggregatorName(lead.companyName)) {
       logger.debug('Filtered aggregator-as-company', { name: lead.companyName });
+      scanEvents.push(job.id, { type: 'filtered', reason: 'aggregator', company: lead.companyName, source: lead.source || null });
       return false;
     }
     // Reject the platform VENDOR itself (e.g. "Salesforce, Inc." for a Salesforce
     // service) — the maker never buys its own ecosystem service.
     if (isVendorCompany(lead.companyName, profile)) {
       logger.debug('Filtered platform vendor', { name: lead.companyName });
+      scanEvents.push(job.id, { type: 'filtered', reason: 'vendor', company: lead.companyName, source: lead.source || null });
       return false;
     }
     // Drop a bogus aggregator domain but keep the lead (the company may be valid,
@@ -1435,12 +1445,14 @@ async function runProductDiscoveryScan(job, productInput, filters = {}, progress
     if ((companyCounts.get(nk) || 0) >= MAX_PER_COMPANY) return false;
     if (isCompetitor(lead, profile)) {
       logger.debug('Filtered competitor', { name: lead.companyName });
+      scanEvents.push(job.id, { type: 'filtered', reason: 'competitor', company: lead.companyName, source: lead.source || null });
       return false;
     }
     seenNames.add(key);
     if (dk) seenDomains.add(dk);
     companyCounts.set(nk, (companyCounts.get(nk) || 0) + 1);
     rawLeads.push(lead);
+    scanEvents.push(job.id, { type: 'kept', company: lead.companyName, source: lead.source || null });
     return true;
   }
 
@@ -1486,7 +1498,8 @@ async function runProductDiscoveryScan(job, productInput, filters = {}, progress
 
   // STEP 3: AI batch scoring — removes sellers, keeps only buyers
   logger.info('AI scoring START', { jobId: job.id, toScore: rawLeads.length });
-  const scoredLeads = await scoreAllLeads(rawLeads, profile);
+  scanEvents.push(job.id, { type: 'phase', reason: 'scoring-start', count: rawLeads.length });
+  const scoredLeads = await scoreAllLeads(rawLeads, profile, job.id);
   logger.info('AI scoring DONE', {
     jobId:    job.id,
     raw:      rawLeads.length,
@@ -1497,7 +1510,10 @@ async function runProductDiscoveryScan(job, productInput, filters = {}, progress
   // Trim to exactly what the user requested — no more leads than maxLeads
   const finalLeads = scoredLeads.slice(0, maxLeads);
 
-  if (progressCallback) await progressCallback(100, finalLeads.length);
+  // Reserve 90-100% for the caller's save loop — each lead insert runs another AI
+  // call + enrichment kickoff and takes real time. If we hit 100% here the progress
+  // bar sits at 100% for several seconds before the leads actually appear.
+  if (progressCallback) await progressCallback(90, finalLeads.length);
 
   logger.info('Product scan DONE', {
     jobId:    job.id,

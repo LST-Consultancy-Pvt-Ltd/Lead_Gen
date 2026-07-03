@@ -114,6 +114,19 @@ function companyLinkedinForDomain(url, companyName, domain) {
   return linkedinMatchesCompany(url, companyName, domain) ? url : null;
 }
 
+// True when a candidate website domain's brand overlaps a significant token from
+// the company name. Prevents saving same-first-word or parent-company domains
+// (e.g. a Google/Clearbit top result for "Acme Corp" pointing at "acme-holdings.com").
+function domainMatchesCompany(domain, companyName) {
+  const brand = brandFromDomain(domain);
+  if (!brand || brand.length < 3) return false;
+  const tokens = companyNameTokens(companyName);
+  if (!tokens.length) return false;
+  const joined = tokens.join('');
+  if (joined.length >= 4 && (brand.includes(joined) || joined.includes(brand))) return true;
+  return tokens.some(t => t.length >= 4 && (brand.includes(t) || t.includes(brand)));
+}
+
 async function serpSearch(query, num = 5) {
   if (!config.serpapi?.key) return [];
   try {
@@ -145,13 +158,18 @@ async function clearbitLookup(lead) {
     );
     const matches = Array.isArray(data) ? data : [];
 
-    // Find best match
+    // Prefer exact-name or exact-domain match; else accept a name-token overlap.
+    // No blind matches[0] fallback — Clearbit's first result is often a same-first-word
+    // company with the wrong domain, which was overwriting good leads with wrong URLs.
     const name = lead.companyName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const match = matches.find(m => {
+    const leadDomain = lead.website ? normDomain(lead.website) : '';
+    let match = matches.find(m => {
       const n = (m.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      return n === name || (lead.website && normDomain(m.domain || '') === normDomain(lead.website));
-    }) || matches[0];
-
+      return n === name || (leadDomain && normDomain(m.domain || '') === leadDomain);
+    });
+    if (!match) {
+      match = matches.find(m => domainMatchesCompany(m.domain || '', lead.companyName));
+    }
     if (!match) return null;
 
     return {
@@ -276,8 +294,12 @@ async function resolveDomain(companyName) {
   for (const r of results) {
     const link = r.link || '';
     if (!link || isAggregator(link)) continue;
-    return normDomain(link);
+    const domain = normDomain(link);
+    // Reject unrelated same-first-word / parent-holding domains. No link beats a wrong link.
+    if (!domainMatchesCompany(domain, companyName)) continue;
+    return domain;
   }
+  logger.debug('resolveDomain: no name-consistent domain found', { companyName });
   return null;
 }
 
@@ -900,7 +922,11 @@ async function runBackgroundEnrichment(lead, prisma) {
           linkedinMatchesCompany(kg.linkedinUrl, cur.companyName, normDomain(patch.website || cur.website || ''))) {
         patch.linkedinUrl = kg.linkedinUrl;
       }
-      if (kg.website     && !cur.website)     patch.website     = kg.website;
+      // KG can attach a same-named but different company's site — gate it the same
+      // way we gate the KG company LinkedIn above.
+      if (kg.website && !cur.website && domainMatchesCompany(normDomain(kg.website), cur.companyName)) {
+        patch.website = kg.website;
+      }
 
       const extra = {};
       if (kg.founded)  extra.founded  = kg.founded;
@@ -1080,4 +1106,5 @@ module.exports = {
   normDomain,
   normalizeLinkedinUrl,
   companyLinkedinForDomain,
+  domainMatchesCompany,
 };
