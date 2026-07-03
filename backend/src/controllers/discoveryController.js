@@ -318,10 +318,18 @@ async function saveDiscoveredLead(organizationId, dl, services, meta = {}) {
       logger.debug('Lead skipped (exact same job exists)', {
         company: dl.companyName, jobTitle, source: dl.source,
       });
+      scanEvents.push(meta.scanJobId, {
+        type: 'filtered', reason: 'duplicate', company: dl.companyName, source: dl.source,
+        detail: `Already saved from a previous scan (same role: ${jobTitle}).`,
+      });
       return null;
     }
   } else if (existing && !jobTitle) {
     logger.debug('Lead skipped (duplicate, no job title)', { company: dl.companyName, source: dl.source });
+    scanEvents.push(meta.scanJobId, {
+      type: 'filtered', reason: 'duplicate', company: dl.companyName, source: dl.source,
+      detail: 'Already saved from a previous scan.',
+    });
     return null;
   }
 
@@ -333,6 +341,10 @@ async function saveDiscoveredLead(organizationId, dl, services, meta = {}) {
   if ((analysis.leadScore || 0) < minScore) {
     logger.debug('Lead skipped (below min score)', {
       company: dl.companyName, score: analysis.leadScore, minScore,
+    });
+    scanEvents.push(meta.scanJobId, {
+      type: 'filtered', reason: 'below-score', company: dl.companyName, source: dl.source,
+      detail: `AI score ${analysis.leadScore || 0} is below the minimum of ${minScore}.`,
     });
     return null;
   }
@@ -414,8 +426,9 @@ async function saveDiscoveredLead(organizationId, dl, services, meta = {}) {
 }
 
 // Baseline score gate applied even when the user picks no threshold — drops
-// pure-junk (near-zero fit) leads automatically. "warm"/"hot" raise it further.
-const DEFAULT_MIN_SCORE = 50;
+// pure-junk (near-zero fit) leads automatically. Kept modest (30) so weak-but-
+// plausible leads still surface; "warm" (60) / "hot" (80) raise it further.
+const DEFAULT_MIN_SCORE = 30;
 
 async function processOfferScan(jobId, orgId, offerInput, filters = {}, options = {}) {
   const {

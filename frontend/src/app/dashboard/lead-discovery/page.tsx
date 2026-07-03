@@ -1366,11 +1366,13 @@ type ScanEvent = {
 };
 
 const FILTER_REASON_LABEL: Record<string, string> = {
-  aggregator: 'aggregator / job board',
-  vendor:     'platform vendor',
-  competitor: 'competitor',
-  seller:     'seller (not a buyer)',
-  agency:     'staffing agency',
+  aggregator:   'aggregator / job board',
+  vendor:       'platform vendor',
+  competitor:   'competitor',
+  seller:       'seller (not a buyer)',
+  agency:       'staffing agency',
+  'below-score': 'below score threshold',
+  duplicate:    'already saved (duplicate)',
 };
 
 function ScanActivity({ events }: { events: ScanEvent[] }) {
