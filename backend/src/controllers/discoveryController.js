@@ -550,6 +550,7 @@ async function getScanStatus(req, res) {
     if (!job) return error(res, 'Scan not found', 404);
     // Attach the in-memory activity feed so Discovery Control can render kept /
     // filtered events. `?since=<ts>` returns only new events for polling deltas.
+    // Not persisted — only available for recent scans still held in memory.
     const events = scanEvents.get(job.id, req.query.since);
     return success(res, { ...job, events });
   } catch (err) {

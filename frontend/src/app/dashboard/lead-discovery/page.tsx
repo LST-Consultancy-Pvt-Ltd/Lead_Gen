@@ -57,6 +57,18 @@ function ScanLeadsPanel({ scanId }: { scanId: string }) {
   );
 }
 
+// Fetches a scan's in-memory kept/filtered activity feed on demand (getScanStatus
+// returns it from the bounded scanEvents Map). Only recent scans still held in
+// memory will have events; older ones render nothing. Not persisted to the DB.
+function ScanActivityPanel({ scanId }: { scanId: string }) {
+  const { data } = useQuery({
+    queryKey: ['scan-events', scanId],
+    queryFn: () => discoveryApi.getScanStatus(scanId).then(r => r.data?.data ?? r.data),
+  });
+  const events = Array.isArray((data as any)?.events) ? (data as any).events : [];
+  return <ScanActivity events={events} />;
+}
+
 const DEFAULT_INDUSTRIES = [
   'Any Industry',
   'Information Technology (IT)',
@@ -1324,7 +1336,8 @@ export default function LeadDiscoveryPage() {
                     <span className="text-xs text-slate-500 flex-shrink-0">{formatDate(scan.createdAt)}</span>
                   </button>
                   {expanded && (
-                    <div className="px-3 pb-3">
+                    <div className="px-3 pb-3 space-y-2">
+                      <ScanActivityPanel scanId={scan.id} />
                       <ScanLeadsPanel scanId={scan.id} />
                     </div>
                   )}
