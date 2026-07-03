@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { leadsApi, contactsApi, dropdownsApi, opportunitiesApi, usersApi } from '../../../../lib/api';
+import { leadsApi, contactsApi, dropdownsApi, opportunitiesApi, usersApi, activitiesApi } from '../../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner } from '../../../../components/ui';
 import { ActivitiesList } from '../../../../components/crm/ActivitiesList';
 import { RoleGuard } from '../../../../components/common/RoleGuard';
@@ -15,7 +15,7 @@ import {
   MapPin, Users2, FileText, Phone, ExternalLink, Copy,
   ChevronRight, Trash2, UserCog, Calendar, DollarSign,
   Clock, TrendingUp, Edit2, Save, X, UserPlus, Plus,
-  ChevronDown, Eye, Hash,
+  ChevronDown, Eye, Hash, MessageCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -23,6 +23,39 @@ import toast from 'react-hot-toast';
 
 function cn(...cls: (string | boolean | undefined | null)[]) {
   return cls.filter(Boolean).join(' ');
+}
+
+// Per-channel follow-up: after sending via a channel, the rep sets a follow-up
+// date. "Mark sent" records it on the lead (followUpDate) and logs an activity.
+function OutreachFollowUp({ pending, onMarkSent }: { pending: boolean; onMarkSent: (date: string) => void }) {
+  const today = new Date().toISOString().split('T')[0];
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return d.toISOString().split('T')[0];
+  });
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/[0.06] space-y-2">
+      <p className="label flex items-center gap-1.5"><Calendar size={12} /> Set follow-up after sending</p>
+      <div className="flex gap-2">
+        <input
+          type="date"
+          className="input text-xs flex-1"
+          title="Follow-up date"
+          value={date}
+          min={today}
+          onChange={e => setDate(e.target.value)}
+        />
+        <button
+          className="btn-primary text-xs px-3 whitespace-nowrap"
+          disabled={pending || !date}
+          onClick={() => onMarkSent(date)}
+        >
+          {pending ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Mark sent
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -405,8 +438,9 @@ export default function LeadDetailPage() {
   useEffect(() => setMounted(true), []);
 
   const [enrichState, setEnrichState] = useState<EnrichState>({ status: 'idle' });
-  const [aiTab,       setAiTab]       = useState<'analysis' | 'email'>('analysis');
+  const [aiTab,       setAiTab]       = useState<'analysis' | 'email' | 'whatsapp' | 'telegram'>('analysis');
   const [emailData,   setEmailData]   = useState<any>(null);
+  const [chatMessage, setChatMessage] = useState(''); // WhatsApp / Telegram message body
   const [sendLoading, setSendLoading] = useState(false);
   // Which contacts (by email) the generated draft will be addressed to.
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
@@ -605,6 +639,30 @@ export default function LeadDetailPage() {
       setIsEditing(false);
     },
     onError: () => toast.error('Failed to update lead'),
+  });
+
+  // Records an outreach on a channel: sets the lead's follow-up date + last-contacted
+  // timestamp, and logs an activity so it shows in the timeline and feeds reminders.
+  const markSentMutation = useMutation({
+    mutationFn: async ({ channel, followUp }: { channel: 'email' | 'whatsapp' | 'telegram'; followUp: string }) => {
+      const label = channel === 'email' ? 'Email' : channel === 'whatsapp' ? 'WhatsApp' : 'Telegram';
+      await leadsApi.update(id, { followUpDate: followUp, lastContactedAt: new Date().toISOString() });
+      await activitiesApi.create({
+        type: channel,
+        leadId: id,
+        description: `Sent ${label} message to ${lead?.contactName || 'contact'}`,
+        ...(followUp ? { nextActionDate: followUp } : {}),
+      }).catch(() => {}); // activity is best-effort; the follow-up date is the important part
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead', id] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+      qc.invalidateQueries({ queryKey: ['lead-activities', id] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Marked as sent · follow-up set');
+    },
+    onError: () => toast.error('Failed to set follow-up'),
   });
 
   // ── Contacts (multiple per lead) ──────────────────────────────────────────
@@ -1004,6 +1062,24 @@ export default function LeadDetailPage() {
     }
     const url = kind === 'gmail' ? buildGmailUrl(recipients, subject, body) : buildOutlookUrl(recipients, subject, body);
     window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  // WhatsApp: wa.me works with any phone number → opens a chat with the message
+  // pre-filled. Uses the contact's phone (digits only, keep the country code).
+  function openWhatsApp() {
+    const phone = (lead.contactPhone || '').replace(/\D/g, '');
+    if (!phone) { toast.error('No phone number for this contact — add one in Contact Details'); return; }
+    const text = chatMessage.trim() ? `?text=${encodeURIComponent(chatMessage)}` : '';
+    window.open(`https://wa.me/${phone}${text}`, '_blank', 'noopener,noreferrer');
+  }
+
+  // Telegram can't open a chat by phone number, so we use the share URL: it opens
+  // Telegram with the message pre-filled and lets the rep pick which chat to send to.
+  function openTelegram() {
+    if (!chatMessage.trim()) { toast.error('Type a message first'); return; }
+    const site = lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '';
+    const params = new URLSearchParams({ url: site, text: chatMessage });
+    window.open(`https://t.me/share/url?${params.toString()}`, '_blank', 'noopener,noreferrer');
   }
 
   function handleDelete() {
@@ -1437,11 +1513,11 @@ export default function LeadDetailPage() {
           <div className="card p-5 flex flex-col lg:absolute lg:inset-0">
             {/* Tabs — pinned to the top of the panel */}
             <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl">
-              {(['analysis', 'email'] as const).map(tab => (
+              {(['analysis', 'email', 'whatsapp', 'telegram'] as const).map(tab => (
                 <button key={tab} onClick={() => setAiTab(tab)}
                   className={cn('flex-1 py-1.5 rounded-lg text-xs font-medium transition-all',
                     aiTab === tab ? 'bg-blue-500/20 text-blue-300' : 'text-slate-500 hover:text-slate-500 dark:hover:text-slate-300')}>
-                  {tab === 'analysis' ? '🤖 Analysis' : '✉️ Email'}
+                  {tab === 'analysis' ? '🤖 Analysis' : tab === 'email' ? '✉️ Email' : tab === 'whatsapp' ? '💬 WhatsApp' : '✈️ Telegram'}
                 </button>
               ))}
             </div>
@@ -1567,6 +1643,69 @@ export default function LeadDetailPage() {
                       Generate AI Email
                     </button>
                   )}
+                  <OutreachFollowUp
+                    pending={markSentMutation.isPending}
+                    onMarkSent={(d) => markSentMutation.mutate({ channel: 'email', followUp: d })}
+                  />
+                </div>
+              )}
+
+              {aiTab === 'whatsapp' && (
+                <div className="space-y-3">
+                  {!lead.contactPhone && (
+                    <div className="p-3 bg-amber-500/[0.08] border border-amber-500/20 rounded-xl">
+                      <p className="text-xs text-amber-400">⚠ No phone number yet — add one in Contact Details.</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="label mb-1 flex items-center justify-between">
+                      <span>Message</span>
+                      {emailData?.body && (
+                        <button className="text-[10px] text-slate-400 hover:text-slate-200 transition-colors"
+                          onClick={() => setChatMessage(emailData.body)}>Use AI email text</button>
+                      )}
+                    </p>
+                    <textarea className="input text-xs h-40 resize-none leading-relaxed"
+                      placeholder="Type or paste your WhatsApp message…"
+                      value={chatMessage}
+                      onChange={e => setChatMessage(e.target.value)} />
+                  </div>
+                  <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                    onClick={openWhatsApp} disabled={!lead.contactPhone}>
+                    <MessageCircle size={13} /> Open in WhatsApp
+                  </button>
+                  <p className="text-[10px] text-slate-500 text-center">Opens WhatsApp with your message pre-filled — you send it yourself.</p>
+                  <OutreachFollowUp
+                    pending={markSentMutation.isPending}
+                    onMarkSent={(d) => markSentMutation.mutate({ channel: 'whatsapp', followUp: d })}
+                  />
+                </div>
+              )}
+
+              {aiTab === 'telegram' && (
+                <div className="space-y-3">
+                  <div>
+                    <p className="label mb-1 flex items-center justify-between">
+                      <span>Message</span>
+                      {emailData?.body && (
+                        <button className="text-[10px] text-slate-400 hover:text-slate-200 transition-colors"
+                          onClick={() => setChatMessage(emailData.body)}>Use AI email text</button>
+                      )}
+                    </p>
+                    <textarea className="input text-xs h-40 resize-none leading-relaxed"
+                      placeholder="Type or paste your Telegram message…"
+                      value={chatMessage}
+                      onChange={e => setChatMessage(e.target.value)} />
+                  </div>
+                  <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors"
+                    onClick={openTelegram}>
+                    <Send size={13} /> Open in Telegram
+                  </button>
+                  <p className="text-[10px] text-slate-500 text-center">Telegram can’t open a chat by phone — this opens Telegram with your message pre-filled; pick the contact to send.</p>
+                  <OutreachFollowUp
+                    pending={markSentMutation.isPending}
+                    onMarkSent={(d) => markSentMutation.mutate({ channel: 'telegram', followUp: d })}
+                  />
                 </div>
               )}
             </div>

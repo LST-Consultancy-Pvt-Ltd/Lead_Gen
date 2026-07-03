@@ -11,7 +11,7 @@ const { requireManagerOrAdmin, requireAdmin } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const activityController = require('../controllers/activityController');
 
-const VALID_TYPES = ['call', 'email', 'meeting', 'demo', 'follow-up', 'follow_up', 'whatsapp', 'note', 'linkedin', 'sms', 'other'];
+const VALID_TYPES = ['call', 'email', 'meeting', 'demo', 'follow-up', 'follow_up', 'whatsapp', 'telegram', 'note', 'linkedin', 'sms', 'other'];
 
 // Validation rules
 const createActivityValidation = [
@@ -106,7 +106,7 @@ const getLeadActivitiesValidation = [
 const getActivitiesValidation = [
   query('page').optional().isInt({ min: 1 }).withMessage('page must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: 1000 }).withMessage('limit must be between 1 and 1000'),
-  query('type').optional().isIn(['call', 'email', 'meeting', 'demo', 'follow-up', 'follow_up', 'whatsapp', 'note', 'linkedin', 'sms', 'other'])
+  query('type').optional().isIn(['call', 'email', 'meeting', 'demo', 'follow-up', 'follow_up', 'whatsapp', 'telegram', 'note', 'linkedin', 'sms', 'other'])
     .withMessage('Invalid activity type'),
   query('search').optional().isLength({ min: 2, max: 200 }).withMessage('search must be 2�200 characters'),
   query('dateFrom').optional().isISO8601().withMessage('dateFrom must be a valid ISO date'),

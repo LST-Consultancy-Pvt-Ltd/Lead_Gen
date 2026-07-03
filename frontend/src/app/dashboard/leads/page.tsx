@@ -675,9 +675,11 @@ export default function LeadsPage() {
                 onChange={e => setAssignToId(e.target.value)}
               >
                 <option value="">Select a team member...</option>
-                {(Array.isArray(usersData) ? usersData : []).map((u: any) => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.role?.replace(/_/g, ' ')})</option>
-                ))}
+                {(Array.isArray(usersData) ? usersData : [])
+                  .filter((u: any) => u.id !== user?.id)
+                  .map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.role?.replace(/_/g, ' ')})</option>
+                  ))}
               </select>
             </div>
             <div className="flex gap-2 mt-4">
