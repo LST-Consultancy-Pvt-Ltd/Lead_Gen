@@ -244,7 +244,22 @@ async function enrichLeadViaSignalHire(req, res) {
     // Synchronous wrapper: submit + wait up to 25s for the webhook to deliver (kept
     // under the 30s frontend axios timeout). If it arrives, return the contact now;
     // if it times out, the webhook still updates the lead asynchronously.
-    const result = await enrichViaSignalHire(lead, { createdById: req.user.id, waitMs: 25000 });
+    // Reuse the scan's decision-maker filter when available: if the lead came from
+    // a scan where the user targeted specific roles (e.g. CFO, VP Sales), reveal
+    // those roles first and fall back to the generic leadership pool.
+    let preferredTitles = [];
+    if (lead.scanJobId) {
+      const scanJob = await prisma.scanJob.findFirst({
+        where: { id: lead.scanJobId, organizationId: req.user.organizationId },
+        select: { sources: true },
+      }).catch(() => null);
+      const sources = scanJob?.sources || {};
+      const roles = Array.isArray(sources.decisionMakers)
+        ? sources.decisionMakers
+        : (Array.isArray(sources.decisionMakerRoles) ? sources.decisionMakerRoles : []);
+      preferredTitles = roles.filter(Boolean);
+    }
+    const result = await enrichViaSignalHire(lead, { createdById: req.user.id, waitMs: 25000, preferredTitles });
     if (result?.peopleFound) {
       return success(res, { submitted: true, peopleFound: result.peopleFound, async: true, enrichedVia: 'signalhire' },
         `SignalHire is revealing ${result.peopleFound} decision-maker${result.peopleFound > 1 ? 's' : ''} — they'll appear in Contacts shortly.`);

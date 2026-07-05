@@ -499,11 +499,17 @@ async function processOfferScan(jobId, orgId, offerInput, filters = {}, options 
 
           // Auto-enrich contacts via SignalHire for every discovered lead.
           // Fires-and-forgets a company search → top-5 DM reveal; contacts
-          // arrive asynchronously via the SignalHire webhook.
+          // arrive asynchronously via the SignalHire webhook. When the user
+          // selected specific decision-maker roles in the scan form, those
+          // roles are matched first; the generic leadership pool fills any
+          // remaining slots.
           if (config.signalhire?.apiKey && config.signalhire?.callbackUrl) {
             const savedLead = await prisma.lead.findUnique({ where: { id } }).catch(() => null);
             if (savedLead) {
-              enrichViaSignalHire(savedLead, { createdById: savedLead.createdById }).catch(() => {});
+              enrichViaSignalHire(savedLead, {
+                createdById: savedLead.createdById,
+                preferredTitles: Array.isArray(filters.decisionMakers) ? filters.decisionMakers : [],
+              }).catch(() => {});
             }
           }
         }

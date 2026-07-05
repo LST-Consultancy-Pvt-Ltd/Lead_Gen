@@ -386,21 +386,77 @@ function isDecisionMakerTitle(title) {
   return /\bmanager\b/i.test(t);
 }
 
-// Keep only decision-maker profiles, rank by seniority, return the top N.
-// Ties (same seniority bucket) keep their original order.
-function pickTopSignalhireProfiles(profiles, n = 5) {
+// Split UI role labels containing "/" into their individual title tokens so each
+// half is matched separately. "CEO / Founder" → ["CEO", "Founder"].
+function normalizeUiTitleLabels(labels = []) {
+  const out = new Set();
+  for (const raw of labels) {
+    if (!raw) continue;
+    for (const part of String(raw).split('/')) {
+      const t = part.trim();
+      if (t) out.add(t);
+    }
+  }
+  return [...out];
+}
+
+// Rank and pick the top N SignalHire profiles to reveal.
+//
+// Two-pass strategy:
+//   1) If the user selected specific decision-maker roles (`preferredTitles`,
+//      e.g. from the "Who approves hiring?" filter), take profiles whose current
+//      title matches those roles (synonym-aware, word-boundary matching). These
+//      bypass the generic leadership gate — the user explicitly asked for them.
+//      Ties are broken by the order the user listed the roles.
+//   2) If pass 1 returns fewer than N, fill the remaining slots from the generic
+//      leadership + manager pool ranked by SIGNALHIRE_TITLE_PRIORITY (the old
+//      behavior). This is the "if the CFO doesn't exist, give me any top DM"
+//      fallback.
+function pickTopSignalhireProfiles(profiles, n = 5, preferredTitles = []) {
   if (!profiles.length) return [];
-  const ranked = profiles
+
+  const wantTitles = normalizeUiTitleLabels(preferredTitles);
+  const chosenUids = new Set();
+  const result = [];
+
+  if (wantTitles.length > 0) {
+    const preferred = profiles
+      .map((p, i) => ({ p, i, title: profileCurrentTitle(p) }))
+      .filter(x => titleMatchesAny(x.title, wantTitles))
+      .map(({ p, i, title }) => {
+        const t = title.toLowerCase();
+        // Preserve the user's role-selection order as the primary rank.
+        let rank = wantTitles.findIndex(w => t.includes(w.toLowerCase()));
+        if (rank === -1) rank = 998;
+        return { p, rank, i };
+      });
+    preferred.sort((a, b) => (a.rank - b.rank) || (a.i - b.i));
+    for (const x of preferred) {
+      if (result.length >= n) break;
+      if (!x.p.uid || chosenUids.has(x.p.uid)) continue;
+      chosenUids.add(x.p.uid);
+      result.push(x.p);
+    }
+    if (result.length >= n) return result;
+  }
+
+  const fallback = profiles
     .map((p, i) => ({ p, i, title: profileCurrentTitle(p) }))
-    .filter(x => isDecisionMakerTitle(x.title))
+    .filter(x => !chosenUids.has(x.p.uid) && isDecisionMakerTitle(x.title))
     .map(({ p, i, title }) => {
       const t = title.toLowerCase();
       let rank = SIGNALHIRE_TITLE_PRIORITY.findIndex(k => t.includes(k));
       if (rank === -1) rank = 998;
       return { p, rank, i };
     });
-  ranked.sort((a, b) => (a.rank - b.rank) || (a.i - b.i));
-  return ranked.slice(0, n).map(x => x.p);
+  fallback.sort((a, b) => (a.rank - b.rank) || (a.i - b.i));
+  for (const x of fallback) {
+    if (result.length >= n) break;
+    if (!x.p.uid || chosenUids.has(x.p.uid)) continue;
+    chosenUids.add(x.p.uid);
+    result.push(x.p);
+  }
+  return result;
 }
 
 // SignalHire is webhook-only for the REVEAL step: we submit a person identifier WITH
@@ -447,7 +503,8 @@ async function enrichViaSignalHire(lead, meta = {}) {
         }
       }
 
-      const top = pickTopSignalhireProfiles(profiles, MAX_SIGNALHIRE_PEOPLE).filter(p => p.uid);
+      const preferredTitles = Array.isArray(meta.preferredTitles) ? meta.preferredTitles : [];
+      const top = pickTopSignalhireProfiles(profiles, MAX_SIGNALHIRE_PEOPLE, preferredTitles).filter(p => p.uid);
       if (!top.length) {
         logger.info('SignalHire: no people found at company', { leadId: lead.id, company });
         return { skipped: 'no_people_found' };
@@ -478,6 +535,7 @@ async function enrichViaSignalHire(lead, meta = {}) {
       logger.info('SignalHire: company reveal submitted', {
         leadId: lead.id, company, people: uids.length, totalFound: profiles.length,
         requestId: res.data?.requestId,
+        preferredTitles: preferredTitles.length ? preferredTitles : undefined,
         picked: top.map(p => ({ name: p.fullName, title: profileCurrentTitle(p) })),
       });
       return { submitted: true, peopleFound: uids.length, requestId: res.data?.requestId };
@@ -608,6 +666,9 @@ const TITLE_SYNONYM_GROUPS = [
   ['it manager', 'information technology manager'],
   ['hr manager', 'human resources manager'],
   ['c suite', 'c-suite', 'csuite'],
+  ['md', 'managing director'],
+  ['head of hr', 'head of human resources', 'hr head'],
+  ['procurement head', 'head of procurement', 'director of procurement'],
 ];
 
 /**

@@ -445,6 +445,8 @@ export default function LeadDetailPage() {
   // Which contacts (by email) the generated draft will be addressed to.
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
   const recipInitRef = useRef(false); // default-selects the primary contact once per draft
+  // WhatsApp: wa.me only opens one chat, so this is a single value (not a Set).
+  const [selectedPhone, setSelectedPhone] = useState<string>('');
   const [editingLinkedin, setEditingLinkedin] = useState(false);
   const [linkedinInput,   setLinkedinInput]   = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -708,6 +710,51 @@ export default function LeadDetailPage() {
       recipInitRef.current = true;
     }
   }, [emailData, mailRecipients]);
+
+  // Every reachable phone number for this lead — primary contact + saved contacts
+  // (each contact can have a main phone + additionalPhones) + company phone.
+  // Deduped by digits-only comparison so the same number tagged two ways doesn't
+  // show up twice. Primary first; company last.
+  const phoneRecipients = useMemo(() => {
+    const list: { key: string; name: string; title?: string | null; phone: string; badge?: string }[] = [];
+    if (lead?.contactPhone) {
+      list.push({
+        key: 'primary',
+        name: lead.contactName || 'Primary contact',
+        title: lead.contactTitle,
+        phone: lead.contactPhone,
+        badge: 'Primary',
+      });
+    }
+    for (const c of savedContacts) {
+      const phones = [c.phone || c.contactPhone, ...(Array.isArray(c.additionalPhones) ? c.additionalPhones : [])].filter(Boolean);
+      phones.forEach((p: string, i: number) => list.push({
+        key: `${c.id}-${i}`,
+        name: c.name || c.contactName || 'Contact',
+        title: c.title || c.contactTitle,
+        phone: p,
+      }));
+    }
+    if (lead?.companyPhone) {
+      list.push({ key: 'company', name: 'Company Phone', phone: lead.companyPhone, badge: 'Company' });
+    }
+    const seen = new Set<string>();
+    return list.filter(r => {
+      const digits = (r.phone || '').replace(/\D/g, '');
+      if (!digits || seen.has(digits)) return false;
+      seen.add(digits);
+      return true;
+    });
+  }, [lead?.contactPhone, lead?.contactName, lead?.contactTitle, lead?.companyPhone, savedContacts]);
+
+  // Default the WhatsApp target to the primary once the list resolves; if the
+  // current selection disappears (contact deleted mid-session), fall back to
+  // whatever the first available option is.
+  useEffect(() => {
+    if (!phoneRecipients.length) { setSelectedPhone(''); return; }
+    const stillValid = phoneRecipients.some(r => r.phone === selectedPhone);
+    if (!stillValid) setSelectedPhone(phoneRecipients[0].phone);
+  }, [phoneRecipients, selectedPhone]);
 
   const addContactMutation = useMutation({
     mutationFn: (data: any) => contactsApi.create({ ...data, leadId: id }),
@@ -1065,10 +1112,11 @@ export default function LeadDetailPage() {
   }
 
   // WhatsApp: wa.me works with any phone number → opens a chat with the message
-  // pre-filled. Uses the contact's phone (digits only, keep the country code).
+  // pre-filled. Uses whichever phone the rep picked in the "Send to" list (digits
+  // only, keep the country code).
   function openWhatsApp() {
-    const phone = (lead.contactPhone || '').replace(/\D/g, '');
-    if (!phone) { toast.error('No phone number for this contact — add one in Contact Details'); return; }
+    const phone = (selectedPhone || '').replace(/\D/g, '');
+    if (!phone) { toast.error('Pick a phone number to send to'); return; }
     const text = chatMessage.trim() ? `?text=${encodeURIComponent(chatMessage)}` : '';
     window.open(`https://wa.me/${phone}${text}`, '_blank', 'noopener,noreferrer');
   }
@@ -1652,7 +1700,7 @@ export default function LeadDetailPage() {
 
               {aiTab === 'whatsapp' && (
                 <div className="space-y-3">
-                  {!lead.contactPhone && (
+                  {phoneRecipients.length === 0 && (
                     <div className="p-3 bg-amber-500/[0.08] border border-amber-500/20 rounded-xl">
                       <p className="text-xs text-amber-400">⚠ No phone number yet — add one in Contact Details.</p>
                     </div>
@@ -1670,8 +1718,31 @@ export default function LeadDetailPage() {
                       value={chatMessage}
                       onChange={e => setChatMessage(e.target.value)} />
                   </div>
+                  {phoneRecipients.length > 0 && (
+                    <div>
+                      <p className="label mb-1">Send to</p>
+                      <div className="space-y-0.5 max-h-40 overflow-y-auto rounded-lg border border-slate-200 dark:border-white/[0.08] p-1.5">
+                        {phoneRecipients.map(r => (
+                          <label key={r.key}
+                            className="flex items-start gap-2 px-1.5 py-1 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50">
+                            <input type="radio" name="wa-phone" className="mt-0.5 accent-green-500 cursor-pointer"
+                              checked={selectedPhone === r.phone}
+                              onChange={() => setSelectedPhone(r.phone)} />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{r.name}</span>
+                                {r.title && <span className="text-[10px] text-slate-500 truncate">· {r.title}</span>}
+                                {r.badge && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 whitespace-nowrap">{r.badge}</span>}
+                              </span>
+                              <span className="block text-[11px] text-slate-400 truncate">{r.phone}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-50"
-                    onClick={openWhatsApp} disabled={!lead.contactPhone}>
+                    onClick={openWhatsApp} disabled={!selectedPhone}>
                     <MessageCircle size={13} /> Open in WhatsApp
                   </button>
                   <p className="text-[10px] text-slate-500 text-center">Opens WhatsApp with your message pre-filled — you send it yourself.</p>
