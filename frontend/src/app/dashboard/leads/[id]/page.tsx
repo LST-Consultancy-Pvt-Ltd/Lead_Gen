@@ -1343,6 +1343,15 @@ export default function LeadDetailPage() {
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Keyword</p>
               <p className="text-sm text-slate-800 dark:text-slate-200 break-words" title={lead.keyword || undefined}>{lead.keyword || '—'}</p>
             </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source</p>
+              {(() => {
+                const src = lead.source
+                  ? (lead.source === 'import' ? 'Imported (CSV)' : lead.source)
+                  : (lead.scanJobId ? 'Lead Discovery' : 'Manually added');
+                return <p className="text-sm text-slate-800 dark:text-slate-200 break-words" title={src}>{src}</p>;
+              })()}
+            </div>
             {/* <div>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Name</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactName || '—'}</p>
