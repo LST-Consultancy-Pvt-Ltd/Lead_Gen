@@ -1948,7 +1948,7 @@ export default function LeadDetailPage() {
               signalhireSubmitting={signalhireMutation.isPending}
               signalhireRevealing={signalhireRevealing}
               hasContact={hasContact}
-              isDiscoveryLead={!!lead?.scanJobId}
+              isDiscoveryLead={true} /* SignalHire enabled for all leads, including manually-added ones */
             />
           </div>
 
