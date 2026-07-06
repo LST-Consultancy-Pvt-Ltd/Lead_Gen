@@ -1582,7 +1582,8 @@ export default function LeadDetailPage() {
           <div className="card p-5 flex flex-col lg:absolute lg:inset-0">
             {/* Tabs — pinned to the top of the panel */}
             <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl">
-              {(['analysis', 'email', 'whatsapp', 'telegram'] as const).map(tab => (
+              {/* 'telegram' hidden for now — Telegram can't reliably open a chat by phone. Re-add it to the list to bring the tab back. */}
+              {(['analysis', 'email', 'whatsapp' /* , 'telegram' */] as const).map(tab => (
                 <button key={tab} onClick={() => setAiTab(tab)}
                   className={cn('flex-1 py-1.5 rounded-lg text-xs font-medium transition-all',
                     aiTab === tab ? 'bg-blue-500/20 text-blue-300' : 'text-slate-500 hover:text-slate-500 dark:hover:text-slate-300')}>
@@ -1774,6 +1775,7 @@ export default function LeadDetailPage() {
                 </div>
               )}
 
+              {/* Telegram tab hidden — Telegram can't reliably open a chat by phone. Kept for later; re-add 'telegram' to the tab list above to bring it back.
               {aiTab === 'telegram' && (
                 <div className="space-y-3">
                   <div>
@@ -1793,13 +1795,14 @@ export default function LeadDetailPage() {
                     onClick={openTelegram}>
                     <Send size={13} /> Open in Telegram
                   </button>
-                  <p className="text-[10px] text-slate-500 text-center">Telegram can’t open a chat by phone — this opens Telegram with your message pre-filled; pick the contact to send.</p>
+                  <p className="text-[10px] text-slate-500 text-center">Telegram can not open a chat by phone — this opens Telegram with your message pre-filled; pick the contact to send.</p>
                   <OutreachFollowUp
                     pending={markSentMutation.isPending}
                     onMarkSent={(d) => markSentMutation.mutate({ channel: 'telegram', followUp: d })}
                   />
                 </div>
               )}
+              */}
             </div>
           </div>
         </div>
