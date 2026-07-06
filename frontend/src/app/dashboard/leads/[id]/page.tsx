@@ -1115,10 +1115,22 @@ export default function LeadDetailPage() {
   // pre-filled. Uses whichever phone the rep picked in the "Send to" list (digits
   // only, keep the country code).
   function openWhatsApp() {
-    const phone = (selectedPhone || '').replace(/\D/g, '');
+    const raw = (selectedPhone || '').trim();
+    let phone = raw.replace(/\D/g, '');                 // digits only — drops +, spaces, dashes, parens
+    if (phone.startsWith('00')) phone = phone.slice(2); // 00 = international dialing prefix → country code follows
     if (!phone) { toast.error('Pick a phone number to send to'); return; }
-    const text = chatMessage.trim() ? `?text=${encodeURIComponent(chatMessage)}` : '';
-    window.open(`https://wa.me/${phone}${text}`, '_blank', 'noopener,noreferrer');
+    // wa.me needs the FULL international number (country code + number). A national
+    // number with no country code won't resolve, and WhatsApp then falls back to the
+    // last-open chat — so warn instead of opening the wrong conversation.
+    if (phone.length < 8) {
+      toast.error('Number looks incomplete — include the country code (e.g. +1, +91) so WhatsApp opens the right chat.');
+      return;
+    }
+    // api.whatsapp.com/send reliably navigates to the number's chat (opening the
+    // existing conversation if one exists) — more consistent than the wa.me redirect,
+    // which the WhatsApp Desktop app sometimes ignores and lands on the last chat.
+    const textParam = chatMessage.trim() ? `&text=${encodeURIComponent(chatMessage)}` : '';
+    window.open(`https://api.whatsapp.com/send?phone=${phone}${textParam}`, '_blank', 'noopener,noreferrer');
   }
 
   // Telegram can't open a chat by phone number, so we use the share URL: it opens
