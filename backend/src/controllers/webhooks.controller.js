@@ -268,6 +268,7 @@ async function handleSignalHire(req, res) {
           if (validated) data.linkedinUrl = validated;
         }
 
+        let promoted = null;
         if (entry.best && !lead.contactName && !lead.contactEmail) {
           const c = entry.best.contact;
           data.contactName     = c.name || null;
@@ -275,10 +276,27 @@ async function handleSignalHire(req, res) {
           data.contactEmail    = c.email || null;
           data.contactPhone    = c.phone || null;
           data.contactLinkedin = c.linkedin || null;
+          promoted = c;
         }
 
         if (Object.keys(data).length === 0) continue;
         await prisma.lead.update({ where: { id: leadId }, data });
+
+        // The promoted person was already inserted as a Contact record earlier in
+        // the loop — leaving it there means the Lead Details "Contact Details"
+        // table renders the same person twice (once as Primary from the lead
+        // fields, once from the Contact row). Remove the matching Contact row so
+        // the primary is only shown once.
+        if (promoted) {
+          const or = [];
+          if (promoted.email) or.push({ email: promoted.email });
+          if (promoted.name)  or.push({ name: promoted.name, email: null });
+          if (or.length) {
+            await prisma.contact.deleteMany({ where: { leadId, OR: or } }).catch(err =>
+              logger.warn('SignalHire webhook: dedup Contact delete failed', { leadId, err: err.message })
+            );
+          }
+        }
         logger.info('SignalHire webhook: lead updated post-reveal', {
           leadId,
           fields: Object.keys(data),
