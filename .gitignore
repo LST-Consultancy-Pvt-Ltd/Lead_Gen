@@ -1,0 +1,14 @@
+# Deployment secrets — never commit
+.env
+.env.local
+.env.production
+
+# Dependencies / build output
+node_modules/
+**/node_modules/
+frontend/.next/
+backend/dist/
+
+# Logs
+*.log
+logs/

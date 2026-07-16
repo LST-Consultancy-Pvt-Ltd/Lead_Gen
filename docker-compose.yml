@@ -1,0 +1,90 @@
+# ============================================================================
+# LeadForge AI — full stack for Hostinger (VPS Docker / hPanel Docker Manager)
+# Postgres + Redis + Express backend + Next.js frontend.
+#
+#   1. cp .env.example .env   and fill in the values
+#   2. docker compose up -d --build
+#
+# All secrets live in ./.env (see .env.example). Nothing sensitive is hardcoded.
+# ============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-leadforge}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-leadforge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - leadforge
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - leadforge
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # These override whatever is in .env so the app talks to the compose
+      # services by their internal hostnames.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-leadforge}?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    networks:
+      - leadforge
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the browser bundle — must be reachable from the user's
+        # browser (your public domain), e.g. https://yourdomain.com/api
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - leadforge
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  leadforge:
+    driver: bridge

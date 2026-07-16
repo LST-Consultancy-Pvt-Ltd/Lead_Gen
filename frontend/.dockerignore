@@ -1,10 +1,11 @@
 node_modules
+.next
+.git
 .env
 .env.local
 .env.production
-logs
-*.log
-backend.zip
+npm-debug.log
 Dockerfile
 .dockerignore
-.git
+frontend.zip
+*.tsbuildinfo
