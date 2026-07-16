@@ -1,73 +1,60 @@
-# Deploying LeadForge AI to Hostinger (Docker)
+# Deploying LeadForge AI to Hostinger (two separate Docker projects)
 
-The whole stack runs from a single `docker-compose.yml`:
+Backend and frontend deploy as **two independent compose projects** via the
+Hostinger **Docker Manager → Terminal**. They don't share a docker network —
+the browser calls the backend over its **public URL**, and the backend allows
+that origin via `CORS_ORIGINS`.
 
-| Service    | Image / build      | Port  | Purpose                          |
-|------------|--------------------|-------|----------------------------------|
-| `postgres` | postgres:16-alpine | 5432* | Database (Prisma)                |
-| `redis`    | redis:7-alpine     | 6379* | Queues / cache (bull, ioredis)   |
-| `backend`  | `./backend`        | 4000  | Express API (`/health`, `/api/*`)|
-| `frontend` | `./frontend`       | 3000  | Next.js UI (standalone)          |
+```
+leadforge-backend   →  Postgres + Redis + Express API   (host port 4000)
+leadforge-frontend  →  Next.js UI                        (host port 3000)
+```
 
-\* Postgres/Redis are only reachable inside the compose network — not published to the host.
+Recommended public URLs (set up in hPanel → domain / subdomain, pointing to the VPS):
+- Frontend: `https://yourdomain.com`
+- Backend:  `https://api.yourdomain.com`
 
 ---
 
-## 1. Prerequisites on the Hostinger VPS
+## 0. Open the Terminal
 
-Use a **VPS plan** (KVM). In hPanel, either pick the **Ubuntu 24.04 with Docker** OS template, or install Docker manually:
+In Docker Manager (the screen you're on) click **Terminal** (top-right), or SSH in:
 
 ```bash
-curl -fsSL https://get.docker.com | sh
+ssh root@<your-vps-ip>
 ```
 
-Docker Compose v2 ships with Docker Engine (`docker compose ...`).
-
-## 2. Get the code onto the server
+## 1. Get the code on the server (once)
 
 ```bash
 git clone <your-repo-url> leadforge
 cd leadforge
 ```
 
-## 3. Configure environment
+Update later with `git pull` and re-run the build commands.
+
+---
+
+## 2. Deploy the BACKEND
 
 ```bash
+cd ~/leadforge/backend
 cp .env.example .env
-nano .env          # fill in real secrets
-```
-
-Must-set values:
-- `POSTGRES_PASSWORD`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `NEXTAUTH_SECRET` — strong random strings.
-- `NEXT_PUBLIC_API_URL` — **the browser-facing** API URL. This is baked into the
-  frontend at build time. On a real server set it to your domain, e.g.
-  `https://yourdomain.com/api` (see the reverse-proxy note below), **not** `localhost`.
-- `FRONTEND_URL` / `CORS_ORIGINS` — your public frontend URL, e.g. `https://yourdomain.com`.
-- Provider keys you actually use (`OPENAI_API_KEY`, `SERPAPI_KEY`, `SIGNALHIRE_API_KEY`, email, Google OAuth…).
-
-`DATABASE_URL` and `REDIS_URL` are set automatically by compose — leave them out.
-
-## 4. Build and run
-
-```bash
+nano .env          # set POSTGRES_PASSWORD, JWT secrets, provider keys,
+                   # FRONTEND_URL / CORS_ORIGINS = https://yourdomain.com
 docker compose up -d --build
 ```
 
-- Prisma migrations (`prisma migrate deploy`) run automatically when the backend starts.
-- Check status / logs:
+- `DATABASE_URL` / `REDIS_URL` are wired to the compose Postgres/Redis automatically.
+- Prisma migrations run on startup. Verify:
 
 ```bash
 docker compose ps
 docker compose logs -f backend
-```
-
-Verify the API is healthy:
-
-```bash
 curl http://localhost:4000/health      # -> {"status":"ok",...}
 ```
 
-## 5. (Optional) Seed the database
+(Optional) seed data:
 
 ```bash
 docker compose exec backend node prisma/seed.js
@@ -76,40 +63,46 @@ docker compose exec backend node prisma/seed-dropdowns.js
 
 ---
 
-## Putting it behind your domain (recommended)
+## 3. Deploy the FRONTEND
 
-For a clean single-domain setup, run a reverse proxy (Nginx / Caddy / Traefik)
-in front so `https://yourdomain.com` → frontend and `https://yourdomain.com/api` → backend.
+```bash
+cd ~/leadforge/frontend
+cp .env.example .env
+nano .env          # set NEXT_PUBLIC_API_URL to the PUBLIC backend URL,
+                   # e.g. https://api.yourdomain.com/api
+docker compose up -d --build
+docker compose ps
+```
 
-Minimal **Caddy** example (`Caddyfile`) — automatic HTTPS:
+> `NEXT_PUBLIC_API_URL` is compiled into the browser bundle, so **changing it
+> requires a rebuild** (`docker compose up -d --build`), not just a restart.
+
+---
+
+## 4. Point your domains at the containers (HTTPS)
+
+Put a reverse proxy in front so traffic hits HTTPS on 443 instead of raw
+3000/4000. Minimal **Caddy** (`~/Caddyfile`, auto-HTTPS):
 
 ```
 yourdomain.com {
-    handle /api/* {
-        reverse_proxy localhost:4000
-    }
-    handle {
-        reverse_proxy localhost:3000
-    }
+    reverse_proxy localhost:3000
+}
+api.yourdomain.com {
+    reverse_proxy localhost:4000
 }
 ```
 
-Then set in `.env` and rebuild the frontend:
-
-```
-NEXT_PUBLIC_API_URL=https://yourdomain.com/api
-FRONTEND_URL=https://yourdomain.com
-CORS_ORIGINS=https://yourdomain.com
-```
-
 ```bash
-docker compose up -d --build frontend
+docker run -d --name caddy --restart unless-stopped --network host \
+  -v ~/Caddyfile:/etc/caddy/Caddyfile \
+  -v caddy_data:/data caddy:2
 ```
 
-> `NEXT_PUBLIC_API_URL` is compiled into the browser bundle, so **any change to it
-> requires rebuilding the `frontend` image** (`--build`), not just a restart.
+Then in `frontend/.env`: `NEXT_PUBLIC_API_URL=https://api.yourdomain.com/api`
+and in `backend/.env`: `CORS_ORIGINS=https://yourdomain.com` — rebuild the frontend.
 
-Open the VPS firewall for 80/443 (and 3000/4000 only if you access them directly):
+Open the firewall:
 
 ```bash
 ufw allow 80 && ufw allow 443
@@ -117,13 +110,36 @@ ufw allow 80 && ufw allow 443
 
 ---
 
+## Deploying via the .yaml editor instead of Terminal
+
+The Docker Manager's **.yaml editor** builds from a compose file but has **no
+access to your source code**, so `build:` contexts won't work there. To use the
+UI, first push prebuilt images to a registry (Docker Hub / GHCR):
+
+```bash
+# on any machine with the repo
+docker build -t <user>/leadforge-backend ./backend
+docker build -t <user>/leadforge-frontend \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.yourdomain.com/api ./frontend
+docker push <user>/leadforge-backend
+docker push <user>/leadforge-frontend
+```
+
+Then in each project's `.yaml editor`, replace `build:` with
+`image: <user>/leadforge-backend` (or `-frontend`). **The Terminal route above
+avoids all of this** and is simpler for a first deploy.
+
+---
+
 ## Common operations
 
 ```bash
-docker compose down            # stop (keeps data volumes)
-docker compose down -v         # stop and DELETE database/redis volumes
-docker compose up -d --build   # rebuild after code changes
-docker compose exec backend npx prisma migrate deploy   # apply migrations manually
+docker compose logs -f                 # tail logs (run in the project folder)
+docker compose down                    # stop (keeps DB/redis volumes)
+docker compose down -v                 # stop and DELETE data volumes
+docker compose up -d --build           # rebuild after `git pull`
+docker compose exec backend npx prisma migrate deploy   # manual migration
 ```
 
-Data persists in the named volumes `pgdata` and `redisdata`.
+Database/Redis data persists in the `leadforge-backend` project's `pgdata` /
+`redisdata` volumes.

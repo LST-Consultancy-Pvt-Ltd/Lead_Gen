@@ -1,0 +1,30 @@
+# ============================================================================
+# LeadForge AI — FRONTEND project (deploy separately on Hostinger)
+# Contains: Next.js standalone app only.
+#
+#   cd frontend
+#   cp .env.example .env      # set NEXT_PUBLIC_API_URL to the PUBLIC backend URL
+#   docker compose up -d --build
+#
+# UI will listen on the host at :3000  (change with FRONTEND_PORT in .env)
+#
+# IMPORTANT: NEXT_PUBLIC_API_URL is baked into the browser bundle at BUILD time,
+# so it must be reachable from the user's browser (your public backend URL),
+# e.g. https://api.yourdomain.com/api  — NOT an internal docker hostname.
+# Any change to it requires a rebuild:  docker compose up -d --build
+# ============================================================================
+
+name: leadforge-frontend
+
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
