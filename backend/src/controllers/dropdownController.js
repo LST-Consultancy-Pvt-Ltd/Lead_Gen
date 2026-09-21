@@ -6,6 +6,10 @@
 const prisma = require("../utils/prisma");
 const { success, error } = require("../utils/response");
 const logger = require("../utils/logger");
+const { ADMIN_ROLES } = require("../middleware/rbac");
+
+// Categories any authenticated user (not just admins) may add/edit/delete values for.
+const OPEN_CATEGORIES = ["location", "industry"];
 
 const VALID_CATEGORIES = [
   // Shared / Leads module
@@ -384,6 +388,10 @@ async function updateValue(req, res) {
       return error(res, 'Dropdown value not found', 404);
     }
 
+    if (!OPEN_CATEGORIES.includes(existing.category) && !ADMIN_ROLES.includes(req.user.role)) {
+      return error(res, 'Insufficient permissions', 403);
+    }
+
     // Coerce isActive to boolean in case the frontend sends a string
     const isActiveValue = isActive != null
       ? isActive === 'false' ? false : isActive === 'true' ? true : Boolean(isActive)
@@ -422,6 +430,10 @@ async function deleteValue(req, res) {
     if (!existing) {
       logger.warn('deleteValue: not found', { id: req.params.id, orgId: req.user.organizationId });
       return error(res, 'Dropdown value not found', 404);
+    }
+
+    if (!OPEN_CATEGORIES.includes(existing.category) && !ADMIN_ROLES.includes(req.user.role)) {
+      return error(res, 'Insufficient permissions', 403);
     }
 
     await prisma.dropdownConfig.delete({ where: { id: req.params.id } });
@@ -479,4 +491,4 @@ async function setDefaultDropdown(req, res) {
   }
 }
 
-module.exports = { listByCategory, listActive, listDiscoveryDropdowns, listAllCategories, addValue, updateValue, deleteValue, seedDefaultDropdowns, seedOrgDropdowns, setDefaultDropdown };
+module.exports = { listByCategory, listActive, listDiscoveryDropdowns, listAllCategories, addValue, updateValue, deleteValue, seedDefaultDropdowns, seedOrgDropdowns, setDefaultDropdown, OPEN_CATEGORIES };

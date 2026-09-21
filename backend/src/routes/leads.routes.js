@@ -248,7 +248,11 @@ const getLeadsValidation = [
   
   query('sortBy')
     .optional()
-    .isIn(['createdAt', 'updatedAt', 'companyName', 'leadScore', 'intentScore', 'followUpDate'])
+    .isIn([
+      'createdAt', 'updatedAt', 'companyName', 'leadScore', 'intentScore', 'followUpDate',
+      'contactName', 'contactEmail', 'status', 'leadType', 'subSource', 'keyword',
+      'sourceUrl', 'assignedTo', 'industry', 'createdBy',
+    ])
     .withMessage('Invalid sort field'),
   
   query('sortDir')

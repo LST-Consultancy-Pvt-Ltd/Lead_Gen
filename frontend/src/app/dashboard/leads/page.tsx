@@ -22,6 +22,8 @@ export default function LeadsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -67,6 +69,8 @@ export default function LeadsPage() {
     limit,
     search: search || undefined,
     status: statusFilter || undefined,
+    sortBy,
+    sortDir,
   };
 
   // Sales users only see their own leads
@@ -316,6 +320,21 @@ export default function LeadsPage() {
   const total = pagination?.total ?? 0;
   const totalPages = pagination?.totalPages ?? 1;
 
+  function handleSort(field: string) {
+    if (sortBy === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortDir('asc');
+    }
+    setPage(1);
+  }
+
+  function sortIndicator(field: string) {
+    if (sortBy !== field) return null;
+    return <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
+
   function getFollowUpInfo(dateStr?: string | null) {
     if (!dateStr) return null;
     const date = parseISO(dateStr);
@@ -467,37 +486,71 @@ export default function LeadsPage() {
                       />
                     </th>
                   )}
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Company
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('industry')}
+                    title="Sort by industry"
+                  >
+                    Company{sortIndicator('industry')}
                   </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Contact
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('contactName')}
+                  >
+                    Contact{sortIndicator('contactName')}
                   </th>
                   <RoleGuard permission="canViewAllLeads">
-                    <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                      Assign To
+                    <th
+                      className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                      onClick={() => handleSort('assignedTo')}
+                    >
+                      Assign To{sortIndicator('assignedTo')}
                     </th>
                   </RoleGuard>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Score
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('leadScore')}
+                  >
+                    Score{sortIndicator('leadScore')}
                   </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Status
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('status')}
+                  >
+                    Status{sortIndicator('status')}
                   </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Product / Services
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('leadType')}
+                  >
+                    Product / Services{sortIndicator('leadType')}
                   </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Keyword
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('createdBy')}
+                  >
+                    Lead Created By{sortIndicator('createdBy')}
                   </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Source URL
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('keyword')}
+                  >
+                    Keyword{sortIndicator('keyword')}
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('sourceUrl')}
+                  >
+                    Source URL{sortIndicator('sourceUrl')}
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Origin
                   </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Next Follow-up
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('followUpDate')}
+                  >
+                    Next Follow-up{sortIndicator('followUpDate')}
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Actions
@@ -552,6 +605,11 @@ export default function LeadsPage() {
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
+                    </td>
+
+                    {/* Lead Created By — the user who created this lead */}
+                    <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                      {l.createdBy?.name || '—'}
                     </td>
 
                     {/* Keyword — the platform keyword(s) this lead was discovered for */}

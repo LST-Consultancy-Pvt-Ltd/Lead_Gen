@@ -153,12 +153,18 @@ class LeadsService {
 
     const where = await this.buildLeadFilters(user, queryParams);
 
+    const orderBy = sortBy === 'assignedTo'
+      ? { assignedTo: { name: sortDir } }
+      : sortBy === 'createdBy'
+      ? { createdBy: { name: sortDir } }
+      : { [sortBy]: sortDir };
+
     const [leads, total] = await Promise.all([
       prisma.lead.findMany({
         where,
         skip,
         take,
-        orderBy: { [sortBy]: sortDir },
+        orderBy,
         include: {
           assignedTo: {
             select: { id: true, name: true, email: true },
