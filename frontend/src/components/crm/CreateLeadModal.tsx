@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import type { CreateLeadInput } from "../../lib/types";
 import { LEAD_SOURCES } from "../../lib/types";
 import { usePermissions } from "../../lib/rbac";
+import { useAuthStore } from "../../store/authStore";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
@@ -71,6 +72,7 @@ const defaultValues: LeadFormData = {
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
   const { canReassignLead, canManageDropdowns } = usePermissions();
+  const currentUser = useAuthStore((s) => s.user);
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
     payload: CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: string };
@@ -591,6 +593,21 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               </select>
             </div>
           )}
+        </div>
+
+        {/* Lead Created By — read-only, always the logged-in user; server sets this automatically on create */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Lead Created By</label>
+            <input
+              type="text"
+              value={currentUser?.name || ""}
+              disabled
+              readOnly
+              title="Lead Created By"
+              className="input opacity-70 cursor-not-allowed"
+            />
+          </div>
         </div>
 
         {/* Company Info */}

@@ -527,6 +527,12 @@ export default function LeadsPage() {
                   </th>
                   <th
                     className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
+                    onClick={() => handleSort('createdBy')}
+                  >
+                    Lead Created By{sortIndicator('createdBy')}
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
                     onClick={() => handleSort('keyword')}
                   >
                     Keyword{sortIndicator('keyword')}
@@ -599,6 +605,11 @@ export default function LeadsPage() {
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
+                    </td>
+
+                    {/* Lead Created By — the user who created this lead */}
+                    <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                      {l.createdBy?.name || '—'}
                     </td>
 
                     {/* Keyword — the platform keyword(s) this lead was discovered for */}
