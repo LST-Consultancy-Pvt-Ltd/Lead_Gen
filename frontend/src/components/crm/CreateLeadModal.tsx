@@ -438,10 +438,10 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   };
 
   const onSubmit = (formData: any) => {
-    // Filter out empty values; exclude assignedToId when cannot reassign
+    // Filter out empty values; exclude assignedToId for non-admins
     const cleanedData = Object.fromEntries(
       Object.entries(formData).filter(([k, v]) => {
-        if (k === "assignedToId" && !canReassignLead) return false;
+        if (k === "assignedToId" && !isAdmin) return false;
         if (k === "disqualificationReason" && formData.status !== "disqualified") return false;
         return v !== "" && v !== undefined;
       }),
@@ -582,7 +582,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             />
             {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
           </div>
-          {canReassignLead && (
+          {isAdmin && (
             <div>
               <label className="label">Assign Lead To</label>
               <select {...register("assignedToId")} title="Assign To" className="input">
