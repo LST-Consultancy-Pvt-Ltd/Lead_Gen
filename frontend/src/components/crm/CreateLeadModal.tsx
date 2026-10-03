@@ -593,9 +593,23 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               </select>
             </div>
           )}
+          {!isAdmin && (
+            <div>
+              <label className="label">Lead Created By</label>
+            <input
+              type="text"
+              value={currentUser?.name || ""}
+              disabled
+              readOnly
+              title="Lead Created By"
+              className="input opacity-70 cursor-not-allowed"
+            />
+            </div>
+          )}
         </div>
 
         {/* Lead Created By — read-only, always the logged-in user; server sets this automatically on create */}
+        {isAdmin && (
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Lead Created By</label>
@@ -609,6 +623,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             />
           </div>
         </div>
+        )}
 
         {/* Company Info */}
         <div className="pt-2 border-t border-slate-200 dark:border-white/10">

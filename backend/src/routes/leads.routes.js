@@ -200,8 +200,8 @@ const updateLeadValidation = [
   body('notes')
     .optional()
     .trim()
-    .isLength({ max: 5000 })
-    .withMessage('Notes must be less than 5000 characters'),
+    .isLength({ max: 15000 })
+    .withMessage('Notes must be less than 15000 characters'),
 
   body('followUpDate')
     .optional({ checkFalsy: true })

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, contactsApi, dropdownsApi, opportunitiesApi, usersApi } from '../../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner } from '../../../../components/ui';
+import { LeadNotesView, LeadNotesEditor } from '../../../../components/crm/LeadNotesTable';
 import { ActivitiesList } from '../../../../components/crm/ActivitiesList';
 import { RoleGuard } from '../../../../components/common/RoleGuard';
 import { usePermissions } from '../../../../lib/rbac';
@@ -1237,9 +1238,9 @@ export default function LeadDetailPage() {
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead Source</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.source || '—'}</p>
             </div> */}
-            <div>
+            <div className="sm:col-span-2">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
-              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap max-h-[8.75rem] overflow-y-auto pr-1" title={lead.notes || undefined}>{lead.notes || '—'}</p>
+              <LeadNotesView value={lead.notes} fallback={{ date: lead.createdAt, author: lead.createdBy?.name }} />
             </div>
           </div>
         </div>
@@ -1343,13 +1344,13 @@ export default function LeadDetailPage() {
                 placeholder="https://..."
               />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="label">Notes</label>
-              <textarea
-                className="input h-20 resize-none"
-                value={editData.notes || ''}
-                onChange={(e) => setEditData((d: any) => ({ ...d, notes: e.target.value }))}
-                placeholder="Internal notes..."
+              <LeadNotesEditor
+                original={lead.notes}
+                fallback={{ date: lead.createdAt, author: lead.createdBy?.name }}
+                author={user?.name || ''}
+                onChange={(v) => setEditData((d: any) => ({ ...d, notes: v }))}
               />
             </div>
             {editData.status === 'disqualified' && (
