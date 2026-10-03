@@ -71,7 +71,7 @@ const defaultValues: LeadFormData = {
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
-  const { canReassignLead, canManageDropdowns } = usePermissions();
+  const { canReassignLead, canManageDropdowns, isAdmin } = usePermissions();
   const currentUser = useAuthStore((s) => s.user);
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
@@ -624,9 +624,9 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               value={industry}
               onChange={(value) => setValue("industry", value, { shouldValidate: true })}
               options={industries}
-              onCreateNew={canManageDropdowns ? handleCreateIndustry : undefined}
-              onEdit={canManageDropdowns ? handleEditIndustry : undefined}
-              onDelete={canManageDropdowns ? handleDeleteIndustry : undefined}
+              onCreateNew={isAdmin ? handleCreateIndustry : undefined}
+              onEdit={isAdmin ? handleEditIndustry : undefined}
+              onDelete={isAdmin ? handleDeleteIndustry : undefined}
               placeholder="Select or search industry..."
               error={errors.industry?.message}
             />

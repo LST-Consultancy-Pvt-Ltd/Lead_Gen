@@ -9,7 +9,7 @@ const logger = require("../utils/logger");
 const { ADMIN_ROLES } = require("../middleware/rbac");
 
 // Categories any authenticated user (not just admins) may add/edit/delete values for.
-const OPEN_CATEGORIES = ["location", "industry"];
+const OPEN_CATEGORIES = ["location"];
 
 const VALID_CATEGORIES = [
   // Shared / Leads module
