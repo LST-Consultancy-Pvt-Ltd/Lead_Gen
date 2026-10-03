@@ -484,6 +484,12 @@ export default function LeadDetailPage() {
     staleTime: 0,
   });
 
+  const { data: sourceOptionsRaw } = useQuery({
+    queryKey: ['dropdowns', 'lead_source'],
+    queryFn: () => dropdownsApi.listByCategory('lead_source').then(r => r.data?.data || r.data || []),
+    staleTime: 0,
+  });
+
   const { data: leadTypeOptions = [] } = useQuery({
     queryKey: ['dropdowns', 'lead_type'],
     queryFn: () => dropdownsApi.listByCategory('lead_type').then(r => r.data?.data || r.data || []),
@@ -506,6 +512,7 @@ export default function LeadDetailPage() {
         contactPhone: lead.contactPhone || '',
         contactTitle: lead.contactTitle || '',
         notes: lead.notes || '',
+        source: lead.source || '',
         leadType: lead.leadType || '',
         sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
       });
@@ -1168,6 +1175,7 @@ export default function LeadDetailPage() {
                     contactPhone: lead.contactPhone || '',
                     contactTitle: lead.contactTitle || '',
                     notes: lead.notes || '',
+                    source: lead.source || '',
                     leadType: lead.leadType || '',
                     sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
                   });
@@ -1234,10 +1242,10 @@ export default function LeadDetailPage() {
                 );
               })()}
             </div> */}
-            {/* <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead Source</p>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.source || '—'}</p>
-            </div> */}
+            </div>
             <div className="sm:col-span-2">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
               <LeadNotesView value={lead.notes} fallback={{ date: lead.createdAt, author: lead.createdBy?.name }} />
@@ -1333,6 +1341,27 @@ export default function LeadDetailPage() {
                 value={editData.followUpDate || ''}
                 onChange={(e) => setEditData((d: any) => ({ ...d, followUpDate: e.target.value }))}
               />
+            </div>
+            <div>
+              <label className="label">Source</label>
+              <select
+                className="input"
+                title="Source"
+                value={editData.source || ''}
+                onChange={(e) => setEditData((d: any) => ({ ...d, source: e.target.value }))}
+              >
+                <option value="">—</option>
+                {(() => {
+                  const items: any[] = Array.isArray(sourceOptionsRaw) ? sourceOptionsRaw : [];
+                  const vals: string[] = items
+                    .filter((o: any) => typeof o === 'string' || o.isActive !== false)
+                    .map((o: any) => (typeof o === 'string' ? o : o.value))
+                    .filter(Boolean);
+                  // keep the lead's current value selectable even if it is not in the dropdown list
+                  if (editData.source && !vals.includes(editData.source)) vals.unshift(editData.source);
+                  return vals.map((v) => <option key={v} value={v}>{v}</option>);
+                })()}
+              </select>
             </div>
             <div>
               <label className="label">Source URL</label>
