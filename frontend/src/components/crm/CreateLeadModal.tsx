@@ -513,7 +513,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
           </div>
         </div>
 
-        {/* Row 2: Contact Name + Job Title */}
+        {/* Row 2: Contact Name + Designation */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Contact Name <span className="text-red-400">*</span></label>
@@ -521,7 +521,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             {errors.contactName && <p className="text-xs text-red-400 mt-1">{errors.contactName.message}</p>}
           </div>
           <div>
-            <label className="label">Job Title</label>
+            <label className="label">Designation of Contact Name</label>
             <input type="text" {...register("contactTitle")} className="input" placeholder="e.g. VP of Engineering" />
           </div>
         </div>

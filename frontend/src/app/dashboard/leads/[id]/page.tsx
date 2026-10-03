@@ -1182,7 +1182,7 @@ export default function LeadDetailPage() {
               <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{lead.status?.replace(/_/g, ' ') || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Job Title</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Designation of Contact Name</p>
               <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
             </div>
             <div>
@@ -1299,7 +1299,7 @@ export default function LeadDetailPage() {
               />
             </div> */}
             <div>
-              <label className="label">Job Title</label>
+              <label className="label">Designation of Contact Name</label>
               <input
                 className="input"
                 value={editData.contactTitle || ''}
