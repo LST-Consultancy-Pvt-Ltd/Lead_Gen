@@ -50,6 +50,7 @@ const LEADS_CATEGORIES = [
   { key: 'lead_source',               label: 'Lead Source' },
   { key: 'lead_type',                 label: 'Lead Type' },
   { key: 'job_title',                 label: 'Job Title' },
+  { key: 'industry',                  label: 'Industry' },
   { key: 'pipeline_stage',            label: 'Pipeline Stage' },
   { key: 'loss_reason',               label: 'Loss Reason' },
   { key: 'opportunity_business_line', label: 'Opportunity Business Line' },
