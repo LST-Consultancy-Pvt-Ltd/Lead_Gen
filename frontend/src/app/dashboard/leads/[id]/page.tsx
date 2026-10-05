@@ -1524,7 +1524,6 @@ export default function LeadDetailPage() {
                 placeholder="https://..."
               />
             </div>
-<<<<<<< HEAD
             <div>
               <label className="label">Keyword</label>
               <input
@@ -1535,10 +1534,7 @@ export default function LeadDetailPage() {
                 placeholder="e.g. NetSuite, SuiteCommerce"
               />
             </div>
-            <div>
-=======
             <div className="sm:col-span-2">
->>>>>>> prajwal
               <label className="label">Notes</label>
               <LeadNotesEditor
                 original={lead.notes}
