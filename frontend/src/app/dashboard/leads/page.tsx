@@ -11,7 +11,7 @@ import { usePermissions } from '../../../lib/rbac';
 import { usePermissions as useAuthPermissions } from '../../../store/authStore';
 import { useAuthStore } from '../../../store/authStore';
 import { getInitials, downloadBlob, statusColors } from '../../../lib/utils';
-import { Users, Plus, Download, Search, Trash2, Edit2, UserCog, X, Loader2, Clock, CalendarDays, Lock, Upload, CheckCircle2 } from 'lucide-react';
+import { Users, Plus, Download, Search, Trash2, Edit2, Eye, UserCog, X, Loader2, Clock, CalendarDays, Lock, Upload, CheckCircle2 } from 'lucide-react';
 import { isToday, isPast, isTomorrow, format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -486,6 +486,9 @@ export default function LeadsPage() {
                       />
                     </th>
                   )}
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    View | Edit | Delete
+                  </th>
                   <th
                     className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
                     onClick={() => handleSort('industry')}
@@ -552,9 +555,6 @@ export default function LeadsPage() {
                   >
                     Next Follow-up{sortIndicator('followUpDate')}
                   </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -571,6 +571,28 @@ export default function LeadsPage() {
                         />
                       </td>
                     )}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Link href={`/dashboard/leads/${l.id}`} className="btn-ghost text-xs py-1 px-2" title="View" aria-label="View">
+                          <Eye size={12} />
+                        </Link>
+                        {(permissions.canEditAllLeads || (permissions.canEditOwnLeads && l.assignedTo?.id === user?.id)) && (
+                          <Link href={`/dashboard/leads/${l.id}?edit=1`} className="btn-ghost text-xs py-1 px-2" title="Edit" aria-label="Edit">
+                            <Edit2 size={12} />
+                          </Link>
+                        )}
+                        <RoleGuard permission="canDeleteLead">
+                          <button
+                            onClick={() => handleDelete(l.id)}
+                            className="btn-ghost text-xs py-1 px-2 text-slate-400"
+                            title="Delete"
+                            aria-label="Delete"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </RoleGuard>
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <Link href={`/dashboard/leads/${l.id}`} className="flex items-center gap-2.5">
                         <Avatar initials={getInitials(l.companyName || l.contactName || '?')} size="sm" />
@@ -666,27 +688,6 @@ export default function LeadsPage() {
                           </div>
                         );
                       })()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Link href={`/dashboard/leads/${l.id}`} className="btn-ghost text-xs py-1 px-2">
-                          View
-                        </Link>
-                        {(permissions.canEditAllLeads || (permissions.canEditOwnLeads && l.assignedTo?.id === user?.id)) && (
-                          <Link href={`/dashboard/leads/${l.id}?edit=1`} className="btn-ghost text-xs py-1 px-2">
-                            <Edit2 size={12} /> Edit
-                          </Link>
-                        )}
-                        <RoleGuard permission="canDeleteLead">
-                          <button
-                            onClick={() => handleDelete(l.id)}
-                            className="btn-ghost text-xs py-1 px-2 text-slate-400"
-                            title="Delete"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </RoleGuard>
-                      </div>
                     </td>
                   </tr>
                 ))}

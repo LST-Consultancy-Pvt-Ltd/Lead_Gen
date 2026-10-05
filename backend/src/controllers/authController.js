@@ -199,11 +199,11 @@ async function login(req, res) {
     const password = (req.body.password || '').trim();
     const user = await prisma.user.findUnique({ where: { email } });
 
-    if (!user || !user.passwordHash) return error(res, 'Invalid credentials', 401);
+    if (!user || !user.passwordHash) return error(res, 'Invalid email or password', 401);
     if (!user.isActive) return error(res, 'Account disabled', 403);
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) return error(res, 'Invalid credentials', 401);
+    if (!valid) return error(res, 'Invalid email or password', 401);
 
     const { accessToken, refreshToken } = generateTokens(user.id);
     await prisma.user.update({

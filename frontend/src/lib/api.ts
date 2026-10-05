@@ -143,9 +143,15 @@ api.interceptors.response.use(
   (r) => r,
   async (error: AxiosError) => {
     const original = error.config as any;
-    
+
+    // Don't attempt token refresh for auth endpoints — a 401 here means
+    // wrong credentials / expired refresh token, not an expired access token.
+    const isAuthEndpoint = original?.url?.includes('/auth/login') ||
+                          original?.url?.includes('/auth/register') ||
+                          original?.url?.includes('/auth/refresh');
+
     // Handle 401 - Unauthorized (Token expired)
-    if (error.response?.status === 401 && !original._retry) {
+    if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         // Queue requests while refresh is in progress
         return new Promise((resolve, reject) => {

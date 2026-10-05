@@ -73,7 +73,7 @@ const defaultValues: LeadFormData = {
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
-  const { canReassignLead, canManageDropdowns } = usePermissions();
+  const { canReassignLead, canManageDropdowns, isAdmin } = usePermissions();
   const currentUser = useAuthStore((s) => s.user);
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
@@ -441,10 +441,10 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   };
 
   const onSubmit = (formData: any) => {
-    // Filter out empty values; exclude assignedToId when cannot reassign
+    // Filter out empty values; exclude assignedToId for non-admins
     const cleanedData = Object.fromEntries(
       Object.entries(formData).filter(([k, v]) => {
-        if (k === "assignedToId" && !canReassignLead) return false;
+        if (k === "assignedToId" && !isAdmin) return false;
         if (k === "disqualificationReason" && formData.status !== "disqualified") return false;
         return v !== "" && v !== undefined;
       }),
@@ -516,7 +516,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
           </div>
         </div>
 
-        {/* Row 2: Contact Name + Job Title */}
+        {/* Row 2: Contact Name + Designation */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Contact Name <span className="text-red-400">*</span></label>
@@ -524,7 +524,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             {errors.contactName && <p className="text-xs text-red-400 mt-1">{errors.contactName.message}</p>}
           </div>
           <div>
-            <label className="label">Job Title</label>
+            <label className="label">Designation of Contact Name</label>
             <input type="text" {...register("contactTitle")} className="input" placeholder="e.g. VP of Engineering" />
           </div>
         </div>
@@ -594,7 +594,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             />
             {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
           </div>
-          {canReassignLead && (
+          {isAdmin && (
             <div>
               <label className="label">Assign Lead To</label>
               <select {...register("assignedToId")} title="Assign To" className="input">
@@ -605,9 +605,23 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               </select>
             </div>
           )}
+          {!isAdmin && (
+            <div>
+              <label className="label">Lead Created By</label>
+            <input
+              type="text"
+              value={currentUser?.name || ""}
+              disabled
+              readOnly
+              title="Lead Created By"
+              className="input opacity-70 cursor-not-allowed"
+            />
+            </div>
+          )}
         </div>
 
         {/* Lead Created By — read-only, always the logged-in user; server sets this automatically on create */}
+        {isAdmin && (
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Lead Created By</label>
@@ -621,6 +635,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
             />
           </div>
         </div>
+        )}
 
         {/* Company Info */}
         <div className="pt-2 border-t border-slate-200 dark:border-white/10">
@@ -636,9 +651,9 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               value={industry}
               onChange={(value) => setValue("industry", value, { shouldValidate: true })}
               options={industries}
-              onCreateNew={canManageDropdowns ? handleCreateIndustry : undefined}
-              onEdit={canManageDropdowns ? handleEditIndustry : undefined}
-              onDelete={canManageDropdowns ? handleDeleteIndustry : undefined}
+              onCreateNew={isAdmin ? handleCreateIndustry : undefined}
+              onEdit={isAdmin ? handleEditIndustry : undefined}
+              onDelete={isAdmin ? handleDeleteIndustry : undefined}
               placeholder="Select or search industry..."
               error={errors.industry?.message}
             />
