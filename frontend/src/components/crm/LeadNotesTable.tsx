@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 
 /**
@@ -83,7 +83,7 @@ function NotesGrid({ notes }: { notes: LeadNote[] }) {
 }
 
 /**
- * Edit mode: existing notes are shown read-only (never overwritten); "Add new line"
+ * Edit mode: existing notes are shown read-only (never overwritten); "Add New Note"
  * adds an editable row. Every change reports the full serialized string via onChange,
  * so the parent form keeps sending a single `notes` field. Empty new lines are dropped.
  */
@@ -93,6 +93,19 @@ export function LeadNotesEditor({
   const existing = useMemo(() => parseNotes(original), [original]);
   const shown = useMemo(() => parseNotes(original, fallback), [original, fallback?.date, fallback?.author]);
   const [drafts, setDrafts] = useState<LeadNote[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const newNoteRef = useRef<HTMLTextAreaElement>(null);
+  const prevDrafts = useRef(0);
+
+  // When a note row is added, scroll the table to it and focus its textarea.
+  useEffect(() => {
+    if (drafts.length > prevDrafts.current) {
+      const box = scrollRef.current;
+      if (box) box.scrollTop = box.scrollHeight;
+      newNoteRef.current?.focus({ preventScroll: true });
+    }
+    prevDrafts.current = drafts.length;
+  }, [drafts.length]);
 
   const update = (next: LeadNote[]) => {
     setDrafts(next);
@@ -102,7 +115,7 @@ export function LeadNotesEditor({
   return (
     <div className="space-y-2">
       <div className="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden">
-        <div className="max-h-56 overflow-y-auto">
+        <div ref={scrollRef} className="max-h-56 overflow-y-auto">
           <table className="w-full">
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800/80">
               <tr>
@@ -123,6 +136,7 @@ export function LeadNotesEditor({
                   <td className="py-2 px-3 text-xs text-slate-500">{n.author || '—'}</td>
                   <td className="py-1.5 px-3">
                     <textarea
+                      ref={i === drafts.length - 1 ? newNoteRef : undefined}
                       className="input text-sm min-h-[56px] resize-y w-full"
                       placeholder="Type a new note..."
                       value={n.text}
@@ -143,7 +157,7 @@ export function LeadNotesEditor({
         onClick={() => update([...drafts, { date: new Date().toISOString(), author, text: '' }])}
         className="btn-ghost text-xs py-1 px-2 inline-flex items-center gap-1"
       >
-        <Plus size={12} /> Add new line
+        <Plus size={12} /> Add New Note
       </button>
     </div>
   );
