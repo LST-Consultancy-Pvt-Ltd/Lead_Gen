@@ -11,6 +11,7 @@ const config = require('../config');
 const emailService = require('../services/emailService');
 const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
+const { getOwnedUserIds } = require('./teamController');
 
 function generateTokens(userId) {
   const accessToken = jwt.sign({ userId }, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
@@ -50,7 +51,16 @@ async function sendInvitation(req, res) {
     }
 
     // Determine managerId
-    const managerId = caller.role === 'manager' ? caller.id : (req.body.managerId || null);
+    let managerId = caller.role === 'manager' ? caller.id : (req.body.managerId || null);
+    if (role !== 'sales_user') managerId = null;
+    if (managerId && caller.role !== 'manager') {
+      // The chosen manager must be an active manager inside the caller's own team
+      const owned = await getOwnedUserIds(caller);
+      const mgr = owned.has(managerId) && await prisma.user.findFirst({
+        where: { id: managerId, organizationId: caller.organizationId, role: 'manager' },
+      });
+      if (!mgr) return error(res, 'Selected manager is not in your team', 403);
+    }
 
     // Generate fresh secure token
     const token = crypto.randomBytes(32).toString('hex');
@@ -128,21 +138,25 @@ async function acceptInvitation(req, res) {
       return error(res, 'Invitation is invalid or expired', 400);
     }
 
-    const { email, role, organizationId, managerId } = invitation;
+    const { email, role, organizationId, managerId, invitedById } = invitation;
     const passwordHash = await bcrypt.hash(password, 12);
 
     let user = await prisma.user.findUnique({ where: { email } });
+
+    if (user && user.organizationId !== organizationId) {
+      return error(res, 'This email is already registered with another organization', 409);
+    }
 
     if (user) {
       // Reactivate existing user account
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { organizationId, role, managerId, isActive: true, passwordHash },
+        data: { organizationId, role, managerId, invitedById, isActive: true, passwordHash },
       });
     } else {
       // Create new user
       user = await prisma.user.create({
-        data: { name, email, passwordHash, role, organizationId, managerId, isActive: true },
+        data: { name, email, passwordHash, role, organizationId, managerId, invitedById, isActive: true },
       });
     }
 
@@ -189,10 +203,14 @@ async function acceptInvitation(req, res) {
 async function getInvitations(req, res) {
   try {
     const caller = req.user;
+    if (caller.role === 'sales_user') return error(res, 'Insufficient permissions', 403);
     const where = { organizationId: caller.organizationId, status: 'pending' };
 
     if (caller.role === 'manager') {
       where.invitedById = caller.id;
+    } else {
+      // Admins only see invitations sent by themselves or their own team
+      where.invitedById = { in: [...(await getOwnedUserIds(caller))] };
     }
 
     const invitations = await prisma.invitation.findMany({
@@ -230,6 +248,9 @@ async function revokeInvitation(req, res) {
     }
     if (caller.role === 'sales_user') {
       return error(res, 'Insufficient permissions', 403);
+    }
+    if (caller.role !== 'manager' && !(await getOwnedUserIds(caller)).has(invitation.invitedById)) {
+      return error(res, 'Invitation not found', 404);
     }
 
     await prisma.invitation.update({

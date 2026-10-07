@@ -5,29 +5,108 @@ const { success, error } = require('../utils/response');
 const { createNotification } = require('../utils/notificationService');
 const dashboardEvents = require('../utils/dashboardEvents');
 
+const ADMIN_ROLES = ['org_admin', 'super_admin'];
+
+// Ids of every user in the caller's own team: the caller plus everyone reachable
+// through invitedById / managerId links. Other admins' teams are never included.
+async function getOwnedUserIds(caller) {
+  const users = await prisma.user.findMany({
+    where: { organizationId: caller.organizationId },
+    select: { id: true, email: true, role: true, invitedById: true, managerId: true },
+  });
+  // Legacy users have no invitedById; recover it from their accepted invitation
+  const accepted = await prisma.invitation.findMany({
+    where: { organizationId: caller.organizationId, status: 'accepted' },
+    select: { email: true, invitedById: true },
+  });
+  const inviterByEmail = new Map(accepted.map((i) => [i.email.toLowerCase(), i.invitedById]));
+  for (const u of users) {
+    if (!u.invitedById) u.invitedById = inviterByEmail.get((u.email || '').toLowerCase()) || null;
+  }
+  const children = new Map();
+  for (const u of users) {
+    for (const parent of new Set([u.invitedById, u.managerId])) {
+      if (!parent || parent === u.id) continue;
+      if (!children.has(parent)) children.set(parent, []);
+      children.get(parent).push(u.id);
+    }
+  }
+  const owned = new Set([caller.id]);
+  const queue = [caller.id];
+  while (queue.length) {
+    for (const c of children.get(queue.pop()) || []) {
+      if (!owned.has(c)) { owned.add(c); queue.push(c); }
+    }
+  }
+  return owned;
+}
+
+// Reporting line above a non-admin user: manager (or inviter) all the way up to the main admin.
+async function getAncestorIds(caller) {
+  const users = await prisma.user.findMany({
+    where: { organizationId: caller.organizationId },
+    select: { id: true, email: true, role: true, invitedById: true, managerId: true },
+  });
+  const accepted = await prisma.invitation.findMany({
+    where: { organizationId: caller.organizationId, status: 'accepted' },
+    select: { email: true, invitedById: true },
+  });
+  const inviterByEmail = new Map(accepted.map((i) => [i.email.toLowerCase(), i.invitedById]));
+  const byId = new Map(users.map((u) => [u.id, u]));
+  const chain = new Set();
+  let cur = byId.get(caller.id);
+  while (cur) {
+    const pid = cur.managerId || cur.invitedById || inviterByEmail.get((cur.email || '').toLowerCase());
+    const parent = pid && pid !== cur.id ? byId.get(pid) : null;
+    if (!parent || chain.has(parent.id)) break;
+    chain.add(parent.id);
+    cur = parent;
+  }
+  return chain;
+}
+
+// Resolves a target user the caller is allowed to act on (own org + own team).
+async function findManageableUser(caller, id, extraWhere = {}) {
+  const target = await prisma.user.findFirst({
+    where: { id, organizationId: caller.organizationId, ...extraWhere },
+  });
+  if (!target) return null;
+  if (ADMIN_ROLES.includes(caller.role) && target.id !== caller.id) {
+    const owned = await getOwnedUserIds(caller);
+    if (!owned.has(target.id)) return null;
+  }
+  return target;
+}
+
 async function getTeam(req, res) {
   try {
     const caller = req.user;
-    let where = { organizationId: caller.organizationId };
-
-    if (caller.role === 'manager') {
-      // Managers see only their direct reports + themselves
-      where = { organizationId: caller.organizationId, OR: [{ managerId: caller.id }, { id: caller.id }] };
-    } else if (caller.role === 'sales_user') {
-      // Sales users see only themselves
-      where = { id: caller.id };
+    // Everyone sees only their own line: the reporting chain above them (Admin -> Manager)
+    // plus themselves and everyone below. No peers (other managers / executives).
+    const ids = await getOwnedUserIds(caller);
+    if (!ADMIN_ROLES.includes(caller.role)) {
+      (await getAncestorIds(caller)).forEach((id) => ids.add(id));
     }
+    const where = { organizationId: caller.organizationId, id: { in: [...ids] } };
 
     const users = await prisma.user.findMany({
       where,
       select: {
         id: true, name: true, email: true, role: true, isActive: true,
-        lastLoginAt: true, avatarUrl: true, createdAt: true, managerId: true,
+        lastLoginAt: true, avatarUrl: true, createdAt: true, managerId: true, invitedById: true,
         _count: { select: { assignedLeads: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
-    return success(res, users);
+    // Resolve legacy rows missing invitedById so the UI can build the hierarchy
+    const accepted = await prisma.invitation.findMany({
+      where: { organizationId: caller.organizationId, status: 'accepted' },
+      select: { email: true, invitedById: true },
+    });
+    const inviterByEmail = new Map(accepted.map((i) => [i.email.toLowerCase(), i.invitedById]));
+    return success(res, users.map((u) => ({
+      ...u, invitedById: u.invitedById || inviterByEmail.get(u.email.toLowerCase()) || null,
+    })));
   } catch (err) {
     return error(res, 'Failed to fetch team', 500);
   }
@@ -43,7 +122,7 @@ async function inviteUser(req, res) {
     const passwordHash = await bcrypt.hash(tempPassword, 12);
 
     const user = await prisma.user.create({
-      data: { name, email, passwordHash, role: role || 'sales_user', organizationId: req.user.organizationId },
+      data: { name, email, passwordHash, role: role || 'sales_user', organizationId: req.user.organizationId, invitedById: req.user.id },
     });
 
     // In production: send invite email here
@@ -59,9 +138,7 @@ async function inviteUser(req, res) {
 async function updateUser(req, res) {
   try {
     const { role, isActive, name } = req.body;
-    const target = await prisma.user.findFirst({
-      where: { id: req.params.id, organizationId: req.user.organizationId },
-    });
+    const target = await findManageableUser(req.user, req.params.id);
     if (!target) return error(res, 'User not found', 404);
     if (target.id === req.user.id && isActive === false) return error(res, 'Cannot disable your own account', 422);
 
@@ -90,7 +167,7 @@ async function updateUser(req, res) {
 
 async function deleteUser(req, res) {
   try {
-    const target = await prisma.user.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const target = await findManageableUser(req.user, req.params.id);
     if (!target) return error(res, 'User not found', 404);
     if (target.id === req.user.id) return error(res, 'Cannot delete your own account', 422);
     const user = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: false }, select: { id: true, isActive: true } });
@@ -102,7 +179,7 @@ async function deleteUser(req, res) {
 
 async function activateUser(req, res) {
   try {
-    const target = await prisma.user.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const target = await findManageableUser(req.user, req.params.id);
     if (!target) return error(res, 'User not found', 404);
     const user = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: true }, select: { id: true, isActive: true } });
     return success(res, user, 'User activated');
@@ -121,10 +198,10 @@ async function bulkReassignLeads(req, res) {
 
     const orgId = req.user.organizationId;
 
-    // Verify both users belong to the organization
+    // Verify both users belong to the caller's own team
     const [fromUser, toUser] = await Promise.all([
-      prisma.user.findFirst({ where: { id: fromUserId, organizationId: orgId }, select: { id: true, name: true } }),
-      prisma.user.findFirst({ where: { id: toUserId, organizationId: orgId, isActive: true }, select: { id: true, name: true } }),
+      findManageableUser(req.user, fromUserId),
+      findManageableUser(req.user, toUserId, { isActive: true }),
     ]);
     if (!fromUser) return error(res, 'Source user not found in organization', 404);
     if (!toUser) return error(res, 'Target user not found or inactive in organization', 404);
@@ -164,4 +241,4 @@ async function bulkReassignLeads(req, res) {
 }
 
 module.exports = {
-  activateUser, getTeam, inviteUser, updateUser, deleteUser, bulkReassignLeads };
+  activateUser, getOwnedUserIds, getTeam, inviteUser, updateUser, deleteUser, bulkReassignLeads };

@@ -27,7 +27,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
     // { href: '/dashboard/intent-signals', label: 'Intent Signals', icon: Zap,             show: canViewTeam },
     // { href: '/dashboard/campaigns',      label: 'Campaigns',      icon: Megaphone,       show: isAdmin },
     // { href: '/dashboard/analytics',      label: 'Analytics',      icon: BarChart3,       show: canViewTeam },
-    { href: '/dashboard/team',           label: 'Team',           icon: UserCog,         show: canViewTeam },
+    { href: '/dashboard/team',           label: 'Team',           icon: UserCog,         show: true },
     { href: '/dashboard/settings',       label: 'Settings',       icon: Settings,        show: isAdmin },
     // { href: '/dashboard/integrations',   label: 'Integrations',   icon: TrendingUp,      show: isAdmin },
   ].filter(item => item.show);

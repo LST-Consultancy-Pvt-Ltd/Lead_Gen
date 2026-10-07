@@ -21,17 +21,9 @@ export default function TeamPage() {
   const [expandedAdmins, setExpandedAdmins] = useState<Record<string, boolean>>({});
   const [expandedManagers, setExpandedManagers] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    if (permissions.isSalesUser) {
-      toast.error('You do not have access to this page');
-      router.replace('/dashboard');
-    }
-  }, [permissions.isSalesUser, router]);
-
   const { data, isLoading } = useQuery({
     queryKey: ['team'],
     queryFn: () => teamApi.list().then(r => ({ items: Array.isArray(r.data.data) ? r.data.data : r.data.data?.items ?? [] })),
-    enabled: !permissions.isSalesUser,
   });
 
   const { data: invitationsData } = useQuery({
@@ -66,8 +58,6 @@ export default function TeamPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['team'] }),
   });
 
-  if (permissions.isSalesUser) return null;
-
   const members: any[] = data?.items ?? [];
   const invitations: any[] = Array.isArray(invitationsData) ? invitationsData : [];
   const isReadOnly = !permissions.canManageUsers;
@@ -76,6 +66,46 @@ export default function TeamPage() {
   const admins = members.filter((m: any) => m.role === 'org_admin' || m.role === 'super_admin');
   const managers = members.filter((m: any) => m.role === 'manager');
   const salesUsers = members.filter((m: any) => m.role === 'sales_user');
+
+  // Hierarchy from actual relationships: parent = manager, else inviter. Admins are roots.
+  const memberById = new Map(members.map((m: any) => [m.id, m]));
+  const isAdminRole = (m: any) => m.role === 'org_admin' || m.role === 'super_admin';
+  const parentOf = (m: any) => {
+    for (const pid of [m.managerId, m.invitedById]) {
+      if (pid && pid !== m.id && memberById.has(pid)) return pid;
+    }
+    return null;
+  };
+  // Managers/executives first, then sub-admins (each carrying their own team)
+  const childrenOf = (id: string) =>
+    members.filter((m: any) => parentOf(m) === id)
+      .sort((x: any, y: any) => Number(isAdminRole(x)) - Number(isAdminRole(y)));
+  const toggleNode = (id: string) => setExpandedAdmins(prev => ({ ...prev, [id]: !(prev[id] ?? true) }));
+  const roleBadge = (m: any) =>
+    isAdminRole(m) ? <Badge color="green" className="ml-auto">Admin</Badge>
+    : m.role === 'manager' ? <Badge color="blue" className="ml-auto">Sales Manager</Badge>
+    : <Badge color="teal" className="ml-auto">Sales Executive</Badge>;
+  const renderNode = (m: any, depth: number): any => {
+    const kids = childrenOf(m.id);
+    const open = expandedAdmins[m.id] ?? true;
+    return (
+      <div key={m.id} className={depth ? 'ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4' : ''}>
+        <button
+          className="w-full flex items-center gap-2 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.03] rounded-lg px-2 transition-colors"
+          onClick={() => kids.length && toggleNode(m.id)}
+        >
+          {kids.length === 0 ? <span className="w-3.5" /> : open ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+          <Avatar initials={getInitials(m.name)} size="sm" />
+          <div className="text-left">
+            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{m.name}</span>
+            <span className="text-xs text-slate-500 ml-2">{m.email}</span>
+          </div>
+          {roleBadge(m)}
+        </button>
+        {open && kids.map((k: any) => renderNode(k, depth + 1))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -93,74 +123,15 @@ export default function TeamPage() {
         )}
       </div>
 
-      {/* Team Structure — admin only */}
-      {authPerms.canManageUsers && members.length > 0 && (
+      {/* Team Structure — visible to every role (own team only). Built from real parent links (managerId / invitedById), not roles */}
+      {members.length > 0 && (
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <Users size={15} className="text-blue-400" />
             <h2 className="section-title">Team Structure</h2>
           </div>
           <div className="space-y-2">
-            {admins.map((a: any) => (
-              <div key={a.id}>
-                <button
-                  className="w-full flex items-center gap-2 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.03] rounded-lg px-2 transition-colors"
-                  onClick={() => setExpandedAdmins(prev => ({ ...prev, [a.id]: !prev[a.id] }))}
-                >
-                  {expandedAdmins[a.id] ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
-                  <Avatar initials={getInitials(a.name)} size="sm" />
-                  <div className="text-left">
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{a.name}</span>
-                    <span className="text-xs text-slate-500 ml-2">{a.email}</span>
-                  </div>
-                  <Badge color="green" className="ml-auto">Admin</Badge>
-                </button>
-                {expandedAdmins[a.id] && managers.map((mgr: any) => (
-                  <div key={mgr.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
-                    <button
-                      className="w-full flex items-center gap-2 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.03] rounded-lg px-2 transition-colors"
-                      onClick={() => setExpandedManagers(prev => ({ ...prev, [mgr.id]: !prev[mgr.id] }))}
-                    >
-                      {expandedManagers[mgr.id] ? <ChevronDown size={12} className="text-slate-400" /> : <ChevronRight size={12} className="text-slate-400" />}
-                      <Avatar initials={getInitials(mgr.name)} size="sm" />
-                      <div className="text-left">
-                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{mgr.name}</span>
-                        <span className="text-xs text-slate-500 ml-2">{mgr.email}</span>
-                      </div>
-                      <Badge color="blue" className="ml-auto">Sales Manager</Badge>
-                    </button>
-                    {expandedManagers[mgr.id] && salesUsers.filter((s: any) => s.managerId === mgr.id).map((su: any) => (
-                      <div key={su.id} className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4">
-                        <div className="flex items-center gap-2 py-1.5 px-2">
-                          <Avatar initials={getInitials(su.name)} size="sm" />
-                          <div>
-                            <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
-                            <span className="text-xs text-slate-500 ml-2">{su.email}</span>
-                          </div>
-                          <Badge color="teal" className="ml-auto">Sales Executive</Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-                {/* Unassigned sales users shown directly under admin */}
-                {expandedAdmins[a.id] && salesUsers.filter((s: any) => !s.managerId).length > 0 && (
-                  <div className="ml-6 border-l border-slate-200 dark:border-white/[0.06] pl-4 mt-1">
-                    <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 py-1">Unassigned</div>
-                    {salesUsers.filter((s: any) => !s.managerId).map((su: any) => (
-                      <div key={su.id} className="flex items-center gap-2 py-1.5 px-2">
-                        <Avatar initials={getInitials(su.name)} size="sm" />
-                        <div>
-                          <span className="text-sm text-slate-600 dark:text-slate-300">{su.name}</span>
-                          <span className="text-xs text-slate-500 ml-2">{su.email}</span>
-                        </div>
-                        <Badge color="teal" className="ml-auto">Sales Executive</Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+            {members.filter((m: any) => parentOf(m) === null).map((m: any) => renderNode(m, 0))}
           </div>
         </div>
       )}
