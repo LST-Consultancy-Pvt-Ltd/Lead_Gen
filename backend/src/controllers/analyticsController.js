@@ -730,10 +730,13 @@ async function getCEODashboard(req, res) {
       );
     }
 
-    const leadSourceBreakdown = leadSourceGroups.map((g) => ({
-      type: g.source || 'manual',
-      count: g._count._all,
-    }));
+    // Leads with a null source and leads with source 'manual' are separate groups; merge them
+    const sourceCounts = new Map();
+    for (const g of leadSourceGroups) {
+      const type = g.source || 'manual';
+      sourceCounts.set(type, (sourceCounts.get(type) || 0) + g._count._all);
+    }
+    const leadSourceBreakdown = [...sourceCounts].map(([type, count]) => ({ type, count }));
 
     return success(res, {
       leadsByExecutive,
