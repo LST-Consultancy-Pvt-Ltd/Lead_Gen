@@ -60,22 +60,125 @@ const ownerOrManagerAdmin = (getOwnerIdFn) => {
 };
 
 /**
+ * buildLeadScope(user)
+ * Prisma `where` fragment describing which leads a user may see/search/touch.
+ * Always pinned to the user's organization. Callers must combine it with any
+ * search/filter conditions via AND (never by spreading, which lets an `OR`
+ * search overwrite the scope):
+ *   org_admin / super_admin → every lead in their organization
+ *   manager                 → leads they created OR that are assigned to them
+ *   sales_user              → only leads currently assigned to them
+ */
+function buildLeadScope(user) {
+  const organizationId = user.organizationId;
+  if (ADMIN_ROLES.includes(user.role)) return { organizationId };
+  if (user.role === 'manager') {
+    return {
+      organizationId,
+      OR: [{ createdById: user.id }, { assignedToId: user.id }],
+    };
+  }
+  return { organizationId, assignedToId: user.id };
+}
+
+/** scope AND extra conditions, so extra can never widen the scope */
+function andScope(scope, extra) {
+  return extra && Object.keys(extra).length ? { AND: [scope, extra] } : scope;
+}
+
+function scopeLeadWhere(user, extra) {
+  return andScope(buildLeadScope(user), extra);
+}
+
+/**
+ * Data that hangs off a lead follows the lead's scope. Records with no lead keep
+ * an owner-based rule (admin: whole org, manager: own/created, rep: own).
+ */
+const unlinkedOwnerOr = (user, ownerField) =>
+  user.role === 'manager'
+    ? { OR: [{ [ownerField]: user.id }, { createdById: user.id }] }
+    : { [ownerField]: user.id };
+
+/** Opportunities: visible only when the linked lead is accessible. */
+function buildOpportunityScope(user) {
+  return { organizationId: user.organizationId, lead: buildLeadScope(user) };
+}
+
+/** Activities: follow the linked lead (directly or via the opportunity's lead). */
+function buildActivityScope(user) {
+  const leadScope = buildLeadScope(user);
+  return {
+    organizationId: user.organizationId,
+    OR: [
+      { lead: leadScope },
+      { leadId: null, opportunity: { lead: leadScope } },
+      { leadId: null, opportunityId: null, ...(ADMIN_ROLES.includes(user.role) ? {} : { userId: user.id }) },
+    ],
+  };
+}
+
+/** Contacts: lead-linked contacts follow the lead; unlinked ones are owner-based. */
+function buildContactScope(user) {
+  const organizationId = user.organizationId;
+  if (ADMIN_ROLES.includes(user.role)) return { organizationId };
+  return {
+    organizationId,
+    OR: [
+      { lead: buildLeadScope(user) },
+      { leadId: null, ...unlinkedOwnerOr(user, 'ownerId') },
+    ],
+  };
+}
+
+/** Accounts: visible through an accessible lead, or when owned/created by the user. */
+function buildAccountScope(user) {
+  const organizationId = user.organizationId;
+  if (ADMIN_ROLES.includes(user.role)) return { organizationId };
+  return {
+    organizationId,
+    OR: [
+      { leads: { some: buildLeadScope(user) } },
+      unlinkedOwnerOr(user, 'accountOwnerId'),
+    ],
+  };
+}
+
+/** In-memory equivalent of buildLeadScope for an already-loaded lead. */
+function canAccessLead(user, lead) {
+  if (!user || !lead || lead.organizationId !== user.organizationId) return false;
+  if (ADMIN_ROLES.includes(user.role)) return true;
+  if (user.role === 'manager') {
+    return lead.createdById === user.id || lead.assignedToId === user.id;
+  }
+  return lead.assignedToId === user.id;
+}
+
+/**
+ * canAssignLeadTo(user, target)
+ * target: { id, organizationId, managerId, isActive }
+ *   admin   → any active user in the same organization
+ *   manager → an active member of their own team (managerId = manager); not themselves
+ *   others  → never
+ */
+function canAssignLeadTo(user, target) {
+  if (!user || !target || target.isActive === false) return false;
+  if (target.organizationId !== user.organizationId) return false;
+  if (ADMIN_ROLES.includes(user.role)) return true;
+  if (user.role === 'manager') return target.id !== user.id && target.managerId === user.id;
+  return false;
+}
+
+/**
  * Permission helper — pure functions used inside controllers/services
  */
 const can = {
   viewAllLeads: (user) => MANAGER_AND_ABOVE.includes(user.role),
 
-  viewLead: (user, lead) => {
-    if (MANAGER_AND_ABOVE.includes(user.role)) return true;
-    return lead.assignedToId === user.id;
-  },
+  viewLead: (user, lead) => canAccessLead(user, lead),
 
   createLead: () => true,
 
-  updateLead: (user, lead) => {
-    if (MANAGER_AND_ABOVE.includes(user.role)) return true;
-    return lead.assignedToId === user.id;
-  },
+  updateLead: (user, lead) => canAccessLead(user, lead),
 
   deleteLead: (user) => ADMIN_ROLES.includes(user.role),
 
@@ -83,10 +186,7 @@ const can = {
 
   viewAllActivities: (user) => MANAGER_AND_ABOVE.includes(user.role),
 
-  createActivity: (user, lead) => {
-    if (MANAGER_AND_ABOVE.includes(user.role)) return true;
-    return lead.assignedToId === user.id;
-  },
+  createActivity: (user, lead) => canAccessLead(user, lead),
 
   manageUsers: (user) => ADMIN_ROLES.includes(user.role),
 
@@ -227,4 +327,13 @@ module.exports = {
   MANAGER_AND_ABOVE,
   buildOrganizationFilter,
   getTeamMemberIds,
+  buildLeadScope,
+  andScope,
+  scopeLeadWhere,
+  buildOpportunityScope,
+  buildActivityScope,
+  buildContactScope,
+  buildAccountScope,
+  canAccessLead,
+  canAssignLeadTo,
 };

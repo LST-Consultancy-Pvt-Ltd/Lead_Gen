@@ -4,7 +4,7 @@
  */
 
 const prisma = require('../utils/prisma');
-const { buildOrganizationFilter } = require('../middleware/rbac');
+const { buildAccountScope, buildContactScope, buildOpportunityScope, andScope } = require('../middleware/rbac');
 const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
 
@@ -13,20 +13,17 @@ async function getAccounts(req, res) {
     const { page = 1, limit = 20, search, customerType } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const baseFilter = await buildOrganizationFilter(req.user);
-    // For accounts, ownership is via accountOwnerId
-    const where = { organizationId: baseFilter.organizationId };
-    if (baseFilter.assignedToId) {
-      where.accountOwnerId = baseFilter.assignedToId;
-    }
-    if (customerType) where.customerType = customerType;
+    // Accounts are visible through an accessible lead (or ownership); filters/search are ANDed
+    const filters = {};
+    if (customerType) filters.customerType = customerType;
     if (search) {
-      where.OR = [
+      filters.OR = [
         { companyName: { contains: search, mode: 'insensitive' } },
         { industry: { contains: search, mode: 'insensitive' } },
         { website: { contains: search, mode: 'insensitive' } },
       ];
     }
+    const where = andScope(buildAccountScope(req.user), filters);
 
     const [accounts, total] = await Promise.all([
       prisma.account.findMany({
@@ -56,20 +53,16 @@ async function getAccounts(req, res) {
 async function getAccountById(req, res) {
   try {
     const account = await prisma.account.findFirst({
-      where: { id: req.params.id, organizationId: req.user.organizationId },
+      where: andScope(buildAccountScope(req.user), { id: req.params.id }),
       include: {
         accountOwner: { select: { id: true, name: true, email: true } },
-        contacts: true,
-        opportunities: { include: { salesOwner: { select: { id: true, name: true } } } },
+        // nested records only if their own lead is accessible
+        contacts: { where: buildContactScope(req.user) },
+        opportunities: { where: buildOpportunityScope(req.user), include: { salesOwner: { select: { id: true, name: true } } } },
       },
     });
 
     if (!account) return error(res, 'Account not found', 404);
-
-    // Scope check for non-admin roles
-    if (req.user.role === 'sales_user' && account.accountOwnerId !== req.user.id) {
-      return error(res, 'Access denied', 403);
-    }
 
     return success(res, account);
   } catch (err) {
@@ -113,7 +106,7 @@ async function createAccount(req, res) {
 async function updateAccount(req, res) {
   try {
     const account = await prisma.account.findFirst({
-      where: { id: req.params.id, organizationId: req.user.organizationId },
+      where: andScope(buildAccountScope(req.user), { id: req.params.id }),
     });
     if (!account) return error(res, 'Account not found', 404);
 

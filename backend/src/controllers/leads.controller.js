@@ -130,10 +130,7 @@ async function updateLead(req, res) {
       );
     }
 
-    // Log assignment change if assignedToId was updated
-    if (req.body.assignedToId && req.body.assignedToId !== currentLead.lead.assignedToId) {
-      await activityService.logLeadAssigned(result.lead, req.user, req.body.assignedToId);
-    }
+    // (assignment changes are logged to the Activity Timeline by leadsService)
 
     // Log general update
     const changedFields = Object.keys(req.body);
@@ -261,7 +258,7 @@ async function reassignLead(req, res) {
       return error(res, result.message, result.statusCode || 400);
     }
 
-    await activityService.logLeadAssigned(result.lead, req.user, assignedToId).catch(() => {});
+    // (the Activity Timeline entry is written by leadsService.reassignLead)
 
     logger.info('Lead reassigned', { leadId, assignedToId, byUserId: req.user.id });
     return success(res, result.lead, 'Lead reassigned successfully');

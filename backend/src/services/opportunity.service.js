@@ -4,7 +4,7 @@
  */
 
 const prisma = require('../utils/prisma');
-const { MANAGER_AND_ABOVE, buildOrganizationFilter } = require('../middleware/rbac');
+const { buildOpportunityScope, andScope, scopeLeadWhere } = require('../middleware/rbac');
 const { createBulkNotifications } = require('../utils/notificationService');
 const { logAudit } = require('../utils/auditLogger');
 const dashboardEvents = require('../utils/dashboardEvents');
@@ -24,9 +24,22 @@ const STAGE_PROBABILITY = {
 };
 
 class OpportunityService {
-  _canAccess(user, opportunity) {
-    if (MANAGER_AND_ABOVE.includes(user.role)) return true;
-    return opportunity.assignedToId === user.id;
+  /** Opportunity by ID, only if its linked lead is accessible to the user (org + role scope). */
+  _findAccessible(id, user, extra = {}) {
+    return prisma.opportunity.findFirst({
+      where: andScope(buildOpportunityScope(user), { id }),
+      ...extra,
+    });
+  }
+
+  /** Assignee must be an active user of the caller's own organization. */
+  async _validAssigneeId(assignedToId, user) {
+    if (!assignedToId) return null;
+    const target = await prisma.user.findFirst({
+      where: { id: assignedToId, organizationId: user.organizationId, isActive: true },
+      select: { id: true },
+    });
+    return target ? target.id : null;
   }
 
   async _generateOpportunityId() {
@@ -43,23 +56,13 @@ class OpportunityService {
     return `OPP-${String(nextNum).padStart(5, '0')}`;
   }
 
-  _buildWhere(user) {
-    const where = { organizationId: user.organizationId };
-    if (user.role === 'sales_user') {
-      where.OR = [
-        { assignedToId: user.id },
-        { lead: { assignedToId: user.id } },
-      ];
-    }
-    return where;
-  }
-
   async getAll(user, queryParams = {}) {
     const { page = 1, limit = 20, stage, leadId } = queryParams;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const where = this._buildWhere(user);
-    if (stage) where.stage = stage;
-    if (leadId) where.leadId = leadId;
+    const filters = {};
+    if (stage) filters.stage = stage;
+    if (leadId) filters.leadId = leadId;
+    const where = andScope(buildOpportunityScope(user), filters);
 
     const [opportunities, total] = await Promise.all([
       prisma.opportunity.findMany({
@@ -90,8 +93,7 @@ class OpportunityService {
   }
 
   async getById(id, user) {
-    const opportunity = await prisma.opportunity.findFirst({
-      where: { id, organizationId: user.organizationId },
+    const opportunity = await this._findAccessible(id, user, {
       include: {
         lead: { select: { id: true, companyName: true, contactName: true, contactEmail: true, contactPhone: true } },
         assignedTo: { select: { id: true, name: true, email: true } },
@@ -101,9 +103,6 @@ class OpportunityService {
       },
     });
     if (!opportunity) return { success: false, message: 'Opportunity not found', statusCode: 404 };
-    if (!this._canAccess(user, opportunity)) {
-      return { success: false, message: 'You do not have access to this opportunity', statusCode: 403 };
-    }
     return { success: true, opportunity };
   }
 
@@ -112,7 +111,7 @@ class OpportunityService {
     let lead = null;
     if (data.leadId) {
       lead = await prisma.lead.findFirst({
-        where: { id: data.leadId, organizationId: user.organizationId },
+        where: scopeLeadWhere(user, { id: data.leadId }),
         include: { leadContacts: { take: 1, select: { id: true } } },
       });
       if (!lead) return { success: false, message: 'Lead not found', statusCode: 404 };
@@ -153,7 +152,7 @@ class OpportunityService {
         contactId,
         organizationId: user.organizationId,
         createdById: user.id,
-        assignedToId: user.role === 'sales_user' ? user.id : (data.assignedToId || null),
+        assignedToId: user.role === 'sales_user' ? user.id : await this._validAssigneeId(data.assignedToId, user),
       },
       include: {
         lead: { select: { id: true, companyName: true, contactName: true } },
@@ -167,13 +166,8 @@ class OpportunityService {
   }
 
   async update(id, data, user) {
-    const existing = await prisma.opportunity.findFirst({
-      where: { id, organizationId: user.organizationId },
-    });
+    const existing = await this._findAccessible(id, user);
     if (!existing) return { success: false, message: 'Opportunity not found', statusCode: 404 };
-    if (!this._canAccess(user, existing)) {
-      return { success: false, message: 'You do not have access to this opportunity', statusCode: 403 };
-    }
 
     // No stage progression restrictions — any stage change is allowed
 
@@ -185,6 +179,20 @@ class OpportunityService {
     delete updateData.organizationId;
     delete updateData.createdById;
     delete updateData.id;
+
+    // Re-pointing at another lead is only allowed to a lead the user can access
+    if (updateData.leadId && updateData.leadId !== existing.leadId) {
+      const target = await prisma.lead.findFirst({
+        where: scopeLeadWhere(user, { id: updateData.leadId }),
+        select: { id: true },
+      });
+      if (!target) delete updateData.leadId;
+    }
+    // Assignee must belong to the caller's organization
+    if (updateData.assignedToId) {
+      updateData.assignedToId = await this._validAssigneeId(updateData.assignedToId, user) || undefined;
+      if (!updateData.assignedToId) delete updateData.assignedToId;
+    }
 
     // Normalise date-only strings to full ISO DateTime (Prisma requires it)
     if (updateData.expectedCloseDate) {
@@ -271,9 +279,7 @@ class OpportunityService {
   }
 
   async delete(id, user) {
-    const existing = await prisma.opportunity.findFirst({
-      where: { id, organizationId: user.organizationId },
-    });
+    const existing = await this._findAccessible(id, user);
     if (!existing) return { success: false, message: 'Opportunity not found', statusCode: 404 };
 
     if (user.role === 'sales_user' && existing.assignedToId !== user.id) {
@@ -291,7 +297,7 @@ class OpportunityService {
    */
   async convertLeadToOpportunity(leadId, user) {
     const lead = await prisma.lead.findFirst({
-      where: { id: leadId, organizationId: user.organizationId },
+      where: scopeLeadWhere(user, { id: leadId }),
     });
     if (!lead) return { success: false, message: 'Lead not found', statusCode: 404 };
 

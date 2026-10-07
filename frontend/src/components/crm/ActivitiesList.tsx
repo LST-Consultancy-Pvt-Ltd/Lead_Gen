@@ -363,9 +363,10 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/[0.06]">
+        // Show ~7 rows; anything beyond scrolls inside the table (header stays visible)
+        <div className={`overflow-x-auto rounded-xl border border-slate-200 dark:border-white/[0.06] ${activities.length > 7 ? 'max-h-[19rem] overflow-y-auto' : ''}`}>
           <table className="w-full text-xs border-collapse">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900">
               <tr className="border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-slate-800/30">
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Type</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Date</th>

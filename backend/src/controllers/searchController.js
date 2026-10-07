@@ -12,7 +12,7 @@
 
 const prisma = require('../utils/prisma');
 const { success, error } = require('../utils/response');
-const { buildOrganizationFilter, MANAGER_AND_ABOVE } = require('../middleware/rbac');
+const { scopeLeadWhere, andScope, buildContactScope, buildAccountScope, buildOpportunityScope } = require('../middleware/rbac');
 const logger = require('../utils/logger');
 
 async function globalSearch(req, res) {
@@ -25,34 +25,14 @@ async function globalSearch(req, res) {
     const limit = Math.min(parseInt(req.query.limit) || 5, 20);
     const user = req.user;
 
-    // Build the org-scoped base filter once
-    const baseFilter = await buildOrganizationFilter(user);
-    const orgId = baseFilter.organizationId;
-
-    // ── RBAC: determine which user IDs are visible ───────────────────────────
-    // For leads/opportunities: assignedToId restriction
-    const assignedFilter = baseFilter.assignedToId
-      ? { assignedToId: baseFilter.assignedToId }
-      : {};
-
-    // For accounts: ownership via accountOwnerId
-    const accountOwnerFilter = baseFilter.assignedToId
-      ? { accountOwnerId: baseFilter.assignedToId }
-      : {};
-
-    // For contacts: ownership via ownerId
-    const contactOwnerFilter = baseFilter.assignedToId
-      ? { ownerId: baseFilter.assignedToId }
-      : {};
-
+    // Every entity is scoped through the lead authorization rules and ANDed with the search
     // ── Run all 4 searches in parallel ──────────────────────────────────────
     const [leads, contacts, accounts, opportunities] = await Promise.all([
 
       // Leads
+      // Role scope is ANDed with the search so the OR below can never widen it
       prisma.lead.findMany({
-        where: {
-          organizationId: orgId,
-          ...assignedFilter,
+        where: scopeLeadWhere(user, {
           OR: [
             { companyName: { contains: q, mode: 'insensitive' } },
             { contactName: { contains: q, mode: 'insensitive' } },
@@ -62,7 +42,7 @@ async function globalSearch(req, res) {
             { firstName: { contains: q, mode: 'insensitive' } },
             { lastName: { contains: q, mode: 'insensitive' } },
           ],
-        },
+        }),
         take: limit,
         orderBy: { updatedAt: 'desc' },
         select: {
@@ -78,16 +58,14 @@ async function globalSearch(req, res) {
 
       // Contacts
       prisma.contact.findMany({
-        where: {
-          organizationId: orgId,
-          ...contactOwnerFilter,
+        where: andScope(buildContactScope(user), {
           OR: [
             { name: { contains: q, mode: 'insensitive' } },
             { email: { contains: q, mode: 'insensitive' } },
             { designation: { contains: q, mode: 'insensitive' } },
             { phone: { contains: q, mode: 'insensitive' } },
           ],
-        },
+        }),
         take: limit,
         orderBy: { updatedAt: 'desc' },
         select: {
@@ -101,15 +79,13 @@ async function globalSearch(req, res) {
 
       // Accounts
       prisma.account.findMany({
-        where: {
-          organizationId: orgId,
-          ...accountOwnerFilter,
+        where: andScope(buildAccountScope(user), {
           OR: [
             { companyName: { contains: q, mode: 'insensitive' } },
             { industry: { contains: q, mode: 'insensitive' } },
             { website: { contains: q, mode: 'insensitive' } },
           ],
-        },
+        }),
         take: limit,
         orderBy: { updatedAt: 'desc' },
         select: {
@@ -123,16 +99,14 @@ async function globalSearch(req, res) {
 
       // Opportunities
       prisma.opportunity.findMany({
-        where: {
-          organizationId: orgId,
-          ...assignedFilter,
+        where: andScope(buildOpportunityScope(user), {
           OR: [
             { title: { contains: q, mode: 'insensitive' } },
             { opportunityName: { contains: q, mode: 'insensitive' } },
             { businessLine: { contains: q, mode: 'insensitive' } },
             { lead: { companyName: { contains: q, mode: 'insensitive' } } },
           ],
-        },
+        }),
         take: limit,
         orderBy: { updatedAt: 'desc' },
         select: {

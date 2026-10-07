@@ -12,6 +12,7 @@
 
 const prisma = require("../utils/prisma");
 const logger = require("../utils/logger");
+const { scopeLeadWhere, buildLeadScope, buildActivityScope, andScope } = require("../middleware/rbac");
 const dashboardEvents = require("../utils/dashboardEvents");
 const { logAudit } = require("../utils/auditLogger");
 
@@ -185,22 +186,14 @@ class ActivityService {
 
     if (resolvedLinkedType === "lead") {
       const lead = await prisma.lead.findFirst({
-        where: { id: resolvedLinkedId, organizationId: user.organizationId },
+        where: scopeLeadWhere(user, { id: resolvedLinkedId }),
       });
       if (!lead)
         return { success: false, statusCode: 404, message: "Lead not found" };
-
-      if (user.role === "sales_user" && lead.assignedToId !== user.id) {
-        return {
-          success: false,
-          statusCode: 403,
-          message: "You can only log activities for leads assigned to you",
-        };
-      }
       resolvedLeadId = lead.id;
     } else {
       const opp = await prisma.opportunity.findFirst({
-        where: { id: resolvedLinkedId, organizationId: user.organizationId },
+        where: { id: resolvedLinkedId, organizationId: user.organizationId, lead: buildLeadScope(user) },
       });
       if (!opp)
         return {
@@ -209,14 +202,6 @@ class ActivityService {
           message: "Opportunity not found",
         };
 
-      if (user.role === "sales_user" && opp.assignedToId !== user.id) {
-        return {
-          success: false,
-          statusCode: 403,
-          message:
-            "You can only log activities for opportunities assigned to you",
-        };
-      }
       resolvedOpportunityId = opp.id;
       // Also capture the lead for context
       resolvedLeadId = opp.leadId || null;
@@ -288,7 +273,7 @@ class ActivityService {
    */
   async updateActivity(id, data, user) {
     const existing = await prisma.activityLog.findFirst({
-      where: { id, organizationId: user.organizationId },
+      where: andScope(buildActivityScope(user), { id }),
       include: {
         user: { select: { id: true, name: true, email: true } },
         lead: { select: { id: true, companyName: true } },
@@ -382,52 +367,10 @@ class ActivityService {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const take = parseInt(limit);
 
-    const where = { organizationId: user.organizationId };
-
-    // ── Role-based scope ────────────────────────────────────────────────────
-    if (user.role === "sales_user") {
-      // sales_user only sees activities on their own assigned records or logged by themselves
-      const [ownLeadIds, ownOppIds] = await Promise.all([
-        prisma.lead
-          .findMany({
-            where: {
-              organizationId: user.organizationId,
-              assignedToId: user.id,
-            },
-            select: { id: true },
-          })
-          .then((rows) => rows.map((r) => r.id)),
-        prisma.opportunity
-          .findMany({
-            where: {
-              organizationId: user.organizationId,
-              OR: [
-                { assignedToId: user.id },
-                { lead: { assignedToId: user.id } },
-              ],
-            },
-            select: { id: true },
-          })
-          .then((rows) => rows.map((r) => r.id)),
-      ]);
-
-      where.OR = [
-        { leadId: { in: ownLeadIds } },
-        { opportunityId: { in: ownOppIds } },
-        { userId: user.id },
-      ];
-    } else if (user.role === "manager") {
-      // Manager sees their own + all direct reports' activities
-      const teamMemberIds = (
-        await prisma.user.findMany({
-          where: { managerId: user.id, organizationId: user.organizationId },
-          select: { id: true },
-        })
-      ).map((m) => m.id);
-
-      where.userId = { in: [...teamMemberIds, user.id] };
-    }
-    // org_admin / super_admin → no extra scope (all org data)
+    // Filters are collected separately and ANDed with the lead-based scope at the
+    // end, so no filter (or search OR) can widen what the user may see.
+    const where = {};
+    const andClauses = [];
 
     // ── Optional filters applied on top of role scope ───────────────────────
 
@@ -448,11 +391,7 @@ class ActivityService {
     if (linkedId && linkedType === "opportunity")
       where.opportunityId = linkedId;
     if (linkedId && !linkedType) {
-      where.OR = [
-        ...(where.OR || []),
-        { leadId: linkedId },
-        { opportunityId: linkedId },
-      ];
+      andClauses.push({ OR: [{ leadId: linkedId }, { opportunityId: linkedId }] });
     }
 
     // Activity type filter (normalise follow up variants)
@@ -484,13 +423,7 @@ class ActivityService {
         { notes: { contains: search.trim(), mode: "insensitive" } },
         { description: { contains: search.trim(), mode: "insensitive" } },
       ];
-      // Merge with existing OR (role scope) safely
-      if (where.OR) {
-        where.AND = [{ OR: where.OR }, { OR: searchConditions }];
-        delete where.OR;
-      } else {
-        where.OR = searchConditions;
-      }
+      andClauses.push({ OR: searchConditions });
     }
 
     // Overdue filter — nextActionDate is in the past
@@ -498,9 +431,12 @@ class ActivityService {
       where.nextActionDate = { lt: new Date() };
     }
 
+    if (andClauses.length) where.AND = andClauses;
+    const scopedWhere = andScope(buildActivityScope(user), where);
+
     const [activities, total] = await Promise.all([
       prisma.activityLog.findMany({
-        where,
+        where: scopedWhere,
         skip,
         take,
         orderBy: [{ activityDate: "desc" }, { createdAt: "desc" }],
@@ -512,7 +448,7 @@ class ActivityService {
           },
         },
       }),
-      prisma.activityLog.count({ where }),
+      prisma.activityLog.count({ where: scopedWhere }),
     ]);
 
     // Annotate each activity with overdue status for the UI
@@ -563,47 +499,8 @@ class ActivityService {
     );
     weekStart.setHours(0, 0, 0, 0);
 
-    // Build role-scoped base where
-    const baseWhere = { organizationId: user.organizationId };
-
-    if (user.role === "sales_user") {
-      const [ownLeadIds, ownOppIds] = await Promise.all([
-        prisma.lead
-          .findMany({
-            where: {
-              organizationId: user.organizationId,
-              assignedToId: user.id,
-            },
-            select: { id: true },
-          })
-          .then((rows) => rows.map((r) => r.id)),
-        prisma.opportunity
-          .findMany({
-            where: {
-              organizationId: user.organizationId,
-              OR: [
-                { assignedToId: user.id },
-                { lead: { assignedToId: user.id } },
-              ],
-            },
-            select: { id: true },
-          })
-          .then((rows) => rows.map((r) => r.id)),
-      ]);
-      baseWhere.OR = [
-        { leadId: { in: ownLeadIds } },
-        { opportunityId: { in: ownOppIds } },
-        { userId: user.id },
-      ];
-    } else if (user.role === "manager") {
-      const teamMemberIds = (
-        await prisma.user.findMany({
-          where: { managerId: user.id, organizationId: user.organizationId },
-          select: { id: true },
-        })
-      ).map((m) => m.id);
-      baseWhere.userId = { in: [...teamMemberIds, user.id] };
-    }
+    // Same lead-based scope as getActivities
+    const baseWhere = buildActivityScope(user);
 
     const [todayCount, weekCount, followUpsToday, overdueCount] =
       await Promise.all([
@@ -652,24 +549,9 @@ class ActivityService {
           (await (async () => {
             const sevenDaysAgo = new Date(now);
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            // Get teamMemberIds for context (already built in baseWhere.userId)
-            const teamMemberIds = (
-              await prisma.user.findMany({
-                where: {
-                  managerId: user.id,
-                  organizationId: user.organizationId,
-                },
-                select: { id: true },
-              })
-            ).map((m) => m.id);
-            const teamIds = [...teamMemberIds, user.id];
             const activeLeadIds = (
               await prisma.activityLog.findMany({
-                where: {
-                  organizationId: user.organizationId,
-                  userId: { in: teamIds },
-                  activityDate: { gte: sevenDaysAgo },
-                },
+                where: { ...baseWhere, activityDate: { gte: sevenDaysAgo } },
                 select: { leadId: true },
                 distinct: ["leadId"],
               })
@@ -677,16 +559,14 @@ class ActivityService {
               .map((a) => a.leadId)
               .filter(Boolean);
             const noActivity7d = await prisma.lead.count({
-              where: {
-                organizationId: user.organizationId,
-                assignedToId: { in: teamIds },
+              where: scopeLeadWhere(user, {
                 id: {
                   notIn: activeLeadIds.length ? activeLeadIds : ["__none__"],
                 },
                 status: {
                   notIn: ["closed_won", "closed_lost", "disqualified"],
                 },
-              },
+              }),
             });
             return { noActivity7d };
           })())),
@@ -699,13 +579,9 @@ class ActivityService {
    */
   async getLeadActivities(leadId, user) {
     const lead = await prisma.lead.findFirst({
-      where: { id: leadId, organizationId: user.organizationId },
+      where: scopeLeadWhere(user, { id: leadId }),
     });
     if (!lead) return { success: false, message: "Lead not found" };
-
-    if (user.role === "sales_user" && lead.assignedToId !== user.id) {
-      return { success: false, message: "Not authorized" };
-    }
 
     return this.getActivities({ leadId }, user);
   }
@@ -745,14 +621,25 @@ class ActivityService {
     });
   }
 
-  async logLeadAssigned(lead, user, assignedToId) {
+  /**
+   * Activity Timeline entry for an assignment / reassignment (the lead itself is untouched):
+   *   first assignment → "<assigner> assigned this lead to you."
+   *   reassignment     → "<assigner> assigned this lead from <previous> to you."
+   * "you" is the new assignee; the ids/names are kept in metadata.
+   */
+  async logLeadAssigned(leadId, user, assignedToId, previousOwnerName = null) {
+    const description = previousOwnerName
+      ? `${user.name} assigned this lead from ${previousOwnerName} to you.`
+      : `${user.name} assigned this lead to you.`;
     return this.logActivity({
       organizationId: user.organizationId,
       userId: user.id,
-      leadId: lead.id,
+      leadId,
       action: "lead_assigned",
-      description: `Lead assigned to user ${assignedToId}`,
-      metadata: { assignedToId },
+      linkedType: "lead",
+      description,
+      activityDate: new Date(),
+      metadata: { assignedToId, assignedById: user.id, assignedByName: user.name, previousOwnerName },
     });
   }
 
@@ -771,8 +658,9 @@ class ActivityService {
    * Get a single activity by ID (with org + role scope check)
    */
   async getActivityById(id, user) {
+    // Visibility follows the user's CURRENT access to the linked lead
     const activity = await prisma.activityLog.findFirst({
-      where: { id, organizationId: user.organizationId },
+      where: andScope(buildActivityScope(user), { id }),
       include: {
         user: { select: { id: true, name: true, email: true } },
         lead: { select: { id: true, companyName: true, contactName: true } },
@@ -784,14 +672,6 @@ class ActivityService {
     if (!activity)
       return { success: false, statusCode: 404, message: "Activity not found" };
 
-    // sales_user can only see their own activities or on their own records
-    if (user.role === "sales_user" && activity.userId !== user.id) {
-      return {
-        success: false,
-        statusCode: 403,
-        message: "You do not have access to this activity",
-      };
-    }
     return { success: true, activity };
   }
 
@@ -800,7 +680,7 @@ class ActivityService {
    */
   async deleteActivity(id, user) {
     const activity = await prisma.activityLog.findFirst({
-      where: { id, organizationId: user.organizationId },
+      where: andScope(buildActivityScope(user), { id }),
       include: { user: { select: { id: true, name: true } } },
     });
     if (!activity)
@@ -849,20 +729,10 @@ class ActivityService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const where = {
-      organizationId: user.organizationId,
-      nextActionDate: { lt: today },
-    };
+    // Manager/admin only; lead-linked alerts follow the same lead scope as activities
+    const where = andScope(buildActivityScope(user), { nextActionDate: { lt: today } });
 
-    if (user.role === "manager") {
-      const teamMemberIds = (
-        await prisma.user.findMany({
-          where: { managerId: user.id, organizationId: user.organizationId },
-          select: { id: true },
-        })
-      ).map((m) => m.id);
-      where.userId = { in: [...teamMemberIds, user.id] };
-    } else if (!ADMIN_ROLES.includes(user.role)) {
+    if (user.role !== "manager" && !ADMIN_ROLES.includes(user.role)) {
       return {
         success: false,
         statusCode: 403,

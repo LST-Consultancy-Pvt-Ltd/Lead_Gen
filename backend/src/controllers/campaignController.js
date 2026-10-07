@@ -3,6 +3,7 @@ const { success, error, paginated } = require('../utils/response');
 const { generateOutreachEmail } = require('../services/aiService');
 const { sendEmail } = require('../services/emailService');
 const logger = require('../utils/logger');
+const { scopeLeadWhere } = require('../middleware/rbac');
 
 async function getCampaigns(req, res) {
   try {
@@ -22,8 +23,9 @@ async function getCampaign(req, res) {
     const campaign = await prisma.campaign.findFirst({
       where: { id: req.params.id, organizationId: req.user.organizationId },
       include: {
-        leads: { include: { lead: true } },
-        emails: { orderBy: { createdAt: 'desc' }, take: 50 },
+        // only leads the caller is allowed to see
+        leads: { where: { lead: scopeLeadWhere(req.user, {}) }, include: { lead: true } },
+        emails: { where: { lead: scopeLeadWhere(req.user, {}) }, orderBy: { createdAt: 'desc' }, take: 50 },
       },
     });
     if (!campaign) return error(res, 'Campaign not found', 404);
@@ -61,8 +63,13 @@ async function addLeadsToCampaign(req, res) {
     const campaign = await prisma.campaign.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!campaign) return error(res, 'Campaign not found', 404);
 
+    // Only leads inside the caller's scope (and organization) can be added
+    const allowed = await prisma.lead.findMany({
+      where: scopeLeadWhere(req.user, { id: { in: leadIds } }),
+      select: { id: true },
+    });
     const records = await Promise.all(
-      leadIds.map(leadId =>
+      allowed.map(({ id: leadId }) =>
         prisma.campaignLead.upsert({
           where: { campaignId_leadId: { campaignId: campaign.id, leadId } },
           update: {},
@@ -80,7 +87,7 @@ async function launchCampaign(req, res) {
   try {
     const campaign = await prisma.campaign.findFirst({
       where: { id: req.params.id, organizationId: req.user.organizationId },
-      include: { leads: { include: { lead: true } } },
+      include: { leads: { where: { lead: scopeLeadWhere(req.user, {}) }, include: { lead: true } } },
     });
     if (!campaign) return error(res, 'Campaign not found', 404);
     if (!campaign.leads.length) return error(res, 'No leads in campaign', 422);

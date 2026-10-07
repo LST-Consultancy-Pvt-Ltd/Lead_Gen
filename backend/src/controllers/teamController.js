@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const activityService = require('../services/activity.service');
 const prisma = require('../utils/prisma');
 const { success, error } = require('../utils/response');
 const { createNotification } = require('../utils/notificationService');
@@ -138,10 +139,13 @@ async function bulkReassignLeads(req, res) {
       where.id = { in: leadIds };
     }
 
+    // Only the owner changes; each lead gets an Activity Timeline entry
+    const toReassign = await prisma.lead.findMany({ where, select: { id: true } });
     const updated = await prisma.lead.updateMany({
-      where,
+      where: { id: { in: toReassign.map((l) => l.id) } },
       data: { assignedToId: toUserId },
     });
+    await Promise.all(toReassign.map((l) => activityService.logLeadAssigned(l.id, req.user, toUserId, fromUser.name)));
 
     await createNotification(prisma, {
       userId: toUserId,

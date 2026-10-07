@@ -107,13 +107,11 @@ async function getMyActivities(req, res) {
  */
 async function getLeadActivities(req, res) {
   try {
-    const result = await activityService.getActivities(
-      { leadId: req.params.leadId },
-      req.user
-    );
+    // Lead-scope gate (org / created-or-assigned / assigned) before listing
+    const result = await activityService.getLeadActivities(req.params.leadId, req.user);
 
     if (!result.success) {
-      return error(res, result.message, result.statusCode || 403);
+      return error(res, result.message, result.message === 'Lead not found' ? 404 : (result.statusCode || 403));
     }
 
     return success(res, result.activities);

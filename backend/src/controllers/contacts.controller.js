@@ -4,30 +4,38 @@
  */
 
 const prisma = require('../utils/prisma');
-const { buildOrganizationFilter } = require('../middleware/rbac');
+const { buildContactScope, buildOpportunityScope, scopeLeadWhere, andScope } = require('../middleware/rbac');
 const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
+
+/** Contacts linked to a lead are only reachable if the lead itself is in the caller's scope. */
+async function canAccessContactLead(user, leadId) {
+  if (!leadId) return true;
+  const lead = await prisma.lead.findFirst({ where: scopeLeadWhere(user, { id: leadId }), select: { id: true } });
+  return !!lead;
+}
 
 async function getContacts(req, res) {
   try {
     const { page = 1, limit = 20, search, accountId, leadId } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const baseFilter = await buildOrganizationFilter(req.user);
-    const where = { organizationId: baseFilter.organizationId };
-    // When fetching lead-specific contacts, skip the ownership restriction
-    if (!leadId && baseFilter.assignedToId) {
-      where.ownerId = baseFilter.assignedToId;
+    if (leadId && !(await canAccessContactLead(req.user, leadId))) {
+      return error(res, 'Lead not found', 404);
     }
-    if (accountId) where.linkedAccountId = accountId;
-    if (leadId)    where.leadId = leadId;
+
+    // Lead-linked contacts follow lead access; filters/search are ANDed with that scope
+    const filters = {};
+    if (accountId) filters.linkedAccountId = accountId;
+    if (leadId)    filters.leadId = leadId;
     if (search) {
-      where.OR = [
+      filters.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
         { designation: { contains: search, mode: 'insensitive' } },
       ];
     }
+    const where = andScope(buildContactScope(req.user), filters);
 
     const [contacts, total] = await Promise.all([
       prisma.contact.findMany({
@@ -57,19 +65,15 @@ async function getContacts(req, res) {
 async function getContactById(req, res) {
   try {
     const contact = await prisma.contact.findFirst({
-      where: { id: req.params.id, organizationId: req.user.organizationId },
+      where: andScope(buildContactScope(req.user), { id: req.params.id }),
       include: {
         owner: { select: { id: true, name: true, email: true } },
         linkedAccount: { select: { id: true, companyName: true } },
-        opportunities: true,
+        opportunities: { where: buildOpportunityScope(req.user) },
       },
     });
 
     if (!contact) return error(res, 'Contact not found', 404);
-
-    if (req.user.role === 'sales_user' && contact.ownerId !== req.user.id) {
-      return error(res, 'Access denied', 403);
-    }
 
     return success(res, contact);
   } catch (err) {
@@ -96,7 +100,7 @@ async function createContact(req, res) {
     // If leadId is provided, verify it belongs to this organization
     if (data.leadId) {
       const lead = await prisma.lead.findFirst({
-        where: { id: data.leadId, organizationId: req.user.organizationId },
+        where: scopeLeadWhere(req.user, { id: data.leadId }),
         select: { id: true },
       });
       if (!lead) return error(res, 'Lead not found', 404);
@@ -137,13 +141,9 @@ async function createContact(req, res) {
 async function updateContact(req, res) {
   try {
     const contact = await prisma.contact.findFirst({
-      where: { id: req.params.id, organizationId: req.user.organizationId },
+      where: andScope(buildContactScope(req.user), { id: req.params.id }),
     });
     if (!contact) return error(res, 'Contact not found', 404);
-
-    if (req.user.role === 'sales_user' && contact.ownerId !== req.user.id) {
-      return error(res, 'Access denied', 403);
-    }
 
     const updateData = { ...req.body };
     delete updateData.organizationId;
@@ -192,7 +192,7 @@ async function updateContact(req, res) {
 async function deleteContact(req, res) {
   try {
     const contact = await prisma.contact.findFirst({
-      where: { id: req.params.id, organizationId: req.user.organizationId },
+      where: andScope(buildContactScope(req.user), { id: req.params.id }),
     });
     if (!contact) return error(res, 'Contact not found', 404);
 

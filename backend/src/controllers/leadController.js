@@ -7,6 +7,7 @@ const dashboardEvents = require('../utils/dashboardEvents');
 const { analyzeLeadIntent, generateOutreachEmail } = require('../services/aiService');
 const { sendEmail } = require('../services/emailService');
 const logger = require('../utils/logger');
+const { scopeLeadWhere } = require('../middleware/rbac');
 const { Parser } = require('json2csv');
 const { enrichViaSignalHire, enrichViaApollo } = require('../services/leadEnrichmentPipeline');
 const { checkLeadQuota, incrementLeadUsage, decrementLeadUsage } = require('../utils/leadQuota');
@@ -170,7 +171,7 @@ async function createLead(req, res) {
 
 async function updateLead(req, res) {
   try {
-    const existing = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const existing = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: req.params.id }) });
     if (!existing) return error(res, 'Lead not found', 404);
     const lead = await prisma.lead.update({ where: { id: req.params.id }, data: req.body });
     await prisma.activityLog.create({ data: { organizationId: req.user.organizationId, userId: req.user.id,
@@ -184,7 +185,7 @@ async function updateLead(req, res) {
 
 async function deleteLead(req, res) {
   try {
-    const existing = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const existing = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: req.params.id }) });
     if (!existing) return error(res, 'Lead not found', 404);
     await prisma.lead.delete({ where: { id: req.params.id } });
 
@@ -200,7 +201,7 @@ async function deleteLead(req, res) {
 
 async function analyzeLead(req, res) {
   try {
-    const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const lead = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: req.params.id }) });
     if (!lead) return error(res, 'Lead not found', 404);
     const services = await prisma.service.findMany({ where: { organizationId: req.user.organizationId, isActive: true }, select: { name:true } });
     const analysis = await analyzeLeadIntent(lead, services.map(s => s.name));
@@ -238,7 +239,7 @@ function hasContact(c) { return !!(c && (c.email || c.linkedinUrl || c.phone)); 
 
 async function enrichLeadViaSignalHire(req, res) {
   try {
-    const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const lead = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: req.params.id }) });
     if (!lead) return error(res, 'Lead not found', 404);
     logger.info('Enriching via SignalHire', { leadId: lead.id, company: lead.companyName, website: lead.website, linkedinUrl: lead.linkedinUrl });
     // Synchronous wrapper: submit + wait up to 25s for the webhook to deliver (kept
@@ -265,7 +266,7 @@ async function enrichLeadViaSignalHire(req, res) {
         `SignalHire is revealing ${result.peopleFound} decision-maker${result.peopleFound > 1 ? 's' : ''} — they'll appear in Contacts shortly.`);
     }
     if (result?.found) {
-      const updated = await prisma.lead.findFirst({ where: { id: lead.id, organizationId: req.user.organizationId } });
+      const updated = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: lead.id }) });
       return success(res, {
         found: true, async: false, enrichedVia: 'signalhire',
         contactEmail: updated?.contactEmail, contactName: updated?.contactName,
@@ -291,7 +292,7 @@ async function enrichLeadViaSignalHire(req, res) {
 
 async function enrichLeadViaApollo(req, res) {
   try {
-    const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const lead = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: req.params.id }) });
     if (!lead) return error(res, 'Lead not found', 404);
 
     const personTitles = Array.isArray(req.body?.personTitles) ? req.body.personTitles : null;
@@ -396,7 +397,7 @@ async function enrichLeadViaApollo(req, res) {
 
 async function generateEmail(req, res) {
   try {
-    const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const lead = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: req.params.id }) });
     if (!lead) return error(res, 'Lead not found', 404);
     const [services, templates] = await Promise.all([
       prisma.service.findMany({ where: { organizationId: req.user.organizationId } }),
@@ -417,7 +418,7 @@ async function generateEmail(req, res) {
 
 async function sendOutreach(req, res) {
   try {
-    const lead = await prisma.lead.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
+    const lead = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: req.params.id }) });
     if (!lead)             return error(res, 'Lead not found', 404);
     if (!lead.contactEmail) return error(res, 'No contact email on this lead', 422);
     const { subject, body } = req.body;
@@ -434,41 +435,38 @@ async function sendOutreach(req, res) {
 async function exportLeads(req, res) {
   try {
     const isSalesUser = req.user.role === 'sales_user';
-    const where = { organizationId: req.user.organizationId };
-
-    // ALWAYS enforce ownership for sales users — no query param can override this
-    if (isSalesUser) {
-      where.assignedToId = req.user.id;
-    }
+    // Filters are ANDed with the role scope (admin: org, manager: created/assigned,
+    // sales_user: assigned) — no query param can widen it.
+    const filters = {};
 
     if (req.query.ids) {
-      // Prisma ANDs this with assignedToId above, so sales_user can only export their own
-      where.id = { in: req.query.ids.split(',') };
+      filters.id = { in: req.query.ids.split(',') };
     } else {
       if (req.query.search) {
-        where.OR = [
+        filters.OR = [
           { companyName: { contains: req.query.search, mode: 'insensitive' } },
           { contactName: { contains: req.query.search, mode: 'insensitive' } },
           { contactEmail: { contains: req.query.search, mode: 'insensitive' } },
         ];
       }
       if (req.query.status) {
-        where.status = req.query.status;
+        filters.status = req.query.status;
       }
-      // Only non-sales roles can change which user's leads are exported
+      // Only non-sales roles can pick whose leads are exported (still within scope)
       if (!isSalesUser) {
         if (req.query.assignedTo) {
-          where.assignedToId = req.query.assignedTo;
+          filters.assignedToId = req.query.assignedTo;
         }
         if (req.query.unassigned === 'true') {
-          where.assignedToId = null;
+          filters.assignedToId = null;
         }
         if (req.query.assignedToMe === 'true') {
-          where.assignedToId = req.user.id;
+          filters.assignedToId = req.user.id;
         }
       }
     }
-    
+    const where = scopeLeadWhere(req.user, filters);
+
     const leads = await prisma.lead.findMany({
       where,
       orderBy: { createdAt: 'desc' },

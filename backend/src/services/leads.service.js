@@ -5,7 +5,20 @@
 
 const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
-const { buildOrganizationFilter } = require('../middleware/rbac');
+const activityService = require('./activity.service');
+const { buildLeadScope, scopeLeadWhere, canAssignLeadTo, canAccessLead, ADMIN_ROLES } = require('../middleware/rbac');
+
+// Display names for a set of user ids (used in the assignment note)
+const userNames = async (ids) => {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return {};
+  const rows = await prisma.user.findMany({ where: { id: { in: unique } }, select: { id: true, name: true } });
+  return Object.fromEntries(rows.map((u) => [u.id, u.name]));
+};
+
+// Duplicate detection stays org-wide, but never reveals a lead the caller cannot access
+const redactDuplicate = (lead, user) =>
+  canAccessLead(user, lead) ? { id: lead.id, companyName: lead.companyName } : { id: null, companyName: null };
 const { sendLeadAssignmentEmail } = require('./emailService');
 const { logAudit } = require('../utils/auditLogger');
 const { createBulkNotifications } = require('../utils/notificationService');
@@ -60,20 +73,13 @@ class LeadsService {
    * Check if user has access to a specific lead based on their role
    */
   async checkLeadAccess(leadId, user) {
+    // Lead must be inside the caller's role scope (org / created-or-assigned / assigned)
     const lead = await prisma.lead.findFirst({
-      where: {
-        id: leadId,
-        organizationId: user.organizationId,
-      },
+      where: scopeLeadWhere(user, { id: leadId }),
     });
 
     if (!lead) {
       return { hasAccess: false, lead: null, reason: 'Lead not found' };
-    }
-
-    // sales_user can only access their assigned leads
-    if (user.role === 'sales_user' && lead.assignedToId !== user.id) {
-      return { hasAccess: false, lead: null, reason: 'Not authorized to access this lead' };
     }
 
     return { hasAccess: true, lead };
@@ -81,13 +87,14 @@ class LeadsService {
 
   /**
    * Build query filters based on user role and query params.
-   * Uses buildOrganizationFilter for role-scoped data visibility.
+   * Uses buildLeadScope (ANDed with filters/search) for role-scoped visibility.
    */
   async buildLeadFilters(user, queryParams) {
     const { status, intent, search, assignedTo, assignedToMe, unassigned, scanJobId } = queryParams;
 
-    const baseFilter = await buildOrganizationFilter(user);
-    const where = Object.assign({}, baseFilter);
+    // Filters/search live in their own object and are ANDed with the role scope,
+    // so no filter (notably the search OR) can widen or replace the scope.
+    const where = {};
 
     // Status filter
     if (status) where.status = status;
@@ -139,7 +146,7 @@ class LeadsService {
       ];
     }
 
-    return where;
+    return scopeLeadWhere(user, where);
   }
 
   /**
@@ -294,10 +301,10 @@ class LeadsService {
             ...(data.contactPhone ? [{ contactPhone: data.contactPhone }] : []),
           ].filter(Boolean),
         },
-        select: { id: true, companyName: true },
+        select: { id: true, companyName: true, organizationId: true, assignedToId: true, createdById: true },
       });
       if (exactMatch) {
-        possibleDuplicate = { id: exactMatch.id, companyName: exactMatch.companyName };
+        possibleDuplicate = redactDuplicate(exactMatch, user);
       }
 
       // Fuzzy company name match via ILIKE (no pg_trgm extension required)
@@ -307,10 +314,10 @@ class LeadsService {
             organizationId: user.organizationId,
             companyName: { contains: data.companyName, mode: 'insensitive' },
           },
-          select: { id: true, companyName: true },
+          select: { id: true, companyName: true, organizationId: true, assignedToId: true, createdById: true },
         });
         if (similar) {
-          possibleDuplicate = { id: similar.id, companyName: similar.companyName };
+          possibleDuplicate = redactDuplicate(similar, user);
         }
       }
     } catch (_err) {
@@ -396,6 +403,11 @@ class LeadsService {
       },
     });
 
+    // Created for someone else → Activity Timeline entry for the new owner
+    if (lead.assignedToId && lead.assignedToId !== user.id) {
+      await activityService.logLeadAssigned(lead.id, user, lead.assignedToId);
+    }
+
     // Notify assignee if lead was assigned to someone else
     if (lead.assignedToId && lead.assignedToId !== user.id) {
       try {
@@ -440,15 +452,13 @@ class LeadsService {
     const updateData = { ...data };
 
     if (data.assignedToId) {
-      if (user.role === 'sales_user') {
-        delete updateData.assignedToId;
-      } else if (user.role === 'manager') {
-        const isTeamMember = await prisma.user.findFirst({
-          where: { id: data.assignedToId, managerId: user.id, organizationId: user.organizationId },
-          select: { id: true },
-        });
-        if (!isTeamMember) delete updateData.assignedToId;
-      }
+      // Same assignment rule as reassign: admin → any active org user,
+      // manager → own team only, sales_user → never.
+      const target = await prisma.user.findUnique({
+        where: { id: data.assignedToId },
+        select: { id: true, organizationId: true, managerId: true, isActive: true },
+      });
+      if (!canAssignLeadTo(user, target)) delete updateData.assignedToId;
     }
 
     // ── Spec validations ──────────────────────────────────────────────────────
@@ -527,6 +537,9 @@ class LeadsService {
             ? prisma.user.findUnique({ where: { id: previousLead.assignedToId }, select: { name: true, email: true } })
             : null,
         ]);
+
+        // Activity Timeline entry (the lead's own fields are not touched)
+        await activityService.logLeadAssigned(leadId, user, updateData.assignedToId, oldOwner?.name || null);
 
         // Email notification
         if (assignee) {
@@ -621,30 +634,27 @@ class LeadsService {
     if (!Array.isArray(leadIds) || leadIds.length === 0) {
       return { success: false, message: 'leadIds must be a non-empty array', statusCode: 400 };
     }
+    if (!['manager', ...ADMIN_ROLES].includes(user.role)) {
+      return { success: false, message: 'Insufficient permissions', statusCode: 403 };
+    }
 
     // Verify target user belongs to the same org and is active
     const target = await prisma.user.findFirst({
       where: { id: assignedToId, organizationId: user.organizationId, isActive: true },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, organizationId: true, managerId: true, isActive: true },
     });
     if (!target) {
       return { success: false, message: 'Target user not found or inactive', statusCode: 404 };
     }
 
-    // For manager: target must be a direct report
-    if (user.role === 'manager') {
-      const isDirectReport = await prisma.user.findFirst({
-        where: { id: assignedToId, managerId: user.id, organizationId: user.organizationId },
-        select: { id: true },
-      });
-      if (!isDirectReport) {
-        return { success: false, message: 'You can only assign leads to your direct reports', statusCode: 403 };
-      }
+    // Manager: target must be in their own team
+    if (!canAssignLeadTo(user, target)) {
+      return { success: false, message: 'You can only assign leads to users in your own team', statusCode: 403 };
     }
 
-    // Fetch all requested leads scoped to this org
+    // Only leads inside the caller's scope can be touched
     const leads = await prisma.lead.findMany({
-      where: { id: { in: leadIds }, organizationId: user.organizationId },
+      where: scopeLeadWhere(user, { id: { in: leadIds } }),
       select: { id: true, companyName: true, assignedToId: true },
     });
 
@@ -655,11 +665,17 @@ class LeadsService {
       return { success: false, message: 'No valid leads found for the given IDs', statusCode: 404 };
     }
 
-    // Bulk update
+    // Only the owner changes; the assignment is recorded on the Activity Timeline below
     await prisma.lead.updateMany({
       where: { id: { in: leads.map((l) => l.id) } },
       data: { assignedToId },
     });
+    const names = await userNames(leads.map((l) => l.assignedToId));
+    await Promise.all(
+      leads
+        .filter((l) => l.assignedToId !== assignedToId)
+        .map((l) => activityService.logLeadAssigned(l.id, user, assignedToId, l.assignedToId ? names[l.assignedToId] : null)),
+    );
 
     // Audit log + notifications per lead
     const auditAndNotifPromises = leads.map(async (lead) => {
@@ -714,8 +730,13 @@ class LeadsService {
    * Reassign a lead to a new owner (manager/admin only — enforced at route level).
    */
   async reassignLead(leadId, assignedToId, user) {
+    if (!['manager', ...ADMIN_ROLES].includes(user.role)) {
+      return { success: false, message: 'Insufficient permissions', statusCode: 403 };
+    }
+
+    // Lead must be inside the caller's scope (also enforces organization isolation)
     const lead = await prisma.lead.findFirst({
-      where: { id: leadId, organizationId: user.organizationId },
+      where: scopeLeadWhere(user, { id: leadId }),
     });
     if (!lead) return { success: false, message: 'Lead not found', statusCode: 404 };
 
@@ -725,13 +746,25 @@ class LeadsService {
     });
     if (!target) return { success: false, message: 'Target user not found or inactive', statusCode: 404 };
 
+    // Manager may only assign within their own team
+    if (!canAssignLeadTo(user, target)) {
+      return { success: false, message: 'You can only assign leads to users in your own team', statusCode: 403 };
+    }
+
     const oldOwnerId = lead.assignedToId;
 
+    // Only the owner changes — every other field of the lead stays exactly as it is
     const updated = await prisma.lead.update({
       where: { id: leadId },
       data: { assignedToId },
       include: { assignedTo: { select: { id: true, name: true, email: true } } },
     });
+
+    if (oldOwnerId !== assignedToId) {
+      await activityService.logLeadAssigned(
+        leadId, user, assignedToId, oldOwnerId ? (await userNames([oldOwnerId]))[oldOwnerId] : null,
+      );
+    }
 
     // Audit + notifications for reassign
     await logAudit(prisma, {
@@ -776,14 +809,8 @@ class LeadsService {
    * Get leads statistics
    */
   async getLeadStats(user) {
-    const where = {
-      organizationId: user.organizationId,
-    };
-
-    // sales_user can only see their own stats
-    if (user.role === 'sales_user') {
-      where.assignedToId = user.id;
-    }
+    // Same role scope as the leads list (admin: org, manager: created/assigned, rep: assigned)
+    const where = buildLeadScope(user);
 
     const [
       totalLeads,
