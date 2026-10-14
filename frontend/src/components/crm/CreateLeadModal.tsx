@@ -11,6 +11,70 @@ import { useAuthStore } from "../../store/authStore";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
+import { Select } from '../ui/Select';
+import { assignableUsers } from "../../lib/utils";
+import {
+  Briefcase, Building2, User, BadgeCheck, Mail, Phone, Activity, Hash, CalendarClock,
+  Calendar, UserCheck, UserCircle, Globe, FileText, AlertCircle, AlertTriangle, Info,
+} from "lucide-react";
+
+// ── Presentation helpers for the form ─────────────────────────────────────
+const SECTION_TONES: Record<string, { chip: string; tint: string }> = {
+  blue:    { chip: "from-blue-500 to-indigo-600 shadow-blue-500/30",     tint: "from-blue-50/70 dark:from-blue-500/[0.06]" },
+  violet:  { chip: "from-violet-500 to-fuchsia-600 shadow-violet-500/30", tint: "from-violet-50/70 dark:from-violet-500/[0.06]" },
+  amber:   { chip: "from-amber-400 to-orange-600 shadow-amber-500/30",    tint: "from-amber-50/70 dark:from-amber-500/[0.06]" },
+  emerald: { chip: "from-emerald-500 to-teal-600 shadow-emerald-500/30",  tint: "from-emerald-50/70 dark:from-emerald-500/[0.06]" },
+  cyan:    { chip: "from-cyan-500 to-sky-600 shadow-cyan-500/30",         tint: "from-cyan-50/70 dark:from-cyan-500/[0.06]" },
+  slate:   { chip: "from-slate-500 to-slate-700 shadow-slate-500/30",     tint: "from-slate-50 dark:from-white/[0.03]" },
+};
+
+function FormSection({ icon: Icon, title, subtitle, tone = "blue", children }: {
+  icon: any; title: string; subtitle?: string; tone?: string; children: React.ReactNode;
+}) {
+  const t = SECTION_TONES[tone] ?? SECTION_TONES.blue;
+  return (
+    <section className="rounded-2xl border border-line bg-white dark:bg-surface overflow-hidden">
+      <div className={`flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-white/[0.05] bg-gradient-to-r ${t.tint} to-transparent`}>
+        <span className={`w-8 h-8 rounded-lg bg-gradient-to-br ${t.chip} text-white shadow-md flex items-center justify-center flex-shrink-0`}>
+          <Icon size={15} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink leading-tight">{title}</p>
+          {subtitle && <p className="text-[11px] text-ink-3 mt-0.5">{subtitle}</p>}
+        </div>
+      </div>
+      <div className="p-4 space-y-4">{children}</div>
+    </section>
+  );
+}
+
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <label className="label mb-1.5 flex items-center gap-1">
+      {children}
+      {required && <span className="text-rose-500 font-bold">*</span>}
+    </label>
+  );
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p className="flex items-center gap-1 text-xs font-medium text-rose-600 dark:text-rose-400 mt-1.5">
+      <AlertCircle size={12} className="flex-shrink-0" /> {message}
+    </p>
+  );
+}
+
+// Wraps an input with a leading icon
+function IconField({ icon: Icon, children }: { icon: any; children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      <Icon size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3 z-10" />
+      {children}
+    </div>
+  );
+}
 
 interface CreateLeadModalProps {
   isOpen: boolean;
@@ -73,7 +137,7 @@ const defaultValues: LeadFormData = {
 
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
-  const { canReassignLead, canManageDropdowns, isAdmin } = usePermissions();
+  const { canReassignLead, canManageDropdowns, isAdmin, isManager } = usePermissions();
   const currentUser = useAuthStore((s) => s.user);
   const pendingPayloadRef = useRef<(CreateLeadInput & { requirementType: string[]; budgetRange: string; temperature: "hot" | "warm" | "cold" | "prospect" | "lost" | "won" }) | null>(null);
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
@@ -170,7 +234,8 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     enabled: isOpen,
   });
 
-  const users = usersData?.data || [];
+  // Admin: anyone. Manager: themselves + their own team only.
+  const users = assignableUsers(usersData?.data || [], currentUser as any);
 
   // Fetch lead_type options from admin dropdowns
   const { data: leadTypeRaw } = useQuery({
@@ -444,7 +509,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     // Filter out empty values; exclude assignedToId for non-admins
     const cleanedData = Object.fromEntries(
       Object.entries(formData).filter(([k, v]) => {
-        if (k === "assignedToId" && !isAdmin) return false;
+        if (k === "assignedToId" && !isAdmin && !isManager) return false;
         if (k === "disqualificationReason" && formData.status !== "disqualified") return false;
         return v !== "" && v !== undefined;
       }),
@@ -495,156 +560,158 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Create New Lead">
-      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-3">
+      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4">
 
-        {/* Row 1: Company Name + Lead Type */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Company Name</label>
-            <input type="text" {...register("companyName")} className="input" placeholder="Acme Inc." />
-            {errors.companyName && <p className="text-xs text-red-400 mt-1">{errors.companyName.message}</p>}
-          </div>
-          <div>
-            <label className="label">Lead Type <span className="text-red-400">*</span></label>
-            <select {...register("leadType")} title="Lead Type" className="input">
-              <option value="">Select lead type...</option>
-              {leadTypeOptions.map((opt: any) => (
-                <option key={opt.id || opt.value} value={opt.value}>{opt.value}</option>
-              ))}
-            </select>
-            {errors.leadType && <p className="text-xs text-red-400 mt-1">{errors.leadType.message}</p>}
-          </div>
-        </div>
-
-        {/* Row 2: Contact Name + Designation */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Contact Name <span className="text-red-400">*</span></label>
-            <input type="text" {...register("contactName")} className="input" placeholder="John Doe" />
-            {errors.contactName && <p className="text-xs text-red-400 mt-1">{errors.contactName.message}</p>}
-          </div>
-          <div>
-            <label className="label">Designation of Contact Name</label>
-            <input type="text" {...register("contactTitle")} className="input" placeholder="e.g. VP of Engineering" />
-          </div>
-        </div>
-
-        {/* Row 3: Email + Phone */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Email</label>
-            <input type="email" {...register("contactEmail")} className="input" placeholder="john@example.com" />
-            {errors.contactEmail && <p className="text-xs text-red-400 mt-1">{errors.contactEmail.message}</p>}
-          </div>
-          <div>
-            <label className="label">Phone</label>
-            <input type="tel" {...register("contactPhone")} className="input" placeholder="+91 9876543210" />
-            {errors.contactPhone && <p className="text-xs text-red-400 mt-1">{errors.contactPhone.message}</p>}
-          </div>
-        </div>
-
-        {/* Row 4: Lead Status + Lead Source */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Lead Status <span className="text-red-400">*</span></label>
-            <select {...register("status")} title="Status" className="input">
-              <option value="">Select status...</option>
-              {dynamicLeadStatusOptions.map((opt) => (
-                <option key={opt} value={opt}>{formatOptionLabel(opt)}</option>
-              ))}
-            </select>
-            {errors.status && <p className="text-xs text-red-400 mt-1">{errors.status.message}</p>}
-          </div>
-          <div>
-            <label className="label">Lead Source</label>
-            <select {...register("source")} title="Lead Source" className="input">
-              <option value="">Select source...</option>
-              {dynamicSourceOptions.map((source) => (
-                <option key={source} value={source}>{source}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Row 4b: Keyword */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Keyword</label>
-            <input type="text" {...register("keyword")} className="input" placeholder="e.g. NetSuite, SuiteCommerce" />
-            {errors.keyword && <p className="text-xs text-red-400 mt-1">{errors.keyword.message}</p>}
-          </div>
-        </div>
-
-        {/* Row 5: Follow-up Date + Assign To */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Follow-up Date</label>
-            <input
-              type="date"
-              {...register("followUpDate")}
-              title="Follow-up Date"
-              className="input"
-              min={new Date().toISOString().split('T')[0]}
-              max="2099-12-31"
-              onKeyDown={(e) => {
-                if (!/Tab|Backspace|Delete|Arrow/.test(e.key)) {
-                  if (!/[\d\-\/]/.test(e.key)) e.preventDefault();
-                }
-              }}
-            />
-            {errors.followUpDate && <p className="text-xs text-red-400 mt-1">{errors.followUpDate.message}</p>}
-          </div>
-          {isAdmin && (
+        {/* Lead basics: Company Name + Lead Type */}
+        <FormSection icon={Briefcase} title="Lead Basics" subtitle="Who is this lead and what kind is it?" tone="blue">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="label">Assign Lead To</label>
-              <select {...register("assignedToId")} title="Assign To" className="input">
-                <option value="">Select user...</option>
-                {users.map((u: any) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
+              <FieldLabel>Company Name</FieldLabel>
+              <IconField icon={Building2}>
+                <input type="text" {...register("companyName")} className="input pl-10" placeholder="Acme Inc." />
+              </IconField>
+              <FieldError message={errors.companyName?.message} />
+            </div>
+            <div>
+              <FieldLabel required>Lead Type</FieldLabel>
+              <Select {...register("leadType")} title="Lead Type" className="input">
+                <option value="">Select lead type...</option>
+                {leadTypeOptions.map((opt: any) => (
+                  <option key={opt.id || opt.value} value={opt.value}>{opt.value}</option>
                 ))}
-              </select>
+              </Select>
+              <FieldError message={errors.leadType?.message} />
             </div>
-          )}
-          {!isAdmin && (
-            <div>
-              <label className="label">Lead Created By</label>
-            <input
-              type="text"
-              value={currentUser?.name || ""}
-              disabled
-              readOnly
-              title="Lead Created By"
-              className="input opacity-70 cursor-not-allowed"
-            />
-            </div>
-          )}
-        </div>
-
-        {/* Lead Created By — read-only, always the logged-in user; server sets this automatically on create */}
-        {isAdmin && (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Lead Created By</label>
-            <input
-              type="text"
-              value={currentUser?.name || ""}
-              disabled
-              readOnly
-              title="Lead Created By"
-              className="input opacity-70 cursor-not-allowed"
-            />
           </div>
-        </div>
-        )}
+        </FormSection>
+
+        {/* Contact person */}
+        <FormSection icon={User} title="Contact Person" subtitle="The person you'll be talking to" tone="violet">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <FieldLabel required>Contact Name</FieldLabel>
+              <IconField icon={User}>
+                <input type="text" {...register("contactName")} className="input pl-10" placeholder="John Doe" />
+              </IconField>
+              <FieldError message={errors.contactName?.message} />
+            </div>
+            <div>
+              <FieldLabel>Designation of Contact Name</FieldLabel>
+              <IconField icon={BadgeCheck}>
+                <input type="text" {...register("contactTitle")} className="input pl-10" placeholder="e.g. VP of Engineering" />
+              </IconField>
+            </div>
+            <div>
+              <FieldLabel>Email</FieldLabel>
+              <IconField icon={Mail}>
+                <input type="email" {...register("contactEmail")} className="input pl-10" placeholder="john@example.com" />
+              </IconField>
+              <FieldError message={errors.contactEmail?.message} />
+            </div>
+            <div>
+              <FieldLabel>Phone</FieldLabel>
+              <IconField icon={Phone}>
+                <input type="tel" {...register("contactPhone")} className="input pl-10" placeholder="+91 9876543210" />
+              </IconField>
+              <FieldError message={errors.contactPhone?.message} />
+            </div>
+          </div>
+        </FormSection>
+
+        {/* Status & source */}
+        <FormSection icon={Activity} title="Status & Source" subtitle="Where the lead stands and where it came from" tone="amber">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <FieldLabel required>Lead Status</FieldLabel>
+              <Select {...register("status")} title="Status" className="input">
+                <option value="">Select status...</option>
+                {dynamicLeadStatusOptions.map((opt) => (
+                  <option key={opt} value={opt}>{formatOptionLabel(opt)}</option>
+                ))}
+              </Select>
+              <FieldError message={errors.status?.message} />
+            </div>
+            <div>
+              <FieldLabel>Lead Source</FieldLabel>
+              <Select {...register("source")} title="Lead Source" className="input">
+                <option value="">Select source...</option>
+                {dynamicSourceOptions.map((source) => (
+                  <option key={source} value={source}>{source}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <FieldLabel>Keyword</FieldLabel>
+              <IconField icon={Hash}>
+                <input type="text" {...register("keyword")} className="input pl-10" placeholder="e.g. NetSuite, SuiteCommerce" />
+              </IconField>
+              <FieldError message={errors.keyword?.message} />
+            </div>
+          </div>
+        </FormSection>
+
+        {/* Follow-up & ownership */}
+        <FormSection icon={CalendarClock} title="Follow-up & Ownership" subtitle="When to follow up and who owns it" tone="emerald">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <FieldLabel>Follow-up Date</FieldLabel>
+              <IconField icon={Calendar}>
+                <input
+                  type="date"
+                  {...register("followUpDate")}
+                  title="Follow-up Date"
+                  className="input pl-10"
+                  min={new Date().toISOString().split('T')[0]}
+                  max="2099-12-31"
+                  onKeyDown={(e) => {
+                    if (!/Tab|Backspace|Delete|Arrow/.test(e.key)) {
+                      if (!/[\d\-\/]/.test(e.key)) e.preventDefault();
+                    }
+                  }}
+                />
+              </IconField>
+              <FieldError message={errors.followUpDate?.message} />
+            </div>
+            {(isAdmin || isManager) && (
+              <div>
+                <FieldLabel>Assign Lead To</FieldLabel>
+                <Select {...register("assignedToId")} title="Assign To" className="input">
+                  <option value="">Select user...</option>
+                  {users.map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            {/* Lead Created By — read-only, always the logged-in user; server sets this automatically on create */}
+            <div>
+              <FieldLabel>Lead Created By</FieldLabel>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center z-10">
+                  <UserCheck size={12} />
+                </span>
+                <input
+                  type="text"
+                  value={currentUser?.name || ""}
+                  disabled
+                  readOnly
+                  title="Lead Created By"
+                  className="input pl-11 font-medium !bg-slate-50 dark:!bg-white/[0.03] cursor-not-allowed"
+                />
+              </div>
+            </div>
+          </div>
+        </FormSection>
 
         {/* Company Info */}
-        <div className="pt-2 border-t border-slate-200 dark:border-white/10">
-          <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Company Information</h3>
-          <div className="grid grid-cols-2 gap-3">
+        <FormSection icon={Building2} title="Company Information" subtitle="Website, industry and location" tone="cyan">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="label">Website</label>
-              <input type="text" {...register("website")} className="input" placeholder="www.abc.com" />
-              {errors.website && <p className="text-xs text-red-400 mt-1">{errors.website.message}</p>}
+              <FieldLabel>Website</FieldLabel>
+              <IconField icon={Globe}>
+                <input type="text" {...register("website")} className="input pl-10" placeholder="www.abc.com" />
+              </IconField>
+              <FieldError message={errors.website?.message} />
             </div>
             <SearchableDropdown
               label="Industry"
@@ -658,45 +725,82 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               error={errors.industry?.message}
             />
           </div>
-          <div className="mt-3">
-            <SearchableDropdown
-              label="Location"
-              value={location}
-              onChange={(value) => setValue("location", value, { shouldValidate: true })}
-              options={locations}
-              onCreateNew={canManageDropdowns ? handleCreateLocation : undefined}
-              onEdit={canManageDropdowns ? handleEditLocation : undefined}
-              onDelete={canManageDropdowns ? handleDeleteLocation : undefined}
-              placeholder="Select or search location..."
-              error={errors.location?.message}
-            />
-          </div>
-        </div>
+          <SearchableDropdown
+            label="Location"
+            value={location}
+            onChange={(value) => setValue("location", value, { shouldValidate: true })}
+            options={locations}
+            // Location: every role can add and edit; only admins can delete
+            onCreateNew={handleCreateLocation}
+            onEdit={handleEditLocation}
+            onDelete={isAdmin ? handleDeleteLocation : undefined}
+            placeholder="Select or search location..."
+            error={errors.location?.message}
+          />
+        </FormSection>
 
         {/* Notes */}
-        <div>
-          <label className="label">Description / Notes</label>
+        <FormSection icon={FileText} title="Description / Notes" subtitle="Anything your team should know" tone="slate">
           <textarea
             {...register("notes")}
-            className="input min-h-[72px] resize-none"
+            className="input min-h-[96px] resize-none leading-relaxed"
             placeholder="Add any notes or context about this lead..."
             maxLength={2000}
           />
-        </div>
+        </FormSection>
+
+        {duplicateConfirm && (
+          <div className="rounded-2xl border border-amber-200 dark:border-amber-500/25 bg-amber-50 dark:bg-amber-500/[0.08] p-4 animate-fade-in">
+            <div className="flex items-start gap-3">
+              <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md shadow-amber-500/30 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={16} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                  Possible duplicate found: {duplicateConfirm.companyName}. Do you want to continue?
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleContinueAfterDuplicate}
+                    disabled={createMutation.isPending}
+                  >
+                    Continue
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => {
+                      if (duplicateConfirm.existingId) {
+                        window.location.href = `/dashboard/leads/${duplicateConfirm.existingId}`;
+                        handleClose();
+                      } else {
+                        toast("Existing lead not available");
+                      }
+                    }}
+                  >
+                    View Existing
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Actions */}
-        <div className="flex gap-3 pt-4">
+        <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 flex gap-3 border-t border-slate-100 dark:border-white/[0.06] bg-surface/95 backdrop-blur">
           <button
             type="button"
             onClick={handleClose}
-            className="btn-ghost flex-1"
+            className="btn-ghost flex-1 justify-center py-2.5"
             disabled={createMutation.isPending}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="btn-primary flex-1"
+            className="btn-primary flex-1 justify-center py-2.5"
             disabled={createMutation.isPending}
           >
             {createMutation.isPending ? (
@@ -705,43 +809,13 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
                 Creating...
               </>
             ) : (
-              "Create Lead"
+              <>
+                <UserCircle size={15} /> Create Lead
+              </>
             )}
           </button>
         </div>
       </form>
-
-      {duplicateConfirm && (
-        <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3">
-          <p className="text-sm text-amber-300">
-            Possible duplicate found: {duplicateConfirm.companyName}. Do you want to continue?
-          </p>
-          <div className="flex gap-2 mt-3">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={handleContinueAfterDuplicate}
-              disabled={createMutation.isPending}
-            >
-              Continue
-            </button>
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={() => {
-                if (duplicateConfirm.existingId) {
-                  window.location.href = `/dashboard/leads/${duplicateConfirm.existingId}`;
-                  handleClose();
-                } else {
-                  toast("Existing lead not available");
-                }
-              }}
-            >
-              View Existing
-            </button>
-          </div>
-        </div>
-      )}
     </Modal>
   );
 }

@@ -38,32 +38,32 @@ export function serializeNotes(notes: LeadNote[]): string {
 const fmtDate = (iso: string) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 
-const TH = 'text-left py-2 px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider';
+const TH = 'text-left py-2 px-3 text-[10px] font-semibold text-ink-3 uppercase tracking-wider';
 
 /** Read-only table of all notes. */
 export function LeadNotesView({ value, fallback }: { value?: string | null; fallback?: { date?: string; author?: string } }) {
   const notes = parseNotes(value, fallback);
-  if (notes.length === 0) return <p className="text-sm text-slate-500">—</p>;
+  if (notes.length === 0) return <p className="text-sm text-ink-3">—</p>;
   return <NotesGrid notes={notes} />;
 }
 
 function NoteRow({ index, note }: { index: number; note: LeadNote }) {
   return (
     <tr className="border-t border-slate-200 dark:border-white/[0.06] align-top">
-      <td className="py-2 px-3 text-xs text-slate-500">{index}</td>
-      <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap">{fmtDate(note.date)}</td>
-      <td className="py-2 px-3 text-xs text-slate-500">{note.author || '—'}</td>
-      <td className="py-2 px-3 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words">{note.text}</td>
+      <td className="py-2 px-3 text-xs text-ink-3">{index}</td>
+      <td className="py-2 px-3 text-xs text-ink-3 whitespace-nowrap">{fmtDate(note.date)}</td>
+      <td className="py-2 px-3 text-xs text-ink-3">{note.author || '—'}</td>
+      <td className="py-2 px-3 text-sm text-ink-2 dark:text-slate-300 whitespace-pre-wrap break-words">{note.text}</td>
     </tr>
   );
 }
 
 function NotesGrid({ notes }: { notes: LeadNote[] }) {
   return (
-    <div className="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden">
+    <div className="border border-line rounded-lg overflow-hidden">
       <div className="max-h-56 overflow-y-auto">
         <table className="w-full">
-          <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800/80">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-white/[0.04]">
             <tr>
               <th className={`${TH} w-8`}>#</th>
               <th className={`${TH} w-40`}>Date</th>
@@ -114,10 +114,10 @@ export function LeadNotesEditor({
 
   return (
     <div className="space-y-2">
-      <div className="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden">
+      <div className="border border-line rounded-lg overflow-hidden">
         <div ref={scrollRef} className="max-h-56 overflow-y-auto">
           <table className="w-full">
-            <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800/80">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-white/[0.04]">
               <tr>
                 <th className={`${TH} w-8`}>#</th>
                 <th className={`${TH} w-40`}>Date</th>
@@ -131,9 +131,9 @@ export function LeadNotesEditor({
               ))}
               {drafts.map((n, i) => (
                 <tr key={`d${i}`} className="border-t border-slate-200 dark:border-white/[0.06] align-top">
-                  <td className="py-2 px-3 text-xs text-slate-500">{existing.length + i + 1}</td>
-                  <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap">{fmtDate(n.date)}</td>
-                  <td className="py-2 px-3 text-xs text-slate-500">{n.author || '—'}</td>
+                  <td className="py-2 px-3 text-xs text-ink-3">{existing.length + i + 1}</td>
+                  <td className="py-2 px-3 text-xs text-ink-3 whitespace-nowrap">{fmtDate(n.date)}</td>
+                  <td className="py-2 px-3 text-xs text-ink-3">{n.author || '—'}</td>
                   <td className="py-1.5 px-3">
                     <textarea
                       ref={i === drafts.length - 1 ? newNoteRef : undefined}
@@ -146,7 +146,7 @@ export function LeadNotesEditor({
                 </tr>
               ))}
               {existing.length === 0 && drafts.length === 0 && (
-                <tr><td colSpan={4} className="py-3 px-3 text-xs text-slate-500">No notes yet.</td></tr>
+                <tr><td colSpan={4} className="py-3 px-3 text-xs text-ink-3">No notes yet.</td></tr>
               )}
             </tbody>
           </table>

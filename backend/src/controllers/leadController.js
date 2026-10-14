@@ -8,9 +8,9 @@ const { analyzeLeadIntent, generateOutreachEmail } = require('../services/aiServ
 const { sendEmail } = require('../services/emailService');
 const logger = require('../utils/logger');
 const { scopeLeadWhere } = require('../middleware/rbac');
-const { Parser } = require('json2csv');
+const XLSX = require('xlsx');
 const { enrichViaSignalHire, enrichViaApollo } = require('../services/leadEnrichmentPipeline');
-const { checkLeadQuota, incrementLeadUsage, decrementLeadUsage } = require('../utils/leadQuota');
+const { decrementLeadUsage } = require('../utils/leadQuota');
 
 async function getLeads(req, res) {
   try {
@@ -98,11 +98,7 @@ const LEAD_ALLOWED_FIELDS = new Set([
 
 async function createLead(req, res) {
   try {
-    // Check lead quota (unchanged)
-    const quota = await checkLeadQuota(req.user.organizationId);
-    if (!quota.allowed) {
-      return error(res, `Lead limit reached (${quota.quota}). You have used all your available leads. Please upgrade your plan to add more.`, 403);
-    }
+    // Lead quota only applies to Lead Discovery leads, not manual creation
 
     // Strip fields not in the Prisma schema (e.g. ignoreDuplicate) to prevent Prisma errors
     const filtered = Object.fromEntries(
@@ -158,9 +154,6 @@ async function createLead(req, res) {
     await prisma.activityLog.create({ data: { organizationId: req.user.organizationId, userId: req.user.id,
       leadId: lead.id, action: 'lead_created', description: `Lead created: ${lead.companyName}` } }).catch(()=>{});
 
-    // Increment lead usage counter (unchanged)
-    await incrementLeadUsage(req.user.organizationId);
-
     dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, lead, 'Lead created', 201);
   } catch (err) {
@@ -187,10 +180,11 @@ async function deleteLead(req, res) {
   try {
     const existing = await prisma.lead.findFirst({ where: scopeLeadWhere(req.user, { id: req.params.id }) });
     if (!existing) return error(res, 'Lead not found', 404);
+    await prisma.notification.deleteMany({ where: { entityType: 'Lead', entityId: req.params.id } });
     await prisma.lead.delete({ where: { id: req.params.id } });
 
-    // Decrement lead usage counter
-    await decrementLeadUsage(req.user.organizationId);
+    // Decrement lead usage counter (only Lead Discovery leads count)
+    if (existing.scanJobId) await decrementLeadUsage(req.user.organizationId);
 
     dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     return success(res, null, 'Lead deleted');
@@ -450,7 +444,7 @@ async function exportLeads(req, res) {
         ];
       }
       if (req.query.status) {
-        filters.status = req.query.status;
+        filters.status = { equals: String(req.query.status), mode: 'insensitive' };
       }
       // Only non-sales roles can pick whose leads are exported (still within scope)
       if (!isSalesUser) {
@@ -470,91 +464,135 @@ async function exportLeads(req, res) {
     const leads = await prisma.lead.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { leadContacts: true },
+      include: {
+        leadContacts: true,
+        assignedTo: { select: { name: true } },
+        createdBy: { select: { name: true } },
+      },
     });
-    const rows = [];
-    const formatDate = (date) => {
+
+    // Org dropdown values, so Status / Source are written exactly as the import expects
+    const dropdowns = await prisma.dropdownConfig.findMany({
+      where: { organizationId: req.user.organizationId, category: { in: ['lead_status', 'lead_source'] }, isActive: true },
+      select: { category: true, value: true },
+    });
+    const pick = (category, raw) => {
+      if (!raw) return '';
+      const hit = dropdowns.find((d) => d.category === category && d.value.toLowerCase() === String(raw).trim().toLowerCase());
+      return hit ? hit.value : null;
+    };
+    const titleCase = (v) => String(v || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const leadTypeLabel = (v) => {
+      const t = String(v || '').trim().toLowerCase();
+      if (!t) return '';
+      if (t.startsWith('product')) return 'Product';
+      if (t.startsWith('service')) return 'Services';
+      return v;
+    };
+    // DD/MM/YYYY — the format the import reads
+    const ddmmyyyy = (date) => {
       if (!date) return '';
       const d = new Date(date);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const hours = String(d.getHours()).padStart(2, '0');
-      const minutes = String(d.getMinutes()).padStart(2, '0');
-      const seconds = String(d.getSeconds()).padStart(2, '0');
-      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+    };
+    const stamp = (date) => {
+      if (!date) return '';
+      const d = new Date(date);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
+    // Sheet 1 — same columns as the import template, one row per lead (re-importable)
+    const IMPORT_COLUMNS = [
+      'Company Name', 'Lead Type', 'Contact Name', 'Job Title', 'Email', 'Phone',
+      'Lead Status', 'Lead Source', 'Score', 'Follow-up Date', 'Assign Lead To',
+      'Website', 'Industry', 'Location', 'Description / Notes',
+    ];
+    const leadRows = leads.map((l) => {
+      const source = pick('lead_source', l.source);
+      return [
+        l.companyName || '',
+        leadTypeLabel(l.leadType),
+        l.contactName || '',
+        l.contactTitle || '',
+        l.contactEmail || '',
+        l.contactPhone || '',
+        pick('lead_status', l.status) ?? titleCase(l.status),
+        source ?? '', // non-standard sources (e.g. discovery) are kept on the Lead Details sheet
+        Number.isFinite(l.leadScore) ? l.leadScore : '',
+        ddmmyyyy(l.followUpDate),
+        l.assignedTo?.name || '',
+        l.website || '',
+        l.industry || '',
+        l.location || '',
+        l.notes || '',
+      ];
+    });
+
+    // Sheet 2 — everything else about the lead
+    const DETAIL_COLUMNS = [
+      'Company Name', 'Contact Name', 'Email', 'Domain', 'Company Size', 'Company Phone',
+      'Company LinkedIn', 'Contact LinkedIn', 'Intent Level', 'Intent Signals',
+      'Original Source', 'Source URL', 'Created By', 'Created At',
+    ];
+    const detailRows = leads.map((l) => [
+      l.companyName || '',
+      l.contactName || '',
+      l.contactEmail || '',
+      l.website ? l.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] : '',
+      l.companySize || '',
+      l.companyPhone || '',
+      l.linkedinUrl || '',
+      l.contactLinkedin || '',
+      titleCase(l.intentLevel),
+      (l.intentSignals || []).map((s) => s.text || s.type || JSON.stringify(s)).join('; '),
+      l.source || '',
+      l.sourceUrl || '',
+      l.createdBy?.name || '',
+      stamp(l.createdAt),
+    ]);
+
+    // Sheet 3 — additional contacts, one row per email/phone value
+    const CONTACT_COLUMNS = ['Company Name', 'Contact Name', 'Job Title', 'Email', 'Phone', 'LinkedIn'];
+    const contactRows = [];
     for (const l of leads) {
-      const base = {
-        companyName:  l.companyName,
-        domainName:   l.website ? l.website.replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0] : '',
-        website:      l.website || '',
-        industry:     l.industry || '',
-        location:     l.location || '',
-        companySize:  l.companySize || '',
-        companyPhone: l.companyPhone || '',
-        linkedinUrl:  l.linkedinUrl || '',
-        leadScore:    l.leadScore,
-        intentLevel:  l.intentLevel,
-        status:       l.status,
-        intentSignals: (l.intentSignals||[]).map(s=>s.text||s.type||JSON.stringify(s)).join('; '),
-        source:       l.source || '',
-        sourceUrl:    l.sourceUrl || '',
-        createdAt:    formatDate(l.createdAt),
-      };
-      // Company-level fields appear only on the lead's first (Primary) row;
-      // additional rows blank them so the data isn't repeated.
-      const emptyBase = Object.fromEntries(Object.keys(base).map(k => [k, '']));
-
-      // Primary contact row
-      rows.push({
-        ...base,
-        contactType:    'Primary',
-        contactName:    l.contactName || '',
-        contactTitle:   l.contactTitle || '',
-        contactEmail:   l.contactEmail || '',
-        contactPhone:   l.contactPhone || '',
-        contactLinkedin: l.contactLinkedin || '',
-      });
-
-      // Additional contact rows — one row per email/phone value. The contact's
-      // name/title/linkedin appear only on its first row; extra emails/phones
-      // spill onto their own rows so each value gets its own cell.
-      if (l.leadContacts && l.leadContacts.length > 0) {
-        for (const c of l.leadContacts) {
-          const emails = [c.email, ...(Array.isArray(c.additionalEmails) ? c.additionalEmails : [])]
-            .map(v => (v || '').trim()).filter(Boolean);
-          const phones = [c.phone, ...(Array.isArray(c.additionalPhones) ? c.additionalPhones : [])]
-            .map(v => (v || '').trim()).filter(Boolean);
-          const rowCount = Math.max(emails.length, phones.length, 1);
-          for (let i = 0; i < rowCount; i++) {
-            rows.push({
-              ...emptyBase,
-              contactType:    'Additional',
-              contactName:    i === 0 ? (c.name || '') : '',
-              contactTitle:   i === 0 ? (c.title || c.designation || '') : '',
-              contactEmail:   emails[i] || '',
-              contactPhone:   phones[i] || '',
-              contactLinkedin: i === 0 ? (c.linkedin || '') : '',
-            });
-          }
+      for (const c of l.leadContacts || []) {
+        const emails = [c.email, ...(Array.isArray(c.additionalEmails) ? c.additionalEmails : [])]
+          .map((v) => (v || '').trim()).filter(Boolean);
+        const phones = [c.phone, ...(Array.isArray(c.additionalPhones) ? c.additionalPhones : [])]
+          .map((v) => (v || '').trim()).filter(Boolean);
+        const count = Math.max(emails.length, phones.length, 1);
+        for (let i = 0; i < count; i++) {
+          contactRows.push([
+            i === 0 ? (l.companyName || '') : '',
+            i === 0 ? (c.name || '') : '',
+            i === 0 ? (c.title || c.designation || '') : '',
+            emails[i] || '',
+            phones[i] || '',
+            i === 0 ? (c.linkedin || '') : '',
+          ]);
         }
       }
     }
 
-    const parser = new Parser({ fields: [
-      'companyName','domainName','website','industry','location','companySize','companyPhone',
-      'contactType','contactName','contactTitle','contactEmail','contactPhone','contactLinkedin',
-      'linkedinUrl','leadScore','intentLevel','status','intentSignals','source','sourceUrl','createdAt',
-    ]});
-    const csv = parser.parse(rows);
-    // Prepend a UTF-8 BOM so Excel decodes em-dashes/accents correctly
-    // (without it Excel reads the file as Windows-1252 and shows "â€"" etc.)
-    res.setHeader('Content-Type','text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition','attachment; filename=leads.csv');
-    res.send('﻿' + csv);
+    // Cells are written as plain text/number cells, so values such as "=..." are
+    // never evaluated as formulas by Excel/Sheets.
+    const sheet = (header, rows, widths) => {
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      ws['!cols'] = widths.map((wch) => ({ wch }));
+      return ws;
+    };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, sheet(IMPORT_COLUMNS, leadRows, [28, 12, 22, 20, 30, 16, 14, 18, 8, 14, 20, 30, 18, 16, 40]), 'Leads');
+    XLSX.utils.book_append_sheet(wb, sheet(DETAIL_COLUMNS, detailRows, [28, 22, 30, 24, 14, 16, 30, 30, 12, 40, 40, 40, 20, 18]), 'Lead Details');
+    XLSX.utils.book_append_sheet(wb, sheet(CONTACT_COLUMNS, contactRows, [28, 22, 20, 30, 16, 30]), 'Additional Contacts');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=leads.xlsx');
+    res.send(buffer);
   } catch (err) {
+    logger.error('exportLeads failed', { err: err.message });
     return error(res, 'Export failed', 500);
   }
 }

@@ -2,7 +2,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { discoveryApi, leadsApi, dropdownsApi } from '../../../lib/api';
-import { Badge, ProgressBar, Spinner } from '../../../components/ui';
+import { Badge } from '../../../components/ui';
+import { PageHero } from '../../../components/ui/PageHero';
+import { usePermissions } from '../../../lib/rbac';
+import { ShieldOff } from 'lucide-react';
 import {
   X, Zap, Loader2, CheckCircle2,
   Link2, FileText,
@@ -10,10 +13,13 @@ import {
   Target, Users, Edit3,
   Sparkles, ArrowRight, RotateCcw,
   Eye, Lightbulb, Copy, Check,
+  Radar, Briefcase, Package, SlidersHorizontal, MapPin, Search, Rocket,
+  History, Calendar, Minus, Plus, AlertCircle, ChevronRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { formatDate } from '../../../lib/utils';
+import { Select } from '../../../components/ui/Select';
 
 const ACTIVE_SCAN_KEY = 'lf_active_scan_id';
 
@@ -25,32 +31,42 @@ function ScanLeadsPanel({ scanId }: { scanId: string }) {
     queryFn: () => leadsApi.list({ scanJobId: scanId, limit: 100 }).then(r => r.data),
   });
   const leads = (data?.data as any[]) ?? [];
-  if (isLoading) return <div className="px-3 py-2 text-xs text-slate-500">Loading leads…</div>;
-  if (!leads.length) return <div className="px-3 py-2 text-xs text-slate-500">No leads stored for this scan.</div>;
+  if (isLoading) return <div className="flex items-center gap-2 px-3 py-3 text-xs text-ink-3"><Loader2 size={13} className="animate-spin" /> Loading leads…</div>;
+  if (!leads.length) return <div className="px-3 py-3 text-xs text-ink-3">No leads stored for this scan.</div>;
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-white/[0.06] overflow-hidden">
+    <div className="rounded-xl border border-line overflow-x-auto bg-white dark:bg-surface">
       <table className="w-full text-xs">
-        <thead className="bg-slate-200/60 dark:bg-slate-900/60 text-slate-500">
+        <thead className="bg-slate-50 dark:bg-white/[0.03]">
           <tr>
-            <th className="text-left font-semibold px-3 py-2">Company</th>
-            <th className="text-left font-semibold px-3 py-2">Score</th>
-            <th className="text-left font-semibold px-3 py-2">Keyword</th>
-            <th className="text-left font-semibold px-3 py-2">Source</th>
+            <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-3 px-3 py-2.5">Company</th>
+            <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-3 px-3 py-2.5">Score</th>
+            <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-3 px-3 py-2.5">Keyword</th>
+            <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-3 px-3 py-2.5">Source</th>
           </tr>
         </thead>
         <tbody>
-          {leads.map((l: any) => (
-            <tr key={l.id} className="border-t border-slate-200 dark:border-white/[0.04]">
-              <td className="px-3 py-2">
-                <Link href={`/dashboard/leads/${l.id}`} className="font-medium text-slate-800 dark:text-slate-200 hover:underline">
-                  {l.companyName || l.contactName || '—'}
-                </Link>
-              </td>
-              <td className="px-3 py-2">{l.leadScore ?? 0}</td>
-              <td className="px-3 py-2 text-slate-500 truncate max-w-[180px]">{l.keyword || '—'}</td>
-              <td className="px-3 py-2 text-slate-500 truncate max-w-[180px]">{l.source || '—'}</td>
-            </tr>
-          ))}
+          {leads.map((l: any) => {
+            const score = l.leadScore ?? 0;
+            return (
+              <tr key={l.id} className="border-t border-slate-100 dark:border-white/[0.04] hover:bg-blue-50/50 dark:hover:bg-blue-500/[0.04] transition-colors">
+                <td className="px-3 py-2.5">
+                  <Link href={`/dashboard/leads/${l.id}`} className="font-semibold text-ink hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    {l.companyName || l.contactName || '—'}
+                  </Link>
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className={cn(
+                    'inline-flex items-center justify-center min-w-[32px] px-1.5 py-0.5 rounded-md text-[11px] font-bold tabular-nums',
+                    score >= 80 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      : score >= 50 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                        : 'bg-slate-400/10 text-ink-3'
+                  )}>{score}</span>
+                </td>
+                <td className="px-3 py-2.5 text-ink-2 truncate max-w-[180px]">{l.keyword || '—'}</td>
+                <td className="px-3 py-2.5 text-ink-2 truncate max-w-[180px]">{l.source || '—'}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -121,22 +137,39 @@ function cn(...cls: (string | boolean | undefined | null)[]) {
   return cls.filter(Boolean).join(' ');
 }
 
+const SECTION_TONES: Record<string, string> = {
+  blue: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+  violet: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  cyan: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+  emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+};
+
 function SectionCard({
-  title, subtitle, defaultOpen = true, children,
-}: { title: string; subtitle?: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  title, subtitle, defaultOpen = true, icon: Icon, tone = 'blue', children,
+}: { title: string; subtitle?: string; defaultOpen?: boolean; icon?: React.ElementType; tone?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="card overflow-hidden">
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-200/20 dark:hover:bg-slate-800/20 transition-colors text-left">
-        <div>
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{title}</p>
-          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="w-full flex items-center gap-3 px-5 py-4 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors text-left">
+        {Icon && (
+          <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', SECTION_TONES[tone] ?? SECTION_TONES.blue)}>
+            <Icon size={18} />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="section-title">{title}</p>
+          {subtitle && <p className="text-xs text-ink-3 mt-0.5">{subtitle}</p>}
         </div>
-        {open ? <ChevronUp size={14} className="text-slate-500 flex-shrink-0" />
-          : <ChevronDown size={14} className="text-slate-500 flex-shrink-0" />}
+        <span className={cn(
+          'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-ink-3 bg-slate-100 dark:bg-white/[0.04] transition-transform duration-200',
+          open && 'rotate-180'
+        )}>
+          <ChevronDown size={15} />
+        </span>
       </button>
-      {open && <div className="px-5 pb-5 border-t border-slate-200 dark:border-white/[0.04]">{children}</div>}
+      {open && <div className="px-5 pb-5 border-t border-slate-100 dark:border-white/[0.05]">{children}</div>}
     </div>
   );
 }
@@ -145,7 +178,7 @@ function MandatoryLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="label mb-1.5 flex items-center gap-1">
       {children}
-      <span className="text-red-400 text-xs font-bold">*</span>
+      <span className="text-rose-500 text-xs font-bold">*</span>
     </p>
   );
 }
@@ -157,10 +190,10 @@ function MandatoryLabelWithHelp({ label, onHelp }: { label: string; onHelp: () =
     <div className="flex items-center justify-between mb-1.5">
       <span className="label mb-0 flex items-center gap-1">
         {label}
-        <span className="text-red-400 text-xs font-bold">*</span>
+        <span className="text-rose-500 text-xs font-bold">*</span>
       </span>
       <button type="button" onClick={onHelp}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-400 hover:text-blue-300 transition-colors">
+        className="inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/[0.08] hover:bg-blue-500/15 transition-colors">
         <Eye size={12} /> See example
       </button>
     </div>
@@ -209,36 +242,40 @@ function HelpExampleModal({
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-10 pb-6 px-4 bg-black/60 overflow-y-auto"
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-10 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto animate-fade-in"
       onClick={onClose}>
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl"
+      <div className="bg-white dark:bg-surface border border-line rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-white/[0.06]">
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Lightbulb size={15} className="text-amber-400" /> {title}
+        <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500" />
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/[0.06]">
+          <h3 className="font-display text-[15px] font-semibold text-ink flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <Lightbulb size={17} />
+            </span>
+            {title}
           </h3>
-          <button onClick={onClose} title="Close" className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+          <button onClick={onClose} title="Close" className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-white/[0.06] transition-colors">
             <X size={16} />
           </button>
         </div>
-        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
-          <p className="text-xs text-slate-500 leading-relaxed">{intro}</p>
+        <div className="px-5 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
+          <p className="text-[13px] text-ink-2 leading-relaxed">{intro}</p>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Example</p>
-            <pre className="text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-950 rounded-xl p-3 whitespace-pre-wrap leading-relaxed font-sans">{example}</pre>
+            <p className="label mb-2">Example</p>
+            <pre className="text-xs text-ink-2 dark:text-slate-300 bg-slate-50 dark:bg-white/[0.03] border border-line rounded-xl p-4 whitespace-pre-wrap leading-relaxed font-sans">{example}</pre>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Tips</p>
-            <ul className="space-y-1.5">
+            <p className="label mb-2">Tips</p>
+            <ul className="space-y-2">
               {tips.map((t, i) => (
-                <li key={i} className="text-xs text-slate-600 dark:text-slate-300 flex items-start gap-1.5">
-                  <CheckCircle2 size={12} className="text-emerald-400 mt-0.5 flex-shrink-0" /> {t}
+                <li key={i} className="text-[13px] text-ink-2 dark:text-slate-300 flex items-start gap-2">
+                  <CheckCircle2 size={15} className="text-emerald-500 mt-0.5 flex-shrink-0" /> {t}
                 </li>
               ))}
             </ul>
           </div>
         </div>
-        <div className="flex items-center gap-2 p-4 border-t border-slate-200 dark:border-white/[0.06]">
+        <div className="flex items-center gap-2 px-5 py-4 border-t border-slate-100 dark:border-white/[0.06] bg-slate-50/60 dark:bg-white/[0.02]">
           <button onClick={copy} className="btn-ghost text-xs flex items-center gap-1.5">
             {copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
           </button>
@@ -262,13 +299,16 @@ function ChipSelect({
         const active = selected.includes(opt);
         return (
           <button key={opt} type="button" onClick={() => onToggle(opt)}
+            aria-pressed={active}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+              'flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-semibold border transition-all duration-150',
               active
-                ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
-                : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-white/20'
+                ? 'bg-gradient-to-r from-violet-500 to-indigo-500 border-transparent text-white shadow-md shadow-violet-500/25'
+                : 'bg-white dark:bg-white/[0.03] border-line text-ink-2 hover:border-violet-300 hover:text-violet-700 hover:bg-violet-50 dark:hover:border-violet-500/40 dark:hover:text-violet-300 dark:hover:bg-violet-500/[0.06]'
             )}>
-            <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', active ? 'bg-violet-400' : 'bg-slate-500')} />
+            {active
+              ? <Check size={12} className="flex-shrink-0" />
+              : <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-slate-300 dark:bg-slate-600" />}
             {opt}
           </button>
         );
@@ -277,8 +317,33 @@ function ChipSelect({
   );
 }
 
+// Shared classes for the − / + lead-count stepper
+const stepBtnCls = 'w-10 h-10 flex items-center justify-center rounded-lg text-ink-2 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/10 dark:hover:text-blue-400 transition-colors select-none';
+const stepInputCls = 'w-20 h-10 text-center bg-transparent border-0 outline-none font-display text-base font-semibold text-ink tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+const stepWrapCls = 'inline-flex items-center gap-1 p-1 rounded-xl border border-line bg-white dark:bg-sunken shadow-sm focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10';
+
+// Amber "complete these fields" checklist
+function MissingFields({ title, items }: { title: string; items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="w-full bg-amber-50 dark:bg-amber-500/[0.08] border border-amber-200 dark:border-amber-500/20 rounded-xl p-3.5 text-left">
+      <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-2 flex items-center gap-1.5">
+        <AlertCircle size={14} /> {title}
+      </p>
+      <div className="space-y-1.5">
+        {items.map(it => (
+          <p key={it} className="text-xs text-amber-700/90 dark:text-amber-200/90 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" /> {it}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function LeadDiscoveryPage() {
   const qc = useQueryClient();
+  const { isSalesUser } = usePermissions();
   const [scanMode, setScanMode] = useState<'service' | 'product' | null>(null);
 
   // Positions mode — mandatory
@@ -381,6 +446,7 @@ export default function LeadDiscoveryPage() {
     queryKey: ['activeScan'],
     queryFn: () => discoveryApi.getActiveScan().then(r => r.data.data),
     staleTime: 0, refetchOnWindowFocus: false,
+    enabled: !isSalesUser,
   });
   useEffect(() => {
     if (!activeScanId && serverActiveScan?.id) setActiveScanId(serverActiveScan.id);
@@ -391,6 +457,7 @@ export default function LeadDiscoveryPage() {
     queryFn: () => discoveryApi.getScans().then(r => ({
       items: Array.isArray(r.data.data) ? r.data.data : (r.data.data?.items ?? []),
     })),
+    enabled: !isSalesUser,
   });
   const [expandedScan, setExpandedScan] = useState<string | null>(null);
 
@@ -407,7 +474,7 @@ export default function LeadDiscoveryPage() {
     queryFn: () => activeScanId
       ? discoveryApi.getScanStatus(activeScanId).then(r => r.data.data)
       : null,
-    enabled: !!activeScanId,
+    enabled: !!activeScanId && !isSalesUser,
     refetchInterval: activeScanId ? 2000 : false,
   });
 
@@ -611,86 +678,71 @@ export default function LeadDiscoveryPage() {
   const smartScanning = smartScanMutation.isPending ||
     (!!activeScanId && (activeScan == null || ['running', 'pending'].includes(activeScan?.status)));
 
-  return (
-    <div className="space-y-5">
-
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="page-title">Lead Discovery Engine</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            What would you like to generate leads for?
-          </p>
+  // Lead Discovery is not available to sales executives (the API rejects them too)
+  if (isSalesUser) {
+    return (
+      <div className="card p-12 flex flex-col items-center text-center gap-3">
+        <div className="w-14 h-14 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+          <ShieldOff size={24} />
         </div>
+        <h1 className="font-display text-lg font-semibold text-ink">Lead Discovery is not available</h1>
+        <p className="text-sm text-ink-3 max-w-sm">Your role doesn&apos;t have access to Lead Discovery. Ask your manager or admin if you need new leads generated.</p>
       </div>
+    );
+  }
 
-      {/* AI Smart Search */}
-      {/* <div className="card overflow-hidden">
-        <div className="px-5 pt-5 pb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
-              <Sparkles size={13} className="text-violet-400" />
+  const quotaPct = quota && Number(quota.quota) > 0
+    ? Math.min(100, Math.max(0, (Number(quota.used) / Number(quota.quota)) * 100))
+    : 0;
+
+  return (
+    <div className="space-y-6">
+
+      {/* Hero */}
+      <PageHero
+        icon={Radar}
+        eyebrow="AI Lead Engine"
+        title="Lead Discovery Engine"
+        subtitle="What would you like to generate leads for?"
+      >
+        {quota && quota.quota != null && (
+          <div className="rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur px-4 py-3 min-w-[220px]">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-100">Leads used</span>
+              <span className="font-display text-sm font-semibold text-white tabular-nums">
+                {quota.used} <span className="text-blue-200/80 font-medium">/ {quota.quota}</span>
+              </span>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">AI Smart Search</p>
-              <p className="text-xs text-slate-500">Describe your ideal lead in plain English — AI generates leads directly</p>
+            <div className="mt-2 h-1.5 rounded-full bg-white/20 overflow-hidden">
+              <div
+                className={cn('h-full rounded-full', quotaReached ? 'bg-rose-300' : 'bg-gradient-to-r from-emerald-300 to-cyan-200')}
+                style={{ width: `${quotaPct}%` }}
+              />
             </div>
           </div>
-
-          {smartScanning ? (
-            <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="violet"
-              steps={['AI parses your prompt', 'Generating job title variants', 'Scanning Google Jobs', 'Filtering results', 'Saving leads']} />
-          ) : scanComplete && activeScan ? (
-            <ScanComplete activeScan={activeScan} />
-          ) : (
-            <>
-              <div className="flex gap-2">
-                <textarea
-                  className="input text-sm resize-none flex-1 leading-relaxed"
-                  rows={2}
-                  placeholder='e.g. "Find 50 CTOs at mid-size SaaS companies in the USA that need DevOps consulting"'
-                  value={smartPrompt}
-                  onChange={e => setSmartPrompt(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) smartScanMutation.mutate(); }}
-                />
-                <button
-                  className="btn-primary flex-shrink-0 px-5 self-stretch text-sm"
-                  onClick={() => smartScanMutation.mutate()}
-                  disabled={!smartPrompt.trim() || quotaReached}
-                  title={quotaReached ? 'Lead quota reached' : ''}
-                >
-                  <Zap size={14} /> Generate Leads
-                </button>
-              </div>
-              <p className="text-xs text-slate-600 mt-2">
-                Press <kbd className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-mono">Ctrl+Enter</kbd> to search · or use the structured form below for more control
-              </p>
-            </>
-          )}
-        </div>
-      </div> */}
+        )}
+      </PageHero>
 
       {/* Mode dropdown */}
-      <div className="flex items-center gap-3">
-        <div className="relative">
-          <select
-            aria-label="Discovery mode"
-            value={scanMode ?? ''}
-            onChange={e => setScanMode((e.target.value as 'service' | 'product') || null)}
-            className="input text-sm pr-8 appearance-none cursor-pointer min-w-[300px] font-medium"
-          >
-            <option value="">Select discovery mode...</option>
-            <option value="service">Find Clients for Services </option>
-            <option value="product">Find Customers for Product </option>
-          </select>
-          <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          aria-label="Discovery mode"
+          value={scanMode ?? ''}
+          onChange={e => setScanMode((e.target.value as 'service' | 'product') || null)}
+          className="input h-11 text-sm font-medium min-w-[300px] w-auto"
+        >
+          <option value="">Select discovery mode...</option>
+          <option value="service">Find Clients for Services </option>
+          <option value="product">Find Customers for Product </option>
+        </Select>
         {scanMode && (
           <span className={cn(
-            'text-xs font-medium px-2.5 py-1 rounded-lg border',
+            'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold',
             scanMode === 'service'
-              ? 'bg-blue-500/10 border-blue-500/25 text-blue-400'
-              : 'bg-violet-500/10 border-violet-500/25 text-violet-400'
+              ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
+              : 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
           )}>
+            {scanMode === 'service' ? <Briefcase size={13} /> : <Package size={13} />}
             {scanMode === 'service' ? 'Positions' : 'Products'}
           </span>
         )}
@@ -698,45 +750,33 @@ export default function LeadDiscoveryPage() {
 
       {/* POSITIONS MODE */}
       {scanMode === 'service' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start animate-fade-in">
+          <div className="space-y-5">
 
-            <SectionCard title="Position Details" subtitle="Mandatory fields — fill all to enable scanning">
-              <div className="pt-4 space-y-4">
-                {/* <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                  <span className="text-red-400 font-bold">*</span> Required fields
-                </p> */}
-
-                {/* <div>
-                  <MandatoryLabel>Position Title / Job Profile</MandatoryLabel>
-                  <input className="input text-sm"
-                    placeholder="e.g. NetSuite Consultant, Salesforce Admin, SAP Developer"
-                    value={positionTitle} onChange={e => setPositionTitle(e.target.value)} />
-                  <p className="text-xs text-slate-600 mt-1.5">Be specific — "NetSuite Consultant" beats "ERP"</p>
-                </div> */}
-
+            <SectionCard title="Position Details" subtitle="Mandatory fields — fill all to enable scanning" icon={FileText} tone="blue">
+              <div className="pt-5 space-y-5">
                 <div>
                   <MandatoryLabelWithHelp label="Description" onHelp={() => setHelpField('description')} />
-                  <textarea className="input text-sm resize-none w-full" rows={4}
+                  <textarea className="input text-sm resize-none w-full leading-relaxed" rows={4}
                     placeholder="Enter a detailed description for quality leads"
                     value={description} onChange={e => setDescription(e.target.value)} />
                 </div>
 
                 <div>
                   <MandatoryLabel>Geography / Region</MandatoryLabel>
-                  <input className="input text-sm" placeholder="e.g. USA, India, UK, Europe"
-                    value={geography} onChange={e => setGeography(e.target.value)} />
-                </div>Company Information
-
+                  <div className="relative">
+                    <MapPin size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3 z-10" />
+                    <input className="input text-sm pl-10" placeholder="e.g. USA, India, UK, Europe"
+                      value={geography} onChange={e => setGeography(e.target.value)} />
+                  </div>
+                </div>
 
                 <div>
                   <MandatoryLabelWithHelp label="Skills / Key Requirements" onHelp={() => setHelpField('skills')} />
-                  <textarea className="input text-sm resize-none w-full" rows={3}
+                  <textarea className="input text-sm resize-none w-full leading-relaxed" rows={3}
                     placeholder="e.g. SAP S/4HANA, Oracle ERP, 5+ years experience, implementation skills..."
                     value={skillsRequired} onChange={e => setSkillsRequired(e.target.value)} />
                 </div>
-
-
               </div>
             </SectionCard>
 
@@ -761,33 +801,33 @@ export default function LeadDiscoveryPage() {
               />
             )}
 
-            <SectionCard title="Optional Filters" subtitle="Leave blank for any" defaultOpen={true}>
-              <div className="pt-4 space-y-4">
+            <SectionCard title="Optional Filters" subtitle="Leave blank for any" defaultOpen={true} icon={SlidersHorizontal} tone="violet">
+              <div className="pt-5 space-y-5">
 
                 <div>
                   <p className="label mb-1.5">Industry / Vertical</p>
-                  <select aria-label="Industry" className="input text-sm" value={targetIndustry} onChange={e => setTargetIndustry(e.target.value)}>
+                  <Select aria-label="Industry" className="input text-sm" value={targetIndustry} onChange={e => setTargetIndustry(e.target.value)}>
                     {resourceIndustryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
-                  </select>
+                  </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="label mb-1.5">Company Size</p>
-                    <select aria-label="Company size" className="input text-sm" value={companySize} onChange={e => setCompanySize(e.target.value)}>
+                    <Select aria-label="Company size" className="input text-sm" value={companySize} onChange={e => setCompanySize(e.target.value)}>
                       {resourceCompanySizeOptions.map(opt => <option key={opt} value={opt === 'Any Size' ? '' : opt}>{opt}</option>)}
-                    </select>
+                    </Select>
                   </div>
                   <div>
                     <p className="label mb-1.5">Company Type</p>
-                    <select aria-label="Company type" className="input text-sm" value={companyType} onChange={e => setCompanyType(e.target.value)}>
+                    <Select aria-label="Company type" className="input text-sm" value={companyType} onChange={e => setCompanyType(e.target.value)}>
                       {resourceCompanyTypeOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
-                    </select>
+                    </Select>
                   </div>
                 </div>
 
                 <div>
-                  <p className="label mb-2">Who approves hiring? (Decision Maker)</p>
+                  <p className="label mb-2.5">Who approves hiring? (Decision Maker)</p>
                   <ChipSelect
                     options={resourceDecisionMakerOptions}
                     selected={selectedDecisionMakers}
@@ -795,34 +835,34 @@ export default function LeadDiscoveryPage() {
                     color="violet"
                   />
                   {selectedDecisionMakers.length === 0 && (
-                    <p className="text-xs text-slate-500 mt-2">No roles selected — Apollo searches for default decision makers</p>
+                    <p className="text-xs text-ink-3 mt-2.5">No roles selected — Apollo searches for default decision makers</p>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="label mb-1.5">Preferred Contact Channel</p>
-                    <select aria-label="Contact channel" className="input text-sm" value={contactChannel} onChange={e => setContactChannel(e.target.value)}>
+                    <Select aria-label="Contact channel" className="input text-sm" value={contactChannel} onChange={e => setContactChannel(e.target.value)}>
                       {resourceContactChannelOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
-                    </select>
+                    </Select>
                   </div>
                   <div>
                     <p className="label mb-1.5">Seniority Level</p>
-                    <select aria-label="Seniority level" className="input text-sm" value={seniorityLevel} onChange={e => setSeniorityLevel(e.target.value)}>
+                    <Select aria-label="Seniority level" className="input text-sm" value={seniorityLevel} onChange={e => setSeniorityLevel(e.target.value)}>
                       {resourceSeniorityOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
-                    </select>
+                    </Select>
                   </div>
                 </div>
 
                 <div>
                   <MandatoryLabel>Number of Leads</MandatoryLabel>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className={cn(stepWrapCls, 'mt-1')}>
                     <button
                       type="button"
                       aria-label="Decrease lead count"
                       onClick={() => setLeadCount(c => Math.max(1, (Number(c) || 1) - 1))}
-                      className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
-                    >−</button>
+                      className={stepBtnCls}
+                    ><Minus size={16} /></button>
                     <input
                       type="number"
                       aria-label="Number of leads"
@@ -837,18 +877,17 @@ export default function LeadDiscoveryPage() {
                         if (!isNaN(val)) setLeadCount(Math.min(500, val));
                       }}
                       onBlur={() => setLeadCount(c => (c === '' || Number(c) < 1 ? 1 : c))}
-                      className="w-24 text-center input text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className={stepInputCls}
                     />
                     <button
                       type="button"
                       aria-label="Increase lead count"
                       onClick={() => setLeadCount(c => Math.min(500, (Number(c) || 0) + 1))}
-                      className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
-                    >+</button>
-                    {/* <span className="text-xs text-slate-400 dark:text-slate-500">leads (1 – 500)</span> */}
+                      className={stepBtnCls}
+                    ><Plus size={16} /></button>
                   </div>
                   {(leadCount === '' || Number(leadCount) < 1) && (
-                    <p className="text-xs text-red-500 mt-1">Number of leads should be at least one.</p>
+                    <p className="text-xs text-rose-600 dark:text-rose-400 mt-1.5">Number of leads should be at least one.</p>
                   )}
                 </div>
               </div>
@@ -856,83 +895,109 @@ export default function LeadDiscoveryPage() {
           </div>
 
           {/* Right: scan control */}
-          <div className="card p-6 flex flex-col min-h-[320px]">
-            <h2 className="section-title mb-4">Discovery Control</h2>
-            {scanning ? (
-              <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="blue"
-                steps={['AI generates job title variants', 'Google Jobs page 1', 'Google Jobs page 2', 'Google Jobs page 3', 'Filtering agencies', 'More variants', 'Deduplicating', 'Saving leads']} />
-            ) : scanComplete ? (
-              <ScanComplete activeScan={activeScan} peakLeadsFound={peakLeadsFound} />
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600/20 to-cyan-500/10 border border-blue-500/25 flex items-center justify-center">
-                  <Target size={28} className="text-blue-400" />
-                </div>
-                <div>
-                  <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Ready to Discover Leads</p>
-                  <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                    Google Jobs engine finds companies ACTIVELY HIRING for this position.
-                    AI generates job title variants — no static lists.
-                    {geography ? ` Targeting ${geography}.` : ' Fill in the mandatory fields to begin.'}
-                  </p>
-                </div>
-                {!positionsMandatoryFilled && (
-                  <div className="w-full bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left space-y-1">
-                    <p className="text-xs font-semibold text-amber-400 mb-1.5">Complete mandatory fields to scan:</p>
-                    {!description.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Description</p>}
-                    {!geography.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Geography</p>}
-                    {!skillsRequired.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Skills / Key Requirements</p>}
-                  </div>
-                )}
-                <button className="btn-primary px-8 py-3 text-sm w-full justify-center"
-                  onClick={() => scanMutation.mutate()}
-                  disabled={scanMutation.isPending || quotaReached}
-                  title={quotaReached ? 'Lead quota reached' : ''}
-                >
-                  {scanMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
-                  Generate Leads
-                </button>
-                {quotaReached && (
-                  <p className="text-xs text-red-500">Lead quota reached. Upgrade plan to discover more.</p>
-                )}
+          <div className="card relative overflow-hidden p-6 flex flex-col min-h-[320px] lg:sticky lg:top-0">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400" />
+            <div className="pointer-events-none absolute -right-20 -top-20 w-60 h-60 rounded-full bg-blue-500/10 blur-3xl" />
+            <div className="relative flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                <Radar size={18} />
               </div>
-            )}
+              <h2 className="section-title">Discovery Control</h2>
+            </div>
+            <div className="relative flex-1 flex flex-col">
+              {scanning ? (
+                <ScanProgress scanning activeScan={activeScan} scanProgress={scanProgress} color="blue"
+                  steps={['AI generates job title variants', 'Google Jobs page 1', 'Google Jobs page 2', 'Google Jobs page 3', 'Filtering agencies', 'More variants', 'Deduplicating', 'Saving leads']} />
+              ) : scanComplete ? (
+                <ScanComplete activeScan={activeScan} peakLeadsFound={peakLeadsFound} />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center gap-5">
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-3xl bg-blue-500/30 blur-xl" />
+                    <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-500 via-indigo-600 to-violet-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
+                      <Target size={34} className="text-white" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="font-display text-base font-semibold text-ink mb-1.5">Ready to Discover Leads</p>
+                    <p className="text-[13px] text-ink-3 max-w-sm leading-relaxed">
+                      Google Jobs engine finds companies ACTIVELY HIRING for this position.
+                      AI generates job title variants — no static lists.
+                      {geography ? ` Targeting ${geography}.` : ' Fill in the mandatory fields to begin.'}
+                    </p>
+                  </div>
+                  {!positionsMandatoryFilled && (
+                    <MissingFields
+                      title="Complete mandatory fields to scan:"
+                      items={[
+                        ...(!description.trim() ? ['Description'] : []),
+                        ...(!geography.trim() ? ['Geography'] : []),
+                        ...(!skillsRequired.trim() ? ['Skills / Key Requirements'] : []),
+                      ]}
+                    />
+                  )}
+                  <button className="btn-primary px-8 py-3.5 text-sm w-full justify-center"
+                    onClick={() => scanMutation.mutate()}
+                    disabled={scanMutation.isPending || quotaReached}
+                    title={quotaReached ? 'Lead quota reached' : ''}
+                  >
+                    {scanMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                    Generate Leads
+                  </button>
+                  {quotaReached && (
+                    <p className="text-xs text-rose-600 dark:text-rose-400">Lead quota reached. Upgrade plan to discover more.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {/* PRODUCTS MODE */}
       {scanMode === 'product' && (
-        <div className="space-y-4">
+        <div className="space-y-5 animate-fade-in">
 
-          <div className="flex items-center gap-2">
+          {/* Stepper */}
+          <div className="card p-2 flex flex-col sm:flex-row sm:items-center gap-1">
             {[
               { n: '1', label: 'Enter product info', done: hasProductInputs, active: !hasProductInputs },
               { n: '2', label: 'Review AI prompt', done: promptGenerated, active: hasProductInputs && !promptGenerated },
               { n: '3', label: 'Start scan', done: false, active: promptGenerated && !scanning },
             ].map(({ n, label, done, active }, i) => (
-              <div key={n} className="flex items-center gap-2">
+              <div key={n} className="flex items-center gap-1 flex-1 min-w-0">
                 <div className={cn(
-                  'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
-                  done ? 'bg-emerald-500/20 text-emerald-400' : active ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-200 dark:bg-slate-800 text-slate-600'
+                  'flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5 rounded-xl transition-colors',
+                  active ? 'bg-violet-500/[0.08]' : done ? 'bg-emerald-500/[0.06]' : ''
                 )}>
-                  {done ? '✓' : n}
+                  <div className={cn(
+                    'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
+                    done ? 'bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-md shadow-emerald-500/30'
+                      : active ? 'bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-md shadow-violet-500/30'
+                        : 'bg-slate-100 dark:bg-white/[0.05] text-ink-3'
+                  )}>
+                    {done ? <Check size={15} /> : n}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-3">Step {n}</p>
+                    <p className={cn('text-[13px] font-semibold truncate',
+                      done ? 'text-emerald-600 dark:text-emerald-400' : active ? 'text-ink' : 'text-ink-3')}>
+                      {label}
+                    </p>
+                  </div>
                 </div>
-                <span className={cn('text-xs font-medium', done ? 'text-emerald-400' : active ? 'text-slate-800 dark:text-slate-200' : 'text-slate-600')}>
-                  {label}
-                </span>
-                {i < 2 && <ArrowRight size={12} className="text-slate-700 flex-shrink-0" />}
+                {i < 2 && <ChevronRight size={16} className="hidden sm:block text-slate-300 dark:text-slate-600 flex-shrink-0" />}
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+            <div className="space-y-5">
 
-              <SectionCard title="Product Details" subtitle="Mandatory fields — fill all to enable scanning">
-                <div className="pt-4 space-y-4">
-                  <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                    <span className="text-red-400 font-bold">*</span> Required fields
+              <SectionCard title="Product Details" subtitle="Mandatory fields — fill all to enable scanning" icon={Package} tone="violet">
+                <div className="pt-5 space-y-5">
+                  <p className="text-[11px] text-ink-3 flex items-center gap-1">
+                    <span className="text-rose-500 font-bold">*</span> Required fields
                   </p>
 
                   <div>
@@ -945,116 +1010,121 @@ export default function LeadDiscoveryPage() {
 
                   <div>
                     <MandatoryLabel>Geography / Region</MandatoryLabel>
-                    <input className="input text-sm" placeholder="e.g. USA, India, UK, Europe"
-                      value={productGeography}
-                      onChange={e => { setProductGeography(e.target.value); resetPrompt(); }} />
+                    <div className="relative">
+                      <MapPin size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3 z-10" />
+                      <input className="input text-sm pl-10" placeholder="e.g. USA, India, UK, Europe"
+                        value={productGeography}
+                        onChange={e => { setProductGeography(e.target.value); resetPrompt(); }} />
+                    </div>
                   </div>
 
                   <div>
                     <MandatoryLabel>Value Proposition / Key Benefit</MandatoryLabel>
-                    <textarea className="input text-sm resize-none w-full" rows={4}
+                    <textarea className="input text-sm resize-none w-full leading-relaxed" rows={4}
                       placeholder="Please enter a detailed description — what problem does your product solve? Who needs it? What results does it deliver?"
                       value={valueProposition}
                       onChange={e => { setValueProposition(e.target.value); resetPrompt(); }} />
-                    <p className="text-xs text-slate-600 mt-1">{valueProposition.length}/3000 chars</p>
+                    <p className="text-[11px] text-ink-3 mt-1.5 text-right tabular-nums">{valueProposition.length}/3000 chars</p>
                   </div>
                 </div>
               </SectionCard>
 
-              <SectionCard title="Additional Product Information" subtitle="Optional — helps AI build a better targeting prompt" defaultOpen={false}>
+              <SectionCard title="Additional Product Information" subtitle="Optional — helps AI build a better targeting prompt" defaultOpen={false} icon={Link2} tone="cyan">
                 <div className="pt-5 space-y-6">
                   <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-7 h-7 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center flex-shrink-0">
-                        <Link2 size={13} className="text-blue-400" />
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+                        <Link2 size={15} />
                       </div>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Product URL</p>
-                      <span className="text-[10px] bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
+                      <p className="text-sm font-semibold text-ink">Product URL</p>
+                      <span className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.05] text-ink-3">OPTIONAL</span>
                     </div>
                     <div className="flex gap-2">
                       <input className="input text-sm flex-1" placeholder="https://yourproduct.com"
                         value={productUrl} onChange={e => { setProductUrl(e.target.value); resetPrompt(); }} />
                       {productUrl && (
-                        <a href={productUrl} target="_blank" rel="noreferrer" title="Open product URL" className="btn-ghost flex-shrink-0 px-2.5">
-                          <ExternalLink size={13} />
+                        <a href={productUrl} target="_blank" rel="noreferrer" title="Open product URL" className="btn-ghost flex-shrink-0 px-3">
+                          <ExternalLink size={14} />
                         </a>
                       )}
                     </div>
-                    <p className="text-xs text-slate-600 mt-1.5">AI fetches the page to understand what you offer</p>
+                    <p className="text-xs text-ink-3 mt-1.5">AI fetches the page to understand what you offer</p>
                   </div>
 
                   <div className="flex items-center gap-3">
                     <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
-                    <span className="text-[10px] text-slate-600 font-semibold tracking-widest">AND / OR</span>
+                    <span className="text-[10px] font-bold tracking-[0.14em] px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/[0.05] text-ink-3">AND / OR</span>
                     <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
                   </div>
 
                   <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center flex-shrink-0">
-                        <FileText size={13} className="text-emerald-400" />
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+                        <FileText size={15} />
                       </div>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Upload Brochure / Spec Sheet</p>
-                      <span className="text-[10px] bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] text-slate-500 px-1.5 py-0.5 rounded font-medium">OPTIONAL</span>
+                      <p className="text-sm font-semibold text-ink">Upload Brochure / Spec Sheet</p>
+                      <span className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.05] text-ink-3">OPTIONAL</span>
                     </div>
                     <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.pdf"
                       onChange={handleFileUpload} className="hidden" aria-label="Upload brochure or spec sheet" />
                     {productDocumentText ? (
-                      <div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-3 border border-emerald-500/20">
+                      <div className="rounded-xl p-3.5 border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-500/[0.06]">
                         <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 size={13} className="text-emerald-400" />
-                            <span className="text-xs text-emerald-400 font-medium">{productFileName}</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0" />
+                            <span className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold truncate">{productFileName}</span>
                           </div>
                           <button onClick={() => { setProductDocumentText(''); setProductFileName(''); resetPrompt(); }}
                             aria-label="Remove uploaded file"
-                            className="text-slate-600 hover:text-red-400 transition-colors">
-                            <X size={12} />
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-ink-3 hover:text-rose-600 hover:bg-rose-500/10 transition-colors">
+                            <X size={13} />
                           </button>
                         </div>
-                        <p className="text-xs text-slate-500 line-clamp-2">{productDocumentText.slice(0, 180)}...</p>
+                        <p className="text-xs text-ink-2 line-clamp-2">{productDocumentText.slice(0, 180)}...</p>
                       </div>
                     ) : (
                       <button type="button" onClick={() => fileInputRef.current?.click()}
-                        className="w-full border-2 border-dashed border-slate-300 dark:border-white/[0.08] hover:border-emerald-500/30 rounded-xl p-5 text-center transition-colors group">
-                        <Upload size={20} className="mx-auto mb-2 text-slate-600 group-hover:text-emerald-400 transition-colors" />
-                        <p className="text-sm text-slate-400 group-hover:text-slate-500 dark:hover:text-slate-300">Click to upload .txt, .md, or .pdf</p>
-                        <p className="text-xs text-slate-600 mt-1">Max 5 MB</p>
+                        className="w-full border-2 border-dashed border-slate-300 dark:border-white/[0.10] hover:border-emerald-400 dark:hover:border-emerald-500/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/[0.04] rounded-2xl p-6 text-center transition-all group">
+                        <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <Upload size={20} />
+                        </div>
+                        <p className="text-sm font-medium text-ink">Click to upload .txt, .md, or .pdf</p>
+                        <p className="text-xs text-ink-3 mt-1">Max 5 MB</p>
                       </button>
                     )}
                   </div>
                 </div>
               </SectionCard>
 
-              <SectionCard title="Optional Filters" subtitle="Narrow down your target audience" defaultOpen={true}>
-                <div className="pt-4 space-y-4">
+              <SectionCard title="Optional Filters" subtitle="Narrow down your target audience" defaultOpen={true} icon={SlidersHorizontal} tone="violet">
+                <div className="pt-5 space-y-5">
 
                   <div>
                     <p className="label mb-1.5">Industry / Vertical</p>
-                    <select aria-label="Industry" className="input text-sm" value={productIndustry}
+                    <Select aria-label="Industry" className="input text-sm" value={productIndustry}
                       onChange={e => { setProductIndustry(e.target.value); resetPrompt(); }}>
                       {productIndustryOptions.map(opt => <option key={opt} value={opt === 'Any Industry' ? '' : opt}>{opt}</option>)}
-                    </select>
+                    </Select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <p className="label mb-1.5">Company Size</p>
-                      <select aria-label="Company size" className="input text-sm" value={productCompanySize} onChange={e => setProductCompanySize(e.target.value)}>
+                      <Select aria-label="Company size" className="input text-sm" value={productCompanySize} onChange={e => setProductCompanySize(e.target.value)}>
                         {productCompanySizeOptions.map(opt => <option key={opt} value={opt === 'Any Size' ? '' : opt}>{opt}</option>)}
-                      </select>
+                      </Select>
                     </div>
                     <div>
                       <p className="label mb-1.5">Company Type</p>
-                      <select aria-label="Company type" className="input text-sm" value={productCompanyType} onChange={e => setProductCompanyType(e.target.value)}>
+                      <Select aria-label="Company type" className="input text-sm" value={productCompanyType} onChange={e => setProductCompanyType(e.target.value)}>
                         {productCompanyTypeOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
-                      </select>
+                      </Select>
                     </div>
                   </div>
 
                   <div>
                     <p className="label mb-1.5">Annual Revenue Range (USD)</p>
-                    <select
+                    <Select
                       aria-label="Annual revenue range"
                       className="input text-sm w-full"
                       value={annualRevenue}
@@ -1063,11 +1133,11 @@ export default function LeadDiscoveryPage() {
                       {productAnnualRevenueOptions.map(opt => (
                         <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
 
                   <div>
-                    <p className="label mb-2">Who makes the buying decision?</p>
+                    <p className="label mb-2.5">Who makes the buying decision?</p>
                     <ChipSelect
                       options={productDecisionMakerOptions}
                       selected={productDecisionMakers}
@@ -1076,32 +1146,32 @@ export default function LeadDiscoveryPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <p className="label mb-1.5">Preferred Contact Channel</p>
-                      <select aria-label="Contact channel" className="input text-sm" value={productContactChannel} onChange={e => setProductContactChannel(e.target.value)}>
+                      <Select aria-label="Contact channel" className="input text-sm" value={productContactChannel} onChange={e => setProductContactChannel(e.target.value)}>
                         {productContactChannelOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
-                      </select>
+                      </Select>
                     </div>
                     <div>
                       <p className="label mb-1.5">Seniority Level</p>
-                      <select aria-label="Seniority level" className="input text-sm" value={productSeniorityLevel} onChange={e => setProductSeniorityLevel(e.target.value)}>
+                      <Select aria-label="Seniority level" className="input text-sm" value={productSeniorityLevel} onChange={e => setProductSeniorityLevel(e.target.value)}>
                         {productSeniorityOptions.map(opt => <option key={opt} value={opt === 'Any' ? '' : opt}>{opt}</option>)}
-                      </select>
+                      </Select>
                     </div>
                   </div>
 
                   <div>
-                    <p className="label mb-2">Number of Leads to Generate
-                      <span className="ml-1.5 text-[10px] text-slate-500 bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-white/[0.06] px-1.5 py-0.5 rounded font-normal">optional</span>
+                    <p className="label mb-2 flex items-center">Number of Leads to Generate
+                      <span className="ml-2 text-[10px] font-semibold normal-case tracking-normal px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.05] text-ink-3">optional</span>
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className={cn(stepWrapCls, 'mt-1')}>
                       <button
                         type="button"
                         aria-label="Decrease lead count"
                         onClick={() => setProductLeadCount(c => Math.max(1, (Number(c) || 1) - 1))}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
-                      >−</button>
+                        className={stepBtnCls}
+                      ><Minus size={16} /></button>
                       <input
                         type="number"
                         aria-label="Number of leads"
@@ -1116,18 +1186,17 @@ export default function LeadDiscoveryPage() {
                           if (!isNaN(val)) setProductLeadCount(Math.min(500, val));
                         }}
                         onBlur={() => setProductLeadCount(c => (c === '' || Number(c) < 1 ? 1 : c))}
-                        className="w-24 text-center input text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className={stepInputCls}
                       />
                       <button
                         type="button"
                         aria-label="Increase lead count"
                         onClick={() => setProductLeadCount(c => Math.min(500, (Number(c) || 0) + 1))}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-lg font-bold select-none"
-                      >+</button>
-                      {/* <span className="text-xs text-slate-400 dark:text-slate-500">leads (1 – 500)</span> */}
+                        className={stepBtnCls}
+                      ><Plus size={16} /></button>
                     </div>
                     {(productLeadCount === '' || Number(productLeadCount) < 1) && (
-                      <p className="text-xs text-red-500 mt-1">Number of leads should be at least one.</p>
+                      <p className="text-xs text-rose-600 dark:text-rose-400 mt-1.5">Number of leads should be at least one.</p>
                     )}
                   </div>
                 </div>
@@ -1136,31 +1205,40 @@ export default function LeadDiscoveryPage() {
               {!promptGenerated && (
                 <>
                   <button
-                    className="btn-primary w-full py-3 text-sm justify-center"
+                    className="btn-primary w-full py-3.5 text-sm justify-center"
                     onClick={() => generatePromptMutation.mutate()}
                     disabled={!hasProductInputs || generatePromptMutation.isPending}>
                     {generatePromptMutation.isPending
-                      ? <><Loader2 size={14} className="animate-spin" /> AI analyzing your product...</>
-                      : <><Sparkles size={14} /> Generate Discovery Prompt</>}
+                      ? <><Loader2 size={15} className="animate-spin" /> AI analyzing your product...</>
+                      : <><Sparkles size={15} /> Generate Discovery Prompt</>}
                   </button>
                   {!hasProductInputs && (
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-1">
-                      <p className="text-xs font-semibold text-amber-400 mb-1">Complete mandatory fields first:</p>
-                      {!productName.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Product Name / Category</p>}
-                      {!productGeography.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Geography / Region</p>}
-                      {!valueProposition.trim() && <p className="text-xs text-amber-300 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" /> Value Proposition</p>}
-                    </div>
+                    <MissingFields
+                      title="Complete mandatory fields first:"
+                      items={[
+                        ...(!productName.trim() ? ['Product Name / Category'] : []),
+                        ...(!productGeography.trim() ? ['Geography / Region'] : []),
+                        ...(!valueProposition.trim() ? ['Value Proposition'] : []),
+                      ]}
+                    />
                   )}
                 </>
               )}
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5 lg:sticky lg:top-0">
               {(scanning || scanComplete) && (
-                <div className="card p-6">
-                  <h2 className="section-title mb-4">
-                    {scanComplete ? 'Scan Complete' : 'Product Scan in Progress'}
-                  </h2>
+                <div className="card relative overflow-hidden p-6">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-indigo-400" />
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center',
+                      scanComplete ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-violet-500/10 text-violet-600 dark:text-violet-400')}>
+                      {scanComplete ? <CheckCircle2 size={18} /> : <Radar size={18} />}
+                    </div>
+                    <h2 className="section-title">
+                      {scanComplete ? 'Scan Complete' : 'Product Scan in Progress'}
+                    </h2>
+                  </div>
                   {scanComplete ? (
                     <ScanComplete activeScan={activeScan} peakLeadsFound={peakLeadsFound} />
                   ) : (
@@ -1171,38 +1249,44 @@ export default function LeadDiscoveryPage() {
               )}
 
               {promptGenerated && !scanning && !scanComplete && (
-                <div className="card p-5 space-y-4">
+                <div className="card relative overflow-hidden p-5 space-y-4">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-indigo-400" />
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h2 className="section-title">AI Discovery Prompt</h2>
-                        <span className={cn(
-                          'text-[10px] font-semibold px-1.5 py-0.5 rounded border',
-                          promptEdited
-                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/25'
-                            : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
-                        )}>
-                          {promptEdited ? 'EDITED' : 'AI GENERATED'}
-                        </span>
-                        {promptBuyerType && (
-                          <span className={cn(
-                            'text-[10px] font-semibold px-1.5 py-0.5 rounded border',
-                            promptBuyerType === 'B2B' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                              : promptBuyerType === 'B2C' ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                          )}>
-                            {promptBuyerType}
-                          </span>
-                        )}
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center flex-shrink-0">
+                        <Sparkles size={18} />
                       </div>
-                      {promptSummary && <p className="text-xs text-slate-500">{promptSummary}</p>}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <h2 className="section-title">AI Discovery Prompt</h2>
+                          <span className={cn(
+                            'text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-md',
+                            promptEdited
+                              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                              : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                          )}>
+                            {promptEdited ? 'EDITED' : 'AI GENERATED'}
+                          </span>
+                          {promptBuyerType && (
+                            <span className={cn(
+                              'text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-md',
+                              promptBuyerType === 'B2B' ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                                : promptBuyerType === 'B2C' ? 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
+                                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                            )}>
+                              {promptBuyerType}
+                            </span>
+                          )}
+                        </div>
+                        {promptSummary && <p className="text-xs text-ink-3 leading-relaxed">{promptSummary}</p>}
+                      </div>
                     </div>
                     <button
                       className="btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1.5 flex-shrink-0"
                       onClick={() => generatePromptMutation.mutate()}
                       disabled={generatePromptMutation.isPending}
                       title="Regenerate">
-                      <RotateCcw size={11} />
+                      <RotateCcw size={12} className={generatePromptMutation.isPending ? 'animate-spin' : ''} />
                       Regenerate
                     </button>
                   </div>
@@ -1215,55 +1299,62 @@ export default function LeadDiscoveryPage() {
                       onChange={e => { setPromptText(e.target.value); setPromptEdited(true); }}
                       placeholder="AI prompt will appear here..."
                     />
-                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur rounded-lg px-2 py-1 pointer-events-none">
-                      <Edit3 size={9} className="text-slate-600" />
-                      <span className="text-[9px] text-slate-600">editable</span>
+                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1 rounded-md px-2 py-1 pointer-events-none bg-violet-500/10 text-violet-700 dark:text-violet-300">
+                      <Edit3 size={10} />
+                      <span className="text-[10px] font-semibold">editable</span>
                     </div>
                   </div>
 
-                  <p className="text-xs text-slate-600 leading-relaxed">
+                  <p className="text-xs text-ink-3 leading-relaxed">
                     Review the targeting strategy above. Edit any part — add industries, keywords, change job titles.
                     The scan will use exactly what you see here.
                   </p>
 
                   <button
-                    className="btn-primary w-full py-3 text-sm justify-center"
+                    className="btn-primary w-full py-3.5 text-sm justify-center"
                     onClick={() => productScanMutation.mutate()}
                     disabled={!canStartProductScan || productScanMutation.isPending || quotaReached}
                     title={quotaReached ? 'Lead quota reached' : ''}
                   >
                     {productScanMutation.isPending
-                      ? <><Loader2 size={14} className="animate-spin" /> Starting scan...</>
-                      : <><Zap size={14} /> Generate Leads</>}
+                      ? <><Loader2 size={15} className="animate-spin" /> Starting scan...</>
+                      : <><Zap size={15} /> Generate Leads</>}
                   </button>
                   {quotaReached && (
-                    <p className="text-xs text-red-500 text-center mt-2">Lead quota reached. Upgrade plan to discover more.</p>
+                    <p className="text-xs text-rose-600 dark:text-rose-400 text-center mt-2">Lead quota reached. Upgrade plan to discover more.</p>
                   )}
                 </div>
               )}
 
               {!promptGenerated && !scanning && !scanComplete && (
-                <div className="card p-6 flex flex-col items-center justify-center text-center gap-4 min-h-[300px]">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600/20 to-blue-500/10 border border-violet-500/25 flex items-center justify-center">
-                    <Sparkles size={26} className="text-violet-400" />
+                <div className="card relative overflow-hidden p-6 flex flex-col items-center justify-center text-center gap-5 min-h-[300px]">
+                  <div className="pointer-events-none absolute -right-20 -top-20 w-60 h-60 rounded-full bg-violet-500/10 blur-3xl" />
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-3xl bg-violet-500/30 blur-xl" />
+                    <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-600 to-indigo-600 flex items-center justify-center shadow-xl shadow-violet-500/30">
+                      <Sparkles size={28} className="text-white" />
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">AI Prompt Preview</p>
-                    <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                  <div className="relative">
+                    <p className="font-display text-base font-semibold text-ink mb-1.5">AI Prompt Preview</p>
+                    <p className="text-[13px] text-ink-3 max-w-sm leading-relaxed">
                       Fill in the mandatory product details, then click{' '}
-                      <span className="text-violet-400 font-medium">Generate Discovery Prompt</span>.
+                      <span className="text-violet-600 dark:text-violet-400 font-semibold">Generate Discovery Prompt</span>.
                       AI will build a targeting strategy you can review and edit before scanning.
                     </p>
                   </div>
-                  <div className="space-y-2 w-full text-left">
+                  <div className="relative space-y-2 w-full text-left">
                     {[
-                      { icon: 'target', text: 'Identifies who NEEDS your product' },
-                      { icon: 'search', text: 'Generates search keywords & queries' },
-                      { icon: 'edit', text: 'You review & edit before scanning' },
-                      { icon: 'rocket', text: 'Scan runs with your approved prompt' },
-                    ].map(({ icon, text }) => (
-                      <div key={text} className="flex items-center gap-2.5 bg-slate-100 dark:bg-slate-950 rounded-lg px-3 py-2">
-                        <p className="text-xs text-slate-400">{text}</p>
+                      { icon: Target, text: 'Identifies who NEEDS your product', cls: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+                      { icon: Search, text: 'Generates search keywords & queries', cls: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' },
+                      { icon: Edit3, text: 'You review & edit before scanning', cls: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
+                      { icon: Rocket, text: 'Scan runs with your approved prompt', cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+                    ].map(({ icon: Icon, text, cls }) => (
+                      <div key={text} className="flex items-center gap-3 rounded-xl px-3 py-2.5 border border-line bg-white/70 dark:bg-white/[0.02]">
+                        <span className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', cls)}>
+                          <Icon size={15} />
+                        </span>
+                        <p className="text-[13px] font-medium text-ink-2">{text}</p>
                       </div>
                     ))}
                   </div>
@@ -1277,66 +1368,86 @@ export default function LeadDiscoveryPage() {
       {/* Scan History */}
       {(scansData?.items?.length ?? 0) > 0 && (
         <div className="card p-5">
-          <h2 className="section-title mb-4">Scan History</h2>
-          <div className="space-y-2">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+              <History size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="section-title">Scan History</h2>
+              <p className="text-xs text-ink-3 mt-0.5">Your most recent discovery runs</p>
+            </div>
+          </div>
+          <div className="space-y-2.5">
             {(scansData!.items as any[]).slice(0, 8).map((scan: any) => {
               const isProduct = scan.sources?.scanType === 'product';
               const expanded = expandedScan === scan.id;
               return (
-                <div key={scan.id} className="bg-slate-100 dark:bg-slate-950 rounded-xl">
+                <div key={scan.id} className={cn(
+                  'relative rounded-xl border overflow-hidden transition-all duration-150',
+                  expanded
+                    ? 'border-indigo-200 dark:border-indigo-500/25 bg-slate-50/80 dark:bg-white/[0.02] shadow-sm'
+                    : 'border-line bg-white dark:bg-surface-2 hover:border-slate-300 dark:hover:border-white/[0.15]'
+                )}>
+                  <span className={cn('absolute left-0 top-0 bottom-0 w-[3px]',
+                    scan.status === 'completed' ? 'bg-emerald-500'
+                      : scan.status === 'running' ? 'bg-blue-500'
+                        : scan.status === 'failed' ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600')} />
                   <button
                     type="button"
                     onClick={() => setExpandedScan(expanded ? null : scan.id)}
-                    className="w-full flex items-center justify-between p-3 gap-3 text-left"
+                    aria-expanded={expanded}
+                    className="w-full flex items-center justify-between pl-4 pr-3 py-3 gap-3 text-left"
                   >
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      {expanded
-                        ? <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                        : <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+                      <ChevronDown className={cn('w-4 h-4 text-ink-3 flex-shrink-0 transition-transform duration-200', expanded && 'rotate-180')} />
                       <Badge color={
                         scan.status === 'completed' ? 'green' :
                           scan.status === 'running' ? 'blue' :
                             scan.status === 'failed' ? 'red' : 'gray'
                       }>{scan.status}</Badge>
-                      <span className={cn('text-xs rounded px-1.5 py-0.5 border',
-                        isProduct ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20')}>
+                      <span className={cn('text-[11px] font-semibold rounded-md px-2 py-0.5',
+                        isProduct ? 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
+                          : 'bg-blue-500/10 text-blue-700 dark:text-blue-300')}>
                         {isProduct ? 'product' : 'positions'}
                       </span>
-                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{scan.leadsFound ?? 0} leads</span>
+                      <span className="text-sm font-semibold text-ink tabular-nums">{scan.leadsFound ?? 0} leads</span>
                       {(scan.geography || scan.targetRegion) && (
-                        <span className="text-xs text-slate-500">· {scan.geography || scan.targetRegion}</span>
+                        <span className="inline-flex items-center gap-1 text-xs text-ink-3">
+                          <MapPin size={11} /> {scan.geography || scan.targetRegion}
+                        </span>
                       )}
                       {scan.avgMatchScore != null && (
                         <span className={cn(
-                          'text-xs font-semibold px-2 py-0.5 rounded-full border',
-                          scan.avgMatchScore >= 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                            scan.avgMatchScore >= 50 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                              'bg-red-500/10 text-red-400 border-red-500/20'
+                          'text-[11px] font-semibold px-2 py-0.5 rounded-full',
+                          scan.avgMatchScore >= 80 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' :
+                            scan.avgMatchScore >= 50 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' :
+                              'bg-rose-500/10 text-rose-700 dark:text-rose-300'
                         )}>
                           {scan.avgMatchScore}% match
                         </span>
                       )}
                       {!isProduct && (scan.positionTitle || (scan.services ?? []).length > 0) && (
-                        <span className="text-xs text-slate-500 truncate hidden sm:inline">
+                        <span className="text-xs text-ink-3 truncate hidden sm:inline">
                           · {scan.positionTitle || (scan.services as string[]).slice(0, 2).join(', ')}
                         </span>
                       )}
                       {isProduct && (scan.sources?.productName || scan.sources?.productDescriptionSnippet) && (
-                        <span className="text-xs text-slate-500 truncate hidden sm:inline">
+                        <span className="text-xs text-ink-3 truncate hidden sm:inline">
                           · {scan.sources.productName || scan.sources.productDescriptionSnippet?.slice(0, 50)}
                         </span>
                       )}
                       {scan.keyword && (
-                        <span className="text-xs rounded px-1.5 py-0.5 border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 truncate max-w-[220px]" title={scan.keyword}>
+                        <span className="text-[11px] font-medium rounded-md px-2 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 truncate max-w-[220px]" title={scan.keyword}>
                           {scan.keyword}
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-slate-500 flex-shrink-0">{formatDate(scan.createdAt)}</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-ink-3 flex-shrink-0">
+                      <Calendar size={12} /> {formatDate(scan.createdAt)}
+                    </span>
                   </button>
                   {expanded && (
-                    <div className="px-3 pb-3 space-y-2">
+                    <div className="pl-4 pr-3 pb-3 space-y-2.5">
                       <ScanActivityPanel scanId={scan.id} />
                       <ScanLeadsPanel scanId={scan.id} />
                     </div>
@@ -1386,50 +1497,57 @@ function ScanActivity({ events }: { events: ScanEvent[] }) {
   if (!events.length) return null;
 
   return (
-    <div className="border border-slate-800 rounded-lg overflow-hidden">
+    <div className="rounded-xl border border-line overflow-hidden bg-white dark:bg-surface">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs bg-slate-900/40 hover:bg-slate-900/60 transition-colors"
+        aria-expanded={open}
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-xs bg-slate-50 dark:bg-white/[0.03] hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors"
       >
-        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        <span className="font-semibold text-slate-300">Activity</span>
-        <span className="text-emerald-400">{kept} kept</span>
-        <span className="text-slate-600">·</span>
-        <span className="text-amber-400">{filtered} filtered</span>
+        <ChevronDown size={13} className={cn2('text-ink-3 transition-transform duration-200', open && 'rotate-180')} />
+        <span className="font-semibold text-ink">Activity</span>
+        <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold">
+          <Check size={11} /> {kept} kept
+        </span>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold">
+          <X size={11} /> {filtered} filtered
+        </span>
       </button>
       {open && (
-        <div className="max-h-64 overflow-y-auto divide-y divide-slate-800/60">
+        <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-white/[0.04]">
           {ordered.map((e, i) => {
             if (e.type === 'phase') {
               return (
-                <div key={i} className="px-3 py-1.5 text-[11px] text-slate-500 italic">
+                <div key={i} className="px-3 py-1.5 text-[11px] text-ink-3 italic bg-slate-50/60 dark:bg-white/[0.015]">
                   {e.reason === 'scoring-start' ? `AI scoring ${e.count ?? ''} companies…` : e.reason}
                 </div>
               );
             }
             const isKept = e.type === 'kept';
             return (
-              <div key={i} className="px-3 py-1.5 flex items-start gap-2 text-[11px]">
-                <span className={cn2('mt-[3px] flex-shrink-0', isKept ? 'text-emerald-400' : 'text-amber-400')}>
-                  {isKept ? '✓' : '✗'}
+              <div key={i} className="px-3 py-2 flex items-start gap-2 text-[11px]">
+                <span className={cn2(
+                  'mt-px w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0',
+                  isKept ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                )}>
+                  {isKept ? <Check size={10} /> : <X size={10} />}
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className={cn2('font-medium truncate', isKept ? 'text-slate-200' : 'text-slate-400')}>
+                    <span className={cn2('font-semibold truncate', isKept ? 'text-ink' : 'text-ink-2')}>
                       {e.company || '(unknown)'}
                     </span>
                     {e.source && (
-                      <span className="text-slate-600">· {e.source}</span>
+                      <span className="text-ink-3">· {e.source}</span>
                     )}
                     {!isKept && (
-                      <span className="text-amber-500/80">
+                      <span className="text-amber-600 dark:text-amber-400">
                         · {FILTER_REASON_LABEL[e.reason || ''] || e.reason || 'filtered'}
                       </span>
                     )}
                   </div>
                   {!isKept && e.detail && (
-                    <div className="text-slate-500 mt-0.5 line-clamp-2">{e.detail}</div>
+                    <div className="text-ink-3 mt-0.5 line-clamp-2">{e.detail}</div>
                   )}
                 </div>
               </div>
@@ -1441,41 +1559,85 @@ function ScanActivity({ events }: { events: ScanEvent[] }) {
   );
 }
 
+// Literal class strings per accent so Tailwind generates them.
+const PROGRESS_TONES: Record<string, { box: string; dot: string; title: string; pct: string; bar: string; step: string; ring: string }> = {
+  blue: {
+    box: 'bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-blue-500/[0.10] dark:to-indigo-500/[0.04] border-blue-200 dark:border-blue-500/20',
+    dot: 'bg-blue-500',
+    title: 'text-blue-700 dark:text-blue-300',
+    pct: 'text-blue-700 dark:text-blue-300',
+    bar: 'from-blue-500 via-indigo-500 to-cyan-400',
+    step: 'text-blue-700 dark:text-blue-300',
+    ring: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+  },
+  violet: {
+    box: 'bg-gradient-to-br from-violet-50 to-fuchsia-50/50 dark:from-violet-500/[0.10] dark:to-fuchsia-500/[0.04] border-violet-200 dark:border-violet-500/20',
+    dot: 'bg-violet-500',
+    title: 'text-violet-700 dark:text-violet-300',
+    pct: 'text-violet-700 dark:text-violet-300',
+    bar: 'from-violet-500 via-fuchsia-500 to-indigo-400',
+    step: 'text-violet-700 dark:text-violet-300',
+    ring: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
+  },
+};
+
 function ScanProgress({ activeScan, scanProgress, steps, color = 'blue' }: {
   activeScan: any; scanProgress: number; steps: string[]; scanning?: boolean; color?: string;
 }) {
   const events: ScanEvent[] = Array.isArray(activeScan?.events) ? activeScan.events : [];
+  const t = PROGRESS_TONES[color] ?? PROGRESS_TONES.blue;
   return (
     <div className="space-y-4">
-      <div className={`p-4 bg-${color}-500/[0.06] border border-${color}-500/20 rounded-xl`}>
+      <div className={cn2('p-4 border rounded-2xl', t.box)}>
         <div className="flex items-center gap-2 mb-3">
-          <div className={`w-2 h-2 rounded-full bg-${color}-400 animate-pulse`} />
-          <span className={`text-sm font-semibold text-${color}-300`}>
+          <span className="relative flex w-2.5 h-2.5">
+            <span className={cn2('absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping', t.dot)} />
+            <span className={cn2('relative inline-flex w-2.5 h-2.5 rounded-full', t.dot)} />
+          </span>
+          <span className={cn2('text-sm font-semibold', t.title)}>
             {color === 'violet' ? 'Finding buyer companies...' : 'Scanning for leads...'}
           </span>
-          <span className={`ml-auto text-xs text-${color}-400 font-mono`}>{scanProgress}%</span>
+          <span className={cn2('ml-auto font-display text-lg font-semibold tabular-nums', t.pct)}>{scanProgress}%</span>
         </div>
-        <ProgressBar value={scanProgress} color="blue" />
-        <p className={`text-xs text-${color}-400 mt-2`}>{activeScan?.leadsFound ?? 0} leads found so far</p>
+        <div className="h-2.5 rounded-full overflow-hidden bg-white/80 dark:bg-white/[0.06] ring-1 ring-black/[0.03] dark:ring-0">
+          <div
+            className={cn2('h-full rounded-full bg-gradient-to-r transition-all duration-700', t.bar)}
+            style={{ width: `${Math.min(100, Math.round(scanProgress))}%` }}
+          />
+        </div>
+        <p className="text-xs text-ink-2 mt-2.5">
+          <span className="font-display text-sm font-semibold text-ink tabular-nums">{activeScan?.leadsFound ?? 0}</span> leads found so far
+        </p>
       </div>
-      <div className="space-y-2">
+      <ol className="space-y-1">
         {steps.map((step, i) => {
           const threshold = (i + 1) / steps.length * 100;
           const done = scanProgress >= threshold;
           const active = !done && scanProgress >= threshold - (100 / steps.length);
           return (
-            <div key={i} className={cn2('flex items-center gap-2 text-xs transition-all',
-              done ? 'text-emerald-400' : active ? `text-${color}-400` : 'text-slate-600')}>
-              {done ? <CheckCircle2 size={11} className="flex-shrink-0" />
-                : active ? <Loader2 size={11} className="animate-spin flex-shrink-0" />
-                  : <span className="w-3 text-center flex-shrink-0">○</span>}
+            <li key={i} className={cn2(
+              'flex items-center gap-2.5 text-xs px-2 py-1.5 rounded-lg transition-all',
+              done ? 'text-emerald-600 dark:text-emerald-400'
+                : active ? cn2(t.step, 'font-semibold bg-slate-50 dark:bg-white/[0.03]')
+                  : 'text-ink-3'
+            )}>
+              <span className={cn2(
+                'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0',
+                done ? 'bg-emerald-500/15' : active ? t.ring : 'bg-slate-100 dark:bg-white/[0.04]'
+              )}>
+                {done ? <Check size={11} />
+                  : active ? <Loader2 size={11} className="animate-spin" />
+                    : <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />}
+              </span>
               {step}
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ol>
       <ScanActivity events={events} />
-      <p className="text-xs text-slate-600 text-center">Progress saved — safe to navigate away</p>
+      <p className="text-xs text-ink-3 text-center flex items-center justify-center gap-1.5">
+        <CheckCircle2 size={12} className="text-emerald-500" /> Progress saved — safe to navigate away
+      </p>
     </div>
   );
 }
@@ -1483,17 +1645,20 @@ function ScanProgress({ activeScan, scanProgress, steps, color = 'blue' }: {
 function ScanComplete({ activeScan, peakLeadsFound = 0 }: { activeScan: any; peakLeadsFound?: number }) {
   const leadsFound = activeScan?.leadsFound || activeScan?.totalLeads || activeScan?.leadsCount || peakLeadsFound;
   return (
-    <div className="flex flex-col items-center justify-center text-center gap-4 py-4">
-      <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-        <CheckCircle2 size={30} className="text-emerald-400" />
+    <div className="flex flex-col items-center justify-center text-center gap-5 py-4">
+      <div className="relative">
+        <div className="absolute inset-0 rounded-3xl bg-emerald-500/30 blur-xl" />
+        <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-xl shadow-emerald-500/30">
+          <CheckCircle2 size={36} className="text-white" />
+        </div>
       </div>
       <div>
-        <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Scan Complete!</p>
-        <p className="text-3xl font-bold text-emerald-400">{leadsFound}</p>
-        <p className="text-sm text-slate-500 mt-1">new leads discovered</p>
+        <p className="font-display text-base font-semibold text-ink mb-2">Scan Complete!</p>
+        <p className="font-display text-5xl font-semibold tracking-[-0.04em] bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent tabular-nums">{leadsFound}</p>
+        <p className="text-sm text-ink-3 mt-1">new leads discovered</p>
       </div>
-      <a href="/dashboard/leads" className="btn-primary text-sm px-6 py-2.5 w-full justify-center">
-        <Users size={14} /> View All Leads
+      <a href="/dashboard/leads" className="btn-primary text-sm px-6 py-3 w-full justify-center">
+        <Users size={15} /> View All Leads <ArrowRight size={14} />
       </a>
     </div>
   );

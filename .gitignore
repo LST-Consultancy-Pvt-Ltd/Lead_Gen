@@ -12,3 +12,6 @@ backend/dist/
 # Logs
 *.log
 logs/
+
+.DS_Store
+.claude/

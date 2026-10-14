@@ -393,7 +393,7 @@ router.post(
 
 /**
  * GET /api/leads/export
- * Export leads as CSV
+ * Export leads as an Excel workbook (sheet 1 matches the import template)
  * Access: All authenticated users (filtered by role in controller)
  */
 router.get(

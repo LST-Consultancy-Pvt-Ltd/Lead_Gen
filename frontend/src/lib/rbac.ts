@@ -169,7 +169,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canEnrichLead: false,
     canUseAI: false,
     canLogActivity: true,
-    canImportData: false,
+    canImportData: true,
     canExportData: true,
     canBulkDelete: false,
     canManageUsers: false,
@@ -188,7 +188,7 @@ const PERMISSION_MATRIX: Record<UserRole, Omit<Permissions, 'isSuperAdmin' | 'is
     canSendEmails: true,
     canCreateOpportunities: true,
     canViewAllOpportunities: false,
-    canDeleteOpportunities: true,
+    canDeleteOpportunities: false,
     canEditOwnLeads: true,
   },
 };

@@ -4,6 +4,7 @@ const prisma = require('../utils/prisma');
 const { success, error } = require('../utils/response');
 const { createNotification } = require('../utils/notificationService');
 const dashboardEvents = require('../utils/dashboardEvents');
+const { syncOpenOpportunityOwner } = require('../utils/opportunityOwner');
 
 const ADMIN_ROLES = ['org_admin', 'super_admin'];
 
@@ -222,6 +223,7 @@ async function bulkReassignLeads(req, res) {
       where: { id: { in: toReassign.map((l) => l.id) } },
       data: { assignedToId: toUserId },
     });
+    await syncOpenOpportunityOwner(toReassign.map((l) => l.id), toUserId);
     await Promise.all(toReassign.map((l) => activityService.logLeadAssigned(l.id, req.user, toUserId, fromUser.name)));
 
     await createNotification(prisma, {
@@ -231,6 +233,7 @@ async function bulkReassignLeads(req, res) {
       title: 'Leads Bulk Assigned',
       message: `${req.user.name} has assigned ${updated.count} lead(s) to you from ${fromUser.name}`,
       entityType: 'Lead',
+      actorId: req.user.id,
     });
 
     dashboardEvents.notifyOrg(orgId, 'lead');
@@ -241,4 +244,4 @@ async function bulkReassignLeads(req, res) {
 }
 
 module.exports = {
-  activateUser, getOwnedUserIds, getTeam, inviteUser, updateUser, deleteUser, bulkReassignLeads };
+  activateUser, getOwnedUserIds, getAncestorIds, getTeam, inviteUser, updateUser, deleteUser, bulkReassignLeads };

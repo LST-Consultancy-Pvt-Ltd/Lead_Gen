@@ -152,7 +152,8 @@ class OpportunityService {
         contactId,
         organizationId: user.organizationId,
         createdById: user.id,
-        assignedToId: user.role === 'sales_user' ? user.id : await this._validAssigneeId(data.assignedToId, user),
+        // No assignee picked (the field is hidden in the UI) → the deal belongs to the lead's owner
+        assignedToId: user.role === 'sales_user' ? user.id : await this._validAssigneeId(data.assignedToId || lead?.assignedToId, user),
       },
       include: {
         lead: { select: { id: true, companyName: true, contactName: true } },
@@ -246,14 +247,20 @@ class OpportunityService {
       });
     }
 
-    // Notify managers and admins when a deal is won
+    // Notify admins and the deal owner's own manager when a deal is won
     if (data.stage === 'closed_won' && existing.stage !== 'closed_won') {
       try {
+        const owner = opportunity.assignedToId
+          ? await prisma.user.findUnique({ where: { id: opportunity.assignedToId }, select: { managerId: true } })
+          : null;
         const managersAndAdmins = await prisma.user.findMany({
           where: {
             organizationId: user.organizationId,
-            role: { in: ['manager', 'org_admin'] },
             isActive: true,
+            OR: [
+              { role: 'org_admin' },
+              ...(owner?.managerId ? [{ id: owner.managerId }] : []),
+            ],
           },
           select: { id: true },
         });
@@ -268,7 +275,7 @@ class OpportunityService {
           entityType: 'Opportunity',
           entityId: id,
         }));
-        await createBulkNotifications(prisma, notifs);
+        await createBulkNotifications(prisma, notifs, { actorId: user.id });
       } catch (_err) {
         // non-fatal
       }
@@ -286,6 +293,7 @@ class OpportunityService {
       return { success: false, message: 'You can only delete your own opportunities', statusCode: 403 };
     }
 
+    await prisma.notification.deleteMany({ where: { entityType: 'Opportunity', entityId: id } });
     await prisma.opportunity.delete({ where: { id } });
     dashboardEvents.notifyOrg(user.organizationId, 'opportunity');
     return { success: true };
@@ -326,8 +334,8 @@ class OpportunityService {
         title: opportunityName,
         opportunityName,
         businessLine,
-        stage: 'qualification',
-        probability: STAGE_PROBABILITY['qualification'],
+        stage: 'qualified',
+        probability: STAGE_PROBABILITY['qualified'],
         salesOwnerId: lead.assignedToId || user.id,
         assignedToId: lead.assignedToId || user.id,
         createdById: user.id,

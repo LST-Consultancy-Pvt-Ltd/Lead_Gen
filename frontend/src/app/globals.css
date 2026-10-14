@@ -2,138 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theme tokens (--canvas, --surface, --ink, --line, --c-primary-500, --chart-1 …)
+ * are generated per theme from src/lib/themes.json by the plugin in
+ * tailwind.config.js and applied via <html data-theme="…">. Everything below
+ * reads those tokens, so no theme-specific colours live in this file.
+ */
+
 @layer base {
-  :root {
-    --background: #ffffff;
-    --foreground: #1e293b;
-    --toast-bg: #ffffff;
-    --toast-color: #1e293b;
-    --toast-border: rgba(0, 0, 0, 0.1);
-  }
-
-  .dark {
-    --background: #060b18;
-    --foreground: #e2e8f0;
-    --toast-bg: #0d1628;
-    --toast-color: #e2e8f0;
-    --toast-border: rgba(255, 255, 255, 0.1);
-  }
-
   * { box-sizing: border-box; }
 
   body {
-    background: var(--background);
-    color: var(--foreground);
+    background: rgb(var(--canvas));
+    color: rgb(var(--ink));
     font-family: var(--font-dm-sans), system-ui, sans-serif;
+    transition: background-color 200ms ease, color 200ms ease;
   }
 
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: #0a1124; }
-  ::-webkit-scrollbar-thumb { background: #1e2d4a; border-radius: 4px; }
-
-  /* ── Light mode base ───────────────────────────────────────────────── */
-  .light body {
-    background: #f8fafc;
-    color: #1e293b;
-  }
-  .light ::-webkit-scrollbar-track { background: #f1f5f9; }
-  .light ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--c-neutral-400) / 0.35); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-neutral-400) / 0.6); background-clip: padding-box; border: 2px solid transparent; }
+  ::selection { background: rgb(var(--c-primary-500) / 0.3); }
 }
 
 @layer components {
+  /* ── Surfaces ─────────────────────────────────────────────────────── */
   .card {
-    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/[0.06] rounded-2xl;
+    @apply bg-surface border border-line rounded-2xl shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:shadow-none;
   }
   .card-hover {
-    @apply transition-all duration-200 hover:border-blue-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/60;
-  }
-  .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold text-sm transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.08] text-slate-600 dark:text-slate-400 font-medium text-sm transition-all duration-200 hover:bg-slate-200 dark:hover:bg-white/[0.09] hover:text-slate-800 dark:hover:text-slate-200;
-  }
-  .input {
-    @apply w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 outline-none transition-all duration-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15;
-  }
-  .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border;
-  }
-  .nav-link {
-    @apply flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-500/[0.08] transition-all duration-200 text-sm font-medium;
-  }
-  .nav-link-active {
-    @apply bg-blue-50 dark:bg-blue-500/[0.15] text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20;
-  }
-  .page-title {
-    @apply font-display text-xl font-bold text-slate-900 dark:text-slate-100;
-  }
-  .section-title {
-    @apply text-sm font-bold text-slate-800 dark:text-slate-200;
-  }
-  .label {
-    @apply text-xs font-semibold text-slate-500 uppercase tracking-wider;
+    @apply transition-all duration-200 hover:-translate-y-px hover:border-blue-500/30 dark:hover:bg-surface-2;
   }
 
+  /* ── Buttons ──────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold text-sm transition-all duration-200 hover:from-blue-500 hover:to-indigo-500 hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 6px 16px -6px rgb(var(--c-primary-600) / 0.6);
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 10px 22px -8px rgb(var(--c-secondary-600) / 0.7);
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-surface dark:bg-white/[0.04] border border-line text-ink-2 font-medium text-sm shadow-sm dark:shadow-none transition-all duration-200 hover:bg-sunken dark:hover:bg-white/[0.08] hover:border-slate-300 dark:hover:border-white/[0.14] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* ── Form controls ────────────────────────────────────────────────── */
+  .input {
+    @apply w-full bg-surface dark:bg-sunken border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink shadow-sm dark:shadow-none outline-none transition-all duration-200 placeholder:text-ink-3/70 hover:border-slate-300 dark:hover:border-white/[0.15] focus:border-blue-500 dark:focus:border-blue-500/70 focus:ring-4 focus:ring-blue-500/10 dark:focus:ring-blue-500/15;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border leading-5;
+  }
+
+  /* ── Navigation ───────────────────────────────────────────────────── */
+  .nav-link {
+    @apply relative flex items-center gap-3 px-3 py-2.5 rounded-xl border border-transparent text-ink-3 hover:text-ink hover:bg-sunken dark:hover:bg-white/[0.05] transition-all duration-200 text-sm font-medium;
+  }
+  .nav-link-active {
+    @apply bg-gradient-to-r from-blue-600/10 to-indigo-600/[0.04] dark:from-blue-500/20 dark:to-indigo-500/[0.06] text-blue-700 dark:text-ink border-blue-500/20 dark:border-blue-400/20;
+  }
+
+  /* ── Typography ───────────────────────────────────────────────────── */
+  .page-title {
+    @apply font-display text-2xl font-semibold tracking-[-0.025em] text-ink;
+  }
+  .section-title {
+    @apply font-display text-sm font-semibold tracking-[-0.01em] text-ink;
+  }
+  .label {
+    @apply text-[11px] font-semibold text-ink-3 uppercase tracking-[0.08em];
+  }
 }
 
 .font-display { font-family: var(--font-sora), system-ui, sans-serif; }
 
-/* ── Light mode component overrides (plain CSS, outside @layer) ──────── */
-.light .card {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+@keyframes barGrow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
 }
-.light .card-hover:hover {
-  border-color: rgba(96,165,250,0.4) !important;
-  background: #f8fafc !important;
-}
-.light .btn-ghost {
-  background: #f1f5f9 !important;
-  border-color: #e2e8f0 !important;
-  color: #475569 !important;
-}
-.light .btn-ghost:hover {
-  background: #e2e8f0 !important;
-  color: #1e293b !important;
-}
-.light .input {
-  background: #ffffff !important;
-  border-color: #cbd5e1 !important;
-  color: #1e293b !important;
-}
-.light .input::placeholder {
-  color: #94a3b8 !important;
-}
-.light .input:focus {
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.15) !important;
-}
-.light .nav-link {
-  color: #475569 !important;
-}
-.light .nav-link:hover {
-  color: #0f172a !important;
-  background: #eff6ff !important;
-}
-.light .nav-link-active {
-  background: #eff6ff !important;
-  color: #2563eb !important;
-  border-color: #bfdbfe !important;
-}
-.light .page-title {
-  color: #0f172a !important;
-}
-.light .section-title {
-  color: #1e293b !important;
-}
-.light .label {
-  color: #64748b !important;
-}
-.light .badge {
-  border-color: #e2e8f0 !important;
-}
+.animate-bar-grow { transform-origin: left center; animation: barGrow 500ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(8px); }
@@ -142,65 +90,47 @@
 .animate-fade-in { animation: fadeInUp 0.35s ease; }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
-  50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgb(var(--success) / 0.4); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 4px rgb(var(--success) / 0); }
 }
 .animate-pulse-dot { animation: pulse-dot 2s infinite; }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   LIGHT MODE — Global deep overrides
-   Targets all hardcoded dark Tailwind classes used across components.
-   The .light class is applied on <html> by ThemeWrapper.
+   LIGHT APPEARANCE — legacy overrides
+   Some older markup uses dark-only utilities (bg-slate-900, text-slate-200 …).
+   For light themes (.light on <html>) these map to the active theme's tokens.
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Layout shells ───────────────────────────────────────────────────── */
-.light aside {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-}
+.light aside,
 .light header {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
+  background: rgb(var(--chrome)) !important;
+  border-color: rgb(var(--line)) !important;
 }
 .light main {
-  background: #f8fafc !important;
+  background: rgb(var(--canvas)) !important;
 }
 
 /* ── Background overrides ────────────────────────────────────────────── */
-.light .bg-\[\#060b18\],
-.light .bg-\[\#0d1628\],
-.light .bg-\[\#0a1124\] {
-  background: #f8fafc !important;
-}
-.light .bg-slate-950 {
-  background: #ffffff !important;
-}
+.light .bg-slate-950,
 .light .bg-slate-900 {
-  background: #ffffff !important;
+  background: rgb(var(--surface)) !important;
 }
 .light .bg-slate-900\/80 {
-  background: rgba(255,255,255,0.9) !important;
+  background: rgb(var(--surface) / 0.9) !important;
 }
 .light .bg-slate-800 {
-  background: #f1f5f9 !important;
+  background: rgb(var(--sunken)) !important;
 }
-.light .bg-slate-800\/60 {
-  background: rgba(241,245,249,0.7) !important;
-}
-.light .bg-slate-800\/50 {
-  background: rgba(241,245,249,0.6) !important;
-}
-.light .bg-slate-800\/30 {
-  background: rgba(241,245,249,0.4) !important;
-}
+.light .bg-slate-800\/60,
+.light .bg-slate-800\/50,
+.light .bg-slate-800\/30,
 .light .bg-slate-800\/20 {
-  background: rgba(241,245,249,0.3) !important;
+  background: rgb(var(--sunken) / 0.7) !important;
 }
-.light .bg-slate-700\/40 {
-  background: rgba(226,232,240,0.5) !important;
-}
+.light .bg-slate-700\/40,
 .light .bg-slate-700\/60 {
-  background: rgba(226,232,240,0.7) !important;
+  background: rgb(var(--c-neutral-200) / 0.6) !important;
 }
 .light .bg-black\/60 {
   background: rgba(0,0,0,0.3) !important;
@@ -209,60 +139,45 @@
   background: rgba(0,0,0,0.25) !important;
 }
 
-/* Translucent white-on-dark → subtle gray tints in light */
+/* Translucent white-on-dark → subtle neutral tints in light */
 .light .bg-white\/\[0\.04\],
 .light .bg-white\/\[0\.05\],
 .light .bg-white\/\[0\.06\],
 .light .bg-white\/\[0\.08\],
 .light .bg-white\/\[0\.09\] {
-  background: rgba(241,245,249,0.6) !important;
+  background: rgb(var(--sunken) / 0.6) !important;
 }
 
 /* Hover states on translucent BGs */
-.light .hover\:bg-slate-800\/60:hover {
-  background: #f1f5f9 !important;
-}
-.light .hover\:bg-slate-800\/30:hover {
-  background: #f1f5f9 !important;
-}
-.light .hover\:bg-slate-800\/20:hover {
-  background: #f1f5f9 !important;
-}
-.light .hover\:bg-slate-800:hover {
-  background: #e2e8f0 !important;
-}
+.light .hover\:bg-slate-800\/60:hover,
+.light .hover\:bg-slate-800\/30:hover,
+.light .hover\:bg-slate-800\/20:hover,
 .light .hover\:bg-white\/\[0\.05\]:hover,
 .light .hover\:bg-white\/\[0\.09\]:hover {
-  background: #f1f5f9 !important;
+  background: rgb(var(--sunken)) !important;
+}
+.light .hover\:bg-slate-800:hover {
+  background: rgb(var(--c-neutral-200)) !important;
 }
 
 /* ── Text overrides ──────────────────────────────────────────────────── */
-.light .text-slate-100 {
-  color: #0f172a !important;
-}
+.light .text-slate-100,
 .light .text-slate-200 {
-  color: #1e293b !important;
+  color: rgb(var(--ink)) !important;
 }
-.light .text-slate-300 {
-  color: #334155 !important;
-}
-.light .text-slate-400 {
-  color: #64748b !important;
-}
-.light .text-slate-500 {
-  color: #64748b !important;
-}
+.light .text-slate-300,
 .light .text-slate-600 {
-  color: #475569 !important;
+  color: rgb(var(--ink-2)) !important;
 }
-.light .text-white {
-  /* keep white on gradient buttons etc — only override inside specific containers */
+.light .text-slate-400,
+.light .text-slate-500 {
+  color: rgb(var(--ink-3)) !important;
 }
 .light .hover\:text-slate-200:hover {
-  color: #1e293b !important;
+  color: rgb(var(--ink)) !important;
 }
 .light .hover\:text-slate-300:hover {
-  color: #334155 !important;
+  color: rgb(var(--ink-2)) !important;
 }
 
 /* ── Border overrides ────────────────────────────────────────────────── */
@@ -274,16 +189,16 @@
 .light .border-white\/5,
 .light .border-white\/10,
 .light .border-white\/20 {
-  border-color: #e2e8f0 !important;
+  border-color: rgb(var(--line)) !important;
 }
 .light .divide-white\/\[0\.04\] > :not([hidden]) ~ :not([hidden]) {
-  border-color: #e2e8f0 !important;
+  border-color: rgb(var(--line)) !important;
 }
 .light .border-slate-950 {
-  border-color: #ffffff !important;
+  border-color: rgb(var(--surface)) !important;
 }
 .light .hover\:border-white\/20:hover {
-  border-color: #cbd5e1 !important;
+  border-color: rgb(var(--c-neutral-300)) !important;
 }
 
 /* ── Shadow overrides ────────────────────────────────────────────────── */
@@ -295,36 +210,34 @@
   box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1) !important;
 }
 
-/* ── Table overrides ─────────────────────────────────────────────────── */
+/* ── Tables ──────────────────────────────────────────────────────────── */
 .light table thead tr {
-  border-color: #e2e8f0 !important;
+  border-color: rgb(var(--line)) !important;
 }
 .light table tbody tr {
-  border-color: #f1f5f9 !important;
+  border-color: rgb(var(--line) / 0.7) !important;
 }
 .light td {
-  color: #475569 !important;
+  color: rgb(var(--ink-2)) !important;
 }
 .light th {
-  color: #64748b !important;
+  color: rgb(var(--ink-3)) !important;
 }
 
-/* ── Select / form elements ──────────────────────────────────────────── */
-.light select {
-  background: #ffffff !important;
-  border-color: #cbd5e1 !important;
-  color: #1e293b !important;
-}
+/* ── Native form elements ────────────────────────────────────────────── */
+.light select:not(.select-styled),
 .light textarea {
-  background: #ffffff !important;
-  border-color: #cbd5e1 !important;
-  color: #1e293b !important;
+  background-color: rgb(var(--surface)) !important;
+  border-color: rgb(var(--line)) !important;
+  color: rgb(var(--ink)) !important;
 }
-
-/* ── Checkbox styling ────────────────────────────────────────────────── */
 .light input[type="checkbox"] {
-  background: #ffffff !important;
-  border-color: #cbd5e1 !important;
+  background: rgb(var(--surface)) !important;
+  border-color: rgb(var(--c-neutral-300)) !important;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: rgb(var(--c-primary-600));
 }
 
 /* ── Modal backdrop ──────────────────────────────────────────────────── */
@@ -332,23 +245,26 @@
   background: rgba(0,0,0,0.2) !important;
 }
 
-/* ── Gradient text (keep visible on light bg) ────────────────────────── */
-.light .from-blue-400.to-cyan-400 {
-  --tw-gradient-from: #2563eb;
-  --tw-gradient-to: #0891b2;
+/* ── Recharts (fallback for charts not using the theme hook) ─────────── */
+.recharts-cartesian-grid line {
+  stroke: rgb(var(--line));
+}
+.recharts-text {
+  fill: rgb(var(--ink-3));
 }
 
-/* ── Recharts / SVG chart ────────────────────────────────────────────── */
-.light .recharts-cartesian-grid line {
-  stroke: #e2e8f0;
+/* ── Native selects using .input: custom chevron ─────────────────────── */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px 16px;
+  padding-right: 2.5rem;
+  cursor: pointer;
 }
-.light .recharts-text {
-  fill: #64748b;
-}
-
-/* ── Toast override (applied via class in Providers) ─────────────────── */
-.light .toast-custom {
-  background: #ffffff !important;
-  color: #1e293b !important;
-  border-color: #e2e8f0 !important;
+select option {
+  background: rgb(var(--surface));
+  color: rgb(var(--ink));
 }

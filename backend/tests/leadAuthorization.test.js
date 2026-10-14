@@ -29,6 +29,7 @@ const RELS = {
   lead: (r) => leads.find((l) => l.id === r.leadId) || null,
   opportunity: (r) => opportunities.find((o) => o.id === r.opportunityId) || null,
   leads: (r) => leads.filter((l) => l.accountId === r.id),
+  assignedTo: (r) => users.find((u) => u.id === r.assignedToId) || null,
 };
 
 const OPS = ['in', 'notIn', 'contains', 'gte', 'gt', 'lte', 'lt', 'not', 'equals'];
@@ -125,6 +126,8 @@ const prismaFake = {
   organization: { findUnique: async () => ({ leadQuota: 100, leadUsed: 0 }), update: async () => ({}) },
   auditLog: { create: async () => ({}) },
   notification: { createMany: async () => ({}), create: async () => ({}) },
+  dropdownConfig: { findMany: async () => [] },
+  invitation: { findMany: async () => [] },
 };
 const prismaPath = require.resolve(path.join(__dirname, '../src/utils/prisma'));
 require.cache[prismaPath] = { id: prismaPath, filename: prismaPath, loaded: true, exports: prismaFake };
@@ -159,8 +162,10 @@ let ACTIVITIES_ORIGINAL;
 test.beforeEach(() => {
   users = [
     mkUser('admin', 'org_admin', ORG_A),
-    mkUser('mgr1', 'manager', ORG_A),
-    mkUser('mgr2', 'manager', ORG_A),
+    // Managers were invited by the org admin — this is what puts them (and their
+    // teams) in the admin's own team for the Team page / bulk reassign.
+    { ...mkUser('mgr1', 'manager', ORG_A), invitedById: 'admin' },
+    { ...mkUser('mgr2', 'manager', ORG_A), invitedById: 'admin' },
     mkUser('aditi', 'sales_user', ORG_A, 'mgr1'),
     mkUser('sheetal', 'sales_user', ORG_A, 'mgr1'),
     mkUser('rahul', 'sales_user', ORG_A, 'mgr2'),
@@ -311,13 +316,13 @@ test('7. manager cannot view/search another manager\'s lead (created or assigned
     assert.equal(await canGet('mgr1', id), false, id);
   }
 });
-test('8. manager cannot view/search another manager\'s team lead, nor own team\'s lead they neither created nor own', async () => {
+test('8. manager cannot view/search another manager\'s team lead, but sees leads assigned to their own team', async () => {
   assert.ok(!(await globalIds('mgr1', 'rahul')).includes('rahul-lead'));
   assert.equal(await canGet('mgr1', 'rahul-lead'), false);
-  // Aditi is on mgr1's team, but XYZ was created by admin and is assigned to Aditi → not visible
-  assert.ok(!(await globalIds('mgr1')).includes('xyz'));
-  assert.equal(await canGet('mgr1', 'xyz'), false);
-  assert.deepEqual(await listIds('mgr1'), sorted(['mgr1-created', 'mgr1-assigned']));
+  // Aditi is on mgr1's team, so XYZ (created by admin, assigned to Aditi) is visible to mgr1
+  assert.ok((await globalIds('mgr1')).includes('xyz'));
+  assert.equal(await canGet('mgr1', 'xyz'), true);
+  assert.deepEqual(await listIds('mgr1'), sorted(['mgr1-created', 'mgr1-assigned', 'xyz']));
 });
 test('9. manager cannot access leads outside their organization', async () => {
   assert.ok(!(await listIds('mgr1', { search: 'xyz' })).includes('orgB-lead'));
@@ -353,13 +358,17 @@ test('12. manager cannot assign to another manager\'s team, nor take an out-of-s
   assert.equal(lead('rahul-lead').assignedToId, 'rahul');
   assert.equal((await call(reassignRoute, { params: { id: 'mgr1-created' }, body: { assignedToId: 'rahul' }, user: U('mgr1') })).status, 403);
 });
-test('13. manager cannot self-assign (reassign, bulk, update, create)', async () => {
-  assert.equal((await leadsService.reassignLead('mgr1-created', 'mgr1', U('mgr1'))).statusCode, 403);
-  assert.equal((await leadsService.bulkAssignLeads(['mgr1-created'], 'mgr1', U('mgr1'))).success, false);
-  await leadsService.updateLead('mgr1-created', { assignedToId: 'mgr1' }, U('mgr1'));
+test('13. manager can self-assign (reassign, bulk, update, create)', async () => {
+  assert.equal((await leadsService.reassignLead('mgr1-created', 'mgr1', U('mgr1'))).success, true);
+  assert.equal(lead('mgr1-created').assignedToId, 'mgr1');
+  await leadsService.updateLead('mgr1-created', { assignedToId: 'aditi' }, U('mgr1'));
   assert.equal(lead('mgr1-created').assignedToId, 'aditi');
+  await leadsService.updateLead('mgr1-created', { assignedToId: 'mgr1' }, U('mgr1'));
+  assert.equal(lead('mgr1-created').assignedToId, 'mgr1');
+  assert.equal((await leadsService.bulkAssignLeads(['mgr1-assigned'], 'mgr1', U('mgr1'))).success, true);
+  assert.equal(lead('mgr1-assigned').assignedToId, 'mgr1');
   await leadsService.createLead({ companyName: 'Self Assigned Co', assignedToId: 'mgr1' }, U('mgr1'));
-  assert.equal(leads.find((l) => l.companyName === 'Self Assigned Co').assignedToId, null);
+  assert.equal(leads.find((l) => l.companyName === 'Self Assigned Co').assignedToId, 'mgr1');
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -559,7 +568,7 @@ test('timeline: chained reassignments build a continuous history', async () => {
 test('timeline: no entry when the assignee is unchanged or the attempt is denied', async () => {
   await leadsService.reassignLead('xyz', 'aditi', U('admin'));
   await leadsService.reassignLead('mgr1-created', 'rahul', U('mgr1'));       // other team → denied
-  await leadsService.reassignLead('mgr1-created', 'mgr1', U('mgr1'));        // self → denied
+  await leadsService.reassignLead('mgr1-created', 'mgr2', U('mgr1'));        // another manager → denied
   await leadsService.reassignLead('xyz', 'sheetal', U('aditi'));             // rep → denied
   await leadsService.reassignLead('orgB-lead', 'aditi', U('admin'));         // other org → denied
   assert.equal(activities.filter((a) => isNew(a.id)).length, 0);
@@ -610,8 +619,8 @@ test('34-36. activities stay stored; Aditi loses them, Sheetal gains them after 
 test('37. general activity feed follows current lead authorization', async () => {
   assert.deepEqual(await feedIds('admin'), ['a1', 'a2', 'a3', 'a4', 'a5', 'a5b', 'a6']);
   assert.deepEqual(await feedIds('aditi'), ['a1', 'a2', 'a3', 'a4', 'a5', 'a5b']); // a3: mgr1-created is assigned to her
-  assert.deepEqual(await feedIds('mgr1'), ['a3']);
-  assert.deepEqual(await feedIds('mgr2'), []);
+  assert.deepEqual(await feedIds('mgr1'), ['a1', 'a2', 'a3', 'a5', 'a5b']); // own-team leads (xyz, mgr1-created)
+  assert.deepEqual(await feedIds('mgr2'), ['a6']); // rahul-lead: Rahul is on mgr2's team
   assert.deepEqual(await feedIds('sheetal'), []);
   assert.deepEqual(await feedIds('adminB'), ['a7']);
   await leadsService.reassignLead('xyz', 'sheetal', U('admin'));
@@ -647,11 +656,11 @@ test('38. being the activity creator never overrides current lead authorization'
 // ═════════════════════════════════════════════════════════════════════════════
 test('39. manager cannot access an opportunity linked to another manager\'s lead', async () => {
   assert.equal((await opportunityService.getById('opp-rahul', U('mgr1'))).statusCode, 404);
-  assert.equal((await opportunityService.getById('opp-xyz', U('mgr1'))).statusCode, 404);
+  assert.equal((await opportunityService.getById('opp-xyz', U('mgr1'))).success, true); // own team's lead
   assert.equal((await opportunityService.update('opp-rahul', { stage: 'closed_won' }, U('mgr1'))).statusCode, 404);
   assert.equal((await opportunityService.delete('opp-rahul', U('mgr1'))).statusCode, 404);
   assert.equal(opportunities.find((o) => o.id === 'opp-rahul').stage, 'demo');
-  assert.deepEqual(await oppIds('mgr1'), ['opp-mgr1']);
+  assert.deepEqual(await oppIds('mgr1'), ['opp-mgr1', 'opp-xyz']);
   assert.deepEqual(await oppIds('mgr1', { leadId: 'rahul-lead' }), []);
 });
 test('40. sales rep cannot access an opportunity linked to another user\'s lead', async () => {
@@ -673,7 +682,7 @@ test('41. authorized users can access opportunities linked to their authorized l
   assert.equal((await opportunityService.getById('opp-xyz', U('sheetal'))).success, true);
   assert.equal(opportunities.find((o) => o.id === 'opp-xyz').stage, 'negotiation'); // data preserved
   assert.deepEqual(await globalSearchOf('sheetal', 'opp', 'opportunities'), ['opp-xyz']);
-  assert.deepEqual(await globalSearchOf('mgr1', 'opp', 'opportunities'), ['opp-mgr1']);
+  assert.deepEqual(await globalSearchOf('mgr1', 'opp', 'opportunities'), ['opp-mgr1', 'opp-xyz']); // xyz moved to Sheetal, still mgr1's team
 });
 test('42. cross-organization opportunity access is blocked', async () => {
   assert.equal((await opportunityService.getById('opp-orgB', U('admin'))).statusCode, 404);
@@ -694,16 +703,17 @@ test('43. unauthorized linked lead information is not leaked through opportuniti
 // CONTACTS / ACCOUNTS (44-47)
 // ═════════════════════════════════════════════════════════════════════════════
 test('44. manager only sees contacts/accounts related to authorized leads (global search)', async () => {
-  assert.deepEqual(await globalSearchOf('mgr1', 'contact', 'contacts'), ['c-mgr1']);
-  assert.deepEqual(await globalSearchOf('mgr1', 'account', 'accounts'), ['acc-mgr1']);
+  assert.deepEqual(await globalSearchOf('mgr1', 'contact', 'contacts'), ['c-mgr1', 'c-xyz']);
+  assert.deepEqual(await globalSearchOf('mgr1', 'account', 'accounts'), ['acc-mgr1', 'acc-xyz']);
 });
 test('45. manager cannot see another manager\'s contacts/accounts', async () => {
   const contactsSeen = await globalSearchOf('mgr1', 'contact', 'contacts');
-  for (const id of ['c-rahul', 'c-free-mgr2', 'c-xyz']) assert.ok(!contactsSeen.includes(id), id);
+  for (const id of ['c-rahul', 'c-free-mgr2']) assert.ok(!contactsSeen.includes(id), id);
   const accountsSeen = await globalSearchOf('mgr1', 'account', 'accounts');
-  for (const id of ['acc-mgr2', 'acc-rahul', 'acc-xyz']) assert.ok(!accountsSeen.includes(id), id);
-  assert.deepEqual(await globalSearchOf('mgr2', 'account', 'accounts'), ['acc-mgr2']);
-  assert.deepEqual(await globalSearchOf('mgr2', 'contact', 'contacts'), ['c-free-mgr2']);
+  for (const id of ['acc-mgr2', 'acc-rahul']) assert.ok(!accountsSeen.includes(id), id);
+  // Rahul is on mgr2's team, so his lead's account/contact are visible to mgr2
+  assert.deepEqual(await globalSearchOf('mgr2', 'account', 'accounts'), ['acc-mgr2', 'acc-rahul']);
+  assert.deepEqual(await globalSearchOf('mgr2', 'contact', 'contacts'), sorted(['c-free-mgr2', 'c-rahul']));
 });
 test('46. sales rep only sees contacts/accounts related to currently assigned leads (and follows reassignment)', async () => {
   assert.deepEqual(await globalSearchOf('aditi', 'contact', 'contacts'), sorted(['c-xyz', 'c-mgr1', 'c-free-aditi']));
@@ -750,7 +760,7 @@ test('48. unauthorized leads cannot be added to campaigns', async () => {
   campaignLeads = [];
   const add = (u, ids) => call(campaignController.addLeadsToCampaign, { params: { id: 'camp1' }, body: { leadIds: ids }, user: U(u) });
   await add('mgr1', ['mgr1-created', 'rahul-lead', 'orgB-lead', 'xyz']);
-  assert.deepEqual(campaignLeads.map((c) => c.leadId), ['mgr1-created']);
+  assert.deepEqual(sorted(campaignLeads.map((c) => c.leadId)), ['mgr1-created', 'xyz']);
   campaignLeads = [];
   await add('admin', ['xyz', 'orgB-lead']);
   assert.deepEqual(campaignLeads.map((c) => c.leadId), ['xyz']);
@@ -761,8 +771,8 @@ test('48. unauthorized leads cannot be added to campaigns', async () => {
 test('49. campaign retrieval cannot expose unauthorized leads', async () => {
   const get = async (u) => (await call(campaignController.getCampaign, { params: { id: 'camp1' }, user: U(u) })).body.data;
   assert.deepEqual(sorted((await get('admin')).leads.map((l) => l.leadId)), ['mgr1-created', 'rahul-lead', 'xyz']);
-  assert.deepEqual((await get('mgr1')).leads.map((l) => l.leadId), ['mgr1-created']);
-  assert.deepEqual((await get('mgr1')).emails.map((e) => e.id), ['e-mgr1']);
+  assert.deepEqual(sorted((await get('mgr1')).leads.map((l) => l.leadId)), ['mgr1-created', 'xyz']);
+  assert.deepEqual(sorted((await get('mgr1')).emails.map((e) => e.id)), ['e-mgr1', 'e-xyz']);
   assert.deepEqual(sorted((await get('aditi')).leads.map((l) => l.leadId)), ['mgr1-created', 'xyz']);
   assert.deepEqual((await get('sheetal')).leads, []);
   assert.deepEqual((await get('sheetal')).emails, []);
@@ -771,7 +781,7 @@ test('50. campaign launch cannot bypass lead authorization', async () => {
   const launch = (u) => call(campaignController.launchCampaign, { params: { id: 'camp1' }, user: U(u) });
   const r = await launch('mgr1');
   assert.equal(r.status, 200);
-  assert.deepEqual(sentEmails.map((e) => e.leadId), ['mgr1-created']);
+  assert.deepEqual(sorted(sentEmails.map((e) => e.leadId)), ['mgr1-created', 'xyz']); // never rahul-lead / orgB-lead
   sentEmails = [];
   await launch('admin');
   assert.deepEqual(sorted(sentEmails.map((e) => e.leadId)), ['mgr1-created', 'rahul-lead', 'xyz']); // never orgB-lead
@@ -787,10 +797,10 @@ test('51. a search term cannot bypass admin/manager/rep authorization', async ()
   for (const term of ['xyz', 'XYZ', 'x', 'corp', 'lead.com']) {
     assert.deepEqual(await listIds('sheetal', { search: term }), []);
     assert.ok(!(await listIds('aditi', { search: term })).some((id) => !['xyz', 'mgr1-created'].includes(id)));
-    assert.ok(!(await listIds('mgr1', { search: term })).some((id) => !['mgr1-created', 'mgr1-assigned'].includes(id)));
+    assert.ok(!(await listIds('mgr1', { search: term })).some((id) => !['mgr1-created', 'mgr1-assigned', 'xyz'].includes(id)));
     assert.ok(!(await listIds('admin', { search: term })).includes('orgB-lead'));
   }
-  assert.deepEqual(await globalIds('mgr1', 'xyz'), sorted(['mgr1-created', 'mgr1-assigned']));
+  assert.deepEqual(await globalIds('mgr1', 'xyz'), sorted(['mgr1-created', 'mgr1-assigned', 'xyz']));
   assert.deepEqual(await listIds('mgr1', { search: 'xyz', assignedTo: 'rahul' }), []);
   assert.deepEqual(await listIds('mgr1', { search: 'xyz', unassigned: 'true' }), []);
   assert.deepEqual(await listIds('admin', { search: 'xyz', assignedTo: 'repB' }), []);
@@ -798,7 +808,7 @@ test('51. a search term cannot bypass admin/manager/rep authorization', async ()
 test('52. direct ID access (get/update/delete/export/enrich/email/outreach/activities/contacts) cannot bypass authorization', async () => {
   const matrix = {
     admin: { xyz: true, 'mgr2-assigned': true, 'orgB-lead': false },
-    mgr1: { xyz: false, 'mgr1-created': true, 'mgr1-assigned': true, 'mgr2-assigned': false, 'rahul-lead': false, 'orgB-lead': false },
+    mgr1: { xyz: true, 'mgr1-created': true, 'mgr1-assigned': true, 'mgr2-assigned': false, 'rahul-lead': false, 'orgB-lead': false },
     aditi: { xyz: true, 'mgr1-created': true, 'mgr1-assigned': false, 'rahul-lead': false, unassigned: false },
     sheetal: { xyz: false },
     adminB: { xyz: false, 'orgB-lead': true },
@@ -808,7 +818,7 @@ test('52. direct ID access (get/update/delete/export/enrich/email/outreach/activ
   }
   assert.equal((await leadsService.updateLead('xyz', { notes: 'hijack' }, U('sheetal'))).success, false);
   assert.equal(lead('xyz').notes, XYZ_ORIGINAL.notes);
-  assert.equal((await activityService.getLeadActivities('xyz', U('mgr1'))).success, false);
+  assert.equal((await activityService.getLeadActivities('rahul-lead', U('mgr1'))).success, false); // another manager's team
   assert.equal((await activityService.getLeadActivities('xyz', U('sheetal'))).success, false);
 
   // legacy controller endpoints: all answer 404 for out-of-scope leads
@@ -819,11 +829,18 @@ test('52. direct ID access (get/update/delete/export/enrich/email/outreach/activ
   assert.deepEqual(sentEmails, []);
 
   // export: filters/ids cannot widen the scope
-  const exported = async (u, query) => (await call(leadController.exportLeads, { query, user: U(u) })).sent || '';
+  // Export is an Excel workbook — flatten every sheet to text for the assertions
+  const XLSX = require('xlsx');
+  const exported = async (u, query) => {
+    const sent = (await call(leadController.exportLeads, { query, user: U(u) })).sent;
+    if (!sent) return '';
+    const wb = XLSX.read(sent, { type: 'buffer' });
+    return wb.SheetNames.map((n) => XLSX.utils.sheet_to_csv(wb.Sheets[n])).join('\n');
+  };
   const all = 'xyz,mgr1-created,mgr1-assigned,mgr2-assigned,mgr2-created,rahul-lead,unassigned,orgB-lead';
   const csv = await exported('mgr1', { ids: all });
-  assert.ok(csv.includes('XYZ Created By Mgr1') && csv.includes('XYZ Assigned To Mgr1'));
-  for (const hidden of ['XYZ Corp', 'XYZ Rahul Deal', 'XYZ OrgB', 'XYZ Created By Mgr2', 'XYZ Unassigned']) assert.ok(!csv.includes(hidden), hidden);
+  assert.ok(csv.includes('XYZ Created By Mgr1') && csv.includes('XYZ Assigned To Mgr1') && csv.includes('XYZ Corp'));
+  for (const hidden of ['XYZ Rahul Deal', 'XYZ OrgB', 'XYZ Created By Mgr2', 'XYZ Unassigned']) assert.ok(!csv.includes(hidden), hidden);
   const csvSearch = await exported('sheetal', { search: 'xyz', assignedTo: 'aditi' });
   assert.ok(!csvSearch.includes('XYZ Corp'));
   const csvAdmin = await exported('admin', { ids: all });
@@ -851,7 +868,7 @@ test('53. cross-organization search cannot bypass authorization (every role, eve
 test('lead stats use the same scope as the list', async () => {
   const total = async (u) => (await leadsService.getLeadStats(U(u))).totalLeads;
   assert.equal(await total('admin'), 7);
-  assert.equal(await total('mgr1'), 2);
+  assert.equal(await total('mgr1'), 3); // created, assigned, and own-team (xyz)
   assert.equal(await total('aditi'), 2);
   assert.equal(await total('sheetal'), 0);
 });
@@ -870,4 +887,178 @@ test('GET /activities/lead/:leadId answers 404 for out-of-scope or other-org lea
   assert.equal((await leadActivityIds('admin', 'orgB-lead')).status, 404);
   assert.equal((await leadActivityIds('aditi', 'xyz')).status, 200);
   assert.equal((await leadActivityIds('admin', 'xyz')).status, 200);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Activity module: search by linked record + overdue filter
+// ═════════════════════════════════════════════════════════════════════════════
+test('activity search matches the linked lead / opportunity name without widening scope', async () => {
+  assert.deepEqual(await feedIds('aditi', { search: 'XYZ Corp' }), ['a1', 'a2', 'a5']);
+  assert.deepEqual(await feedIds('aditi', { search: 'Opp XYZ' }), ['a5', 'a5b']);
+  // text fields still searchable
+  assert.deepEqual(await feedIds('aditi', { search: 'pricing' }), ['a2']);
+  // a matching name never exposes out-of-scope or other-org activities
+  assert.deepEqual(await feedIds('admin', { search: 'XYZ' }), ['a1', 'a2', 'a3', 'a5', 'a5b', 'a6']);
+  assert.deepEqual(await feedIds('sheetal', { search: 'XYZ' }), []);
+  assert.deepEqual(await feedIds('aditi', { search: 'Rahul' }), []);
+  assert.deepEqual(await feedIds('mgr1', { search: 'Rahul Deal' }), []);
+  assert.deepEqual(await feedIds('mgr2', { search: 'Rahul Deal' }), ['a6']);
+});
+test('activity overdue filter excludes follow-ups due today (matches stats)', async () => {
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  activities.find((a) => a.id === 'a1').nextActionDate = new Date(todayStart.getTime() + 60_000);   // due today
+  activities.find((a) => a.id === 'a2').nextActionDate = new Date(todayStart.getTime() - 86_400_000); // yesterday
+  activities.find((a) => a.id === 'a5').nextActionDate = new Date(todayStart.getTime() + 3 * 86_400_000); // upcoming
+  assert.deepEqual(await feedIds('aditi', { overdue: 'true' }), ['a2']);
+  const stats = (await activityService.getActivityStats(U('aditi'))).stats;
+  assert.equal(stats.overdueCount, 1);
+  assert.equal(stats.followUpsToday, 1);
+  const byId = Object.fromEntries((await activityService.getActivities({ limit: 200 }, U('aditi'))).activities.map((a) => [a.id, a.nextActionStatus]));
+  assert.equal(byId.a1, 'due_today');
+  assert.equal(byId.a2, 'overdue');
+  assert.equal(byId.a5, 'upcoming');
+});
+
+// ── Opportunity pipeline ─────────────────────────────────────────────────────
+test('converting a qualified lead creates the opportunity in the "qualified" stage (shown on the board)', async () => {
+  leads.find((l) => l.id === 'xyz').status = 'qualified';
+  const r = await opportunityService.convertLeadToOpportunity('xyz', U('admin'));
+  assert.equal(r.success, true);
+  const created = opportunities.find((o) => o.id === r.opportunity.id);
+  assert.equal(created.stage, 'qualified');
+  assert.equal(created.probability, 20);
+  assert.ok(['qualified', 'demo', 'proposal', 'negotiation', 'closed_won', 'closed_lost'].includes(created.stage));
+});
+
+test('opportunity list: default page is 20 rows, every row is reachable through page/limit', async () => {
+  for (let i = 0; i < 25; i++) {
+    opportunities.push({ id: `opp-bulk-${i}`, organizationId: ORG_A, leadId: 'xyz', assignedToId: 'aditi', createdById: 'admin', title: `Bulk ${i}`, stage: 'demo' });
+  }
+  const inScope = (await opportunityService.getAll(U('admin'), { limit: 1000 })).pagination.total;
+  assert.ok(inScope > 20);
+
+  const def = await opportunityService.getAll(U('admin'));
+  assert.equal(def.opportunities.length, 20); // why the board must page through the list
+  assert.equal(def.pagination.totalPages, Math.ceil(inScope / 20));
+
+  const seen = new Set();
+  for (let page = 1; page <= def.pagination.totalPages; page++) {
+    (await opportunityService.getAll(U('admin'), { page, limit: 20 })).opportunities.forEach((o) => seen.add(o.id));
+  }
+  assert.equal(seen.size, inScope);
+
+  const big = await opportunityService.getAll(U('admin'), { page: 1, limit: 100 });
+  assert.equal(big.opportunities.length, inScope);
+  assert.equal(big.pagination.totalPages, 1);
+});
+
+// ── Opportunity owner follows the lead (dashboard / pipeline metrics) ────────
+const oppOwner = (id) => opportunities.find((o) => o.id === id).assignedToId;
+const addOpp = (id, leadId, assignedToId, stage) =>
+  opportunities.push({ id, organizationId: ORG_A, leadId, assignedToId, createdById: 'admin', title: id, stage });
+
+test('reassign button: open opportunities move to the new owner, closed deals keep their owner', async () => {
+  addOpp('opp-xyz-won', 'xyz', 'aditi', 'closed_won');
+  addOpp('opp-xyz-lost', 'xyz', 'aditi', 'closed_lost');
+  addOpp('opp-xyz-legacy', 'xyz', 'aditi', 'qualification');
+  await leadsService.reassignLead('xyz', 'sheetal', U('admin'));
+  assert.equal(oppOwner('opp-xyz'), 'sheetal');        // open (proposal)
+  assert.equal(oppOwner('opp-xyz-legacy'), 'sheetal'); // open (legacy stage)
+  assert.equal(oppOwner('opp-xyz-won'), 'aditi');      // closed → stays credited to who closed it
+  assert.equal(oppOwner('opp-xyz-lost'), 'aditi');
+  assert.equal(oppOwner('opp-rahul'), 'rahul');        // other leads untouched
+});
+
+test('bulk assign: only leads whose owner changed have their open opportunities moved', async () => {
+  addOpp('opp-unassigned', 'unassigned', null, 'demo');
+  opportunities.find((o) => o.id === 'opp-mgr1').assignedToId = 'mgr1'; // deliberately out of step
+  await leadsService.bulkAssignLeads(['xyz', 'unassigned', 'mgr1-created'], 'aditi', U('admin'));
+  assert.equal(oppOwner('opp-unassigned'), 'aditi');
+  assert.equal(oppOwner('opp-xyz'), 'aditi');
+  assert.equal(oppOwner('opp-mgr1'), 'mgr1');          // lead already Aditi's → no owner change, no sync
+  await leadsService.bulkAssignLeads(['xyz', 'mgr1-created'], 'sheetal', U('admin'));
+  assert.equal(oppOwner('opp-xyz'), 'sheetal');
+  assert.equal(oppOwner('opp-mgr1'), 'sheetal');
+});
+
+test('edit-form assignment moves open opportunities; editing other fields does not', async () => {
+  await leadsService.updateLead('mgr1-created', { notes: 'just a note' }, U('mgr1'));
+  assert.equal(oppOwner('opp-mgr1'), 'aditi');
+  await leadsService.updateLead('mgr1-created', { assignedToId: 'sheetal' }, U('mgr1'));
+  assert.equal(oppOwner('opp-mgr1'), 'sheetal');
+});
+
+test('team page bulk reassign moves open opportunities to the new owner', async () => {
+  addOpp('opp-rahul-won', 'rahul-lead', 'rahul', 'closed_won');
+  const res = await call(teamController.bulkReassignLeads, { body: { fromUserId: 'rahul', toUserId: 'aditi' }, user: U('admin') });
+  assert.equal(res.status, 200);
+  assert.equal(oppOwner('opp-rahul'), 'aditi');
+  assert.equal(oppOwner('opp-rahul-won'), 'rahul');
+});
+
+test('reassigned owner sees the deal and it is credited to them; previous owner loses it', async () => {
+  await leadsService.reassignLead('xyz', 'sheetal', U('admin'));
+  assert.deepEqual(await oppIds('sheetal'), ['opp-xyz']);
+  assert.ok(!(await oppIds('aditi')).includes('opp-xyz'));
+  assert.equal(oppOwner('opp-xyz'), 'sheetal');
+});
+
+test('new opportunity without an assignee belongs to the lead owner (admin / manager create)', async () => {
+  const byAdmin = await opportunityService.create({ leadId: 'rahul-lead', opportunityName: 'Admin made', stage: 'qualified' }, U('admin'));
+  assert.equal(byAdmin.success, true);
+  assert.equal(byAdmin.opportunity.assignedToId, 'rahul');
+  const byMgr = await opportunityService.create({ leadId: 'mgr1-created', opportunityName: 'Mgr made', stage: 'demo' }, U('mgr1'));
+  assert.equal(byMgr.opportunity.assignedToId, 'aditi');
+  const explicit = await opportunityService.create({ leadId: 'mgr1-created', opportunityName: 'Explicit', assignedToId: 'sheetal' }, U('admin'));
+  assert.equal(explicit.opportunity.assignedToId, 'sheetal'); // an explicit assignee still wins
+  const unassignedLead = await opportunityService.create({ leadId: 'unassigned', opportunityName: 'No owner yet' }, U('admin'));
+  assert.equal(unassignedLead.opportunity.assignedToId, null);
+  const byRep = await opportunityService.create({ leadId: 'xyz', opportunityName: 'Rep made' }, U('aditi'));
+  assert.equal(byRep.opportunity.assignedToId, 'aditi'); // sales users are always the owner (unchanged)
+});
+
+// ── "Lead updated" timeline entry: only real changes, readable labels ────────
+const { updateLead: updateLeadRoute } = require(src('controllers/leads.controller'));
+const { describeLeadChanges } = require(src('utils/leadChangeSummary'));
+const updatedEntries = (leadId) => activities.filter((a) => a.leadId === leadId && a.action === 'lead_updated').map((a) => a.description);
+const futureDay = (n) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+
+test('lead updated: assignment alone writes no "Lead updated" entry (it has its own entry)', async () => {
+  const r = await call(updateLeadRoute, { params: { id: 'xyz' }, body: { assignedToId: 'sheetal' }, user: U('admin') });
+  assert.equal(r.status, 200);
+  assert.deepEqual(updatedEntries('xyz'), []);
+  assert.ok(activities.some((a) => a.leadId === 'xyz' && a.action === 'lead_assigned'));
+});
+
+test('lead updated: lists only fields that really changed, with labels and old → new values', async () => {
+  const day = futureDay(10);
+  const x = lead('xyz');
+  const r = await call(updateLeadRoute, {
+    params: { id: 'xyz' },
+    body: { companyName: x.companyName, notes: 'A brand new note', followUpDate: day, contactPhone: '+91 98765 43210' },
+    user: U('admin'),
+  });
+  assert.equal(r.status, 200);
+  const label = new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  assert.deepEqual(updatedEntries('xyz'), [
+    `Lead updated: Notes, Follow-up date (— → ${label}), Contact phone (— → +91 98765 43210)`,
+  ]);
+  assert.ok(!updatedEntries('xyz')[0].includes('companyName') && !updatedEntries('xyz')[0].includes('Company name'));
+});
+
+test('lead updated: saving the form with nothing changed writes no entry', async () => {
+  const x = lead('xyz');
+  await call(updateLeadRoute, { params: { id: 'xyz' }, body: { companyName: x.companyName, notes: x.notes, status: x.status }, user: U('admin') });
+  assert.deepEqual(updatedEntries('xyz'), []);
+});
+
+test('lead updated: describeLeadChanges ignores own-entry, unknown and unchanged fields', () => {
+  const before = { status: 'new', assignedToId: 'a', notes: 'x', followUpDate: new Date('2026-10-12T00:00:00Z'), techStack: [] };
+  const after = { status: 'qualified', assignedToId: 'b', notes: 'x', followUpDate: new Date('2026-10-12T00:00:00Z'), techStack: [] };
+  assert.deepEqual(describeLeadChanges(before, after, ['status', 'assignedToId', 'notes', 'followUpDate', 'techStack', 'bogus']), []);
+});
+
+test('lead updated: a plain list of field names still gets readable labels', async () => {
+  await activityService.logLeadUpdated(lead('xyz'), U('admin'), ['assignedToId', 'followUpDate', 'someNewField']);
+  assert.deepEqual(updatedEntries('xyz'), ['Lead updated: Assigned to, Follow-up date, Some new field']);
 });

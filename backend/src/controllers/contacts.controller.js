@@ -199,6 +199,11 @@ async function deleteContact(req, res) {
     const isAdmin = ['org_admin', 'super_admin'].includes(req.user.role);
     const isLeadContact = !!contact.leadId;
 
+    // Sales executives cannot delete anything
+    if (req.user.role === 'sales_user') {
+      return error(res, 'Sales executives cannot delete contacts', 403);
+    }
+
     if (!isAdmin && !isLeadContact) {
       return error(res, 'Only admins can delete contacts', 403);
     }

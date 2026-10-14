@@ -349,18 +349,6 @@ export const teamApi = {
   remove: (id: string) => api.delete(`/team/${id}`),
 };
 
-export const importApi = {
-  upload: (formData: FormData) => api.post('/import/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
-  importLeads: (formData: FormData) => api.post('/import/leads', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
-  getLogs: () => api.get('/import/logs'),
-  getHistory: () => api.get('/import/history'),
-  getTemplate: () => api.get('/import/template', { responseType: 'blob' }),
-};
-
 export const invitationsApi = {
   send: (data: { email: string; role: string; managerId?: string }) =>
     api.post('/invitations', data),
@@ -371,7 +359,8 @@ export const invitationsApi = {
 };
 
 export const notificationsApi = {
-  list: () => api.get('/notifications'),
+  // Unread only: a notification disappears from the list once it has been read
+  list: () => api.get('/notifications', { params: { unreadOnly: true, limit: 500 } }),
   markRead: (ids: string[]) => api.patch('/notifications/read', { ids }),
 };
 

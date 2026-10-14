@@ -9,7 +9,7 @@ import { ActivitiesList } from '../../../../components/crm/ActivitiesList';
 import { RoleGuard } from '../../../../components/common/RoleGuard';
 import { usePermissions } from '../../../../lib/rbac';
 import { useAuthStore } from '../../../../store/authStore';
-import { getInitials, intentColors, statusColors } from '../../../../lib/utils';
+import { getInitials, intentColors, statusColors, normalizeLeadType } from '../../../../lib/utils';
 import {
   ArrowLeft, Zap, Send, Loader2, RefreshCw, Globe, Mail,
   User, Linkedin, Search, CheckCircle2, XCircle, Building2,
@@ -18,9 +18,11 @@ import {
   Clock, TrendingUp, Edit2, Save, X, UserPlus, Plus,
   ChevronDown, Eye, Hash, MessageCircle,
 } from 'lucide-react';
+import { FileText as IcDetails, Pencil as IcEdit, Building2 as IcCompany, Users as IcContacts, Briefcase as IcOpps, Cpu as IcTech, Zap as IcIntent, SearchX as IcNotFound } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { Select } from '../../../../components/ui/Select';
 
 function cn(...cls: (string | boolean | undefined | null)[]) {
   return cls.filter(Boolean).join(' ');
@@ -81,17 +83,17 @@ function InfoRow({
 }) {
   if (!value) return null;
   return (
-    <div className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-950 rounded-xl group">
-      <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-white/[0.03] rounded-xl group">
+      <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-white/[0.05] flex items-center justify-center flex-shrink-0">
         {icon}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">{label}</p>
         {href ? (
           <a href={href} target="_blank" rel="noopener noreferrer" title={value}
-            className="text-sm text-blue-400 hover:underline truncate block">{value}</a>
+            className="text-sm text-blue-600 dark:text-blue-400 hover:underline truncate block">{value}</a>
         ) : (
-          <p className="text-sm text-slate-800 dark:text-slate-200 truncate" title={value}>{value}</p>
+          <p className="text-sm text-ink dark:text-slate-200 truncate" title={value}>{value}</p>
         )}
       </div>
       {copyable && (
@@ -129,20 +131,20 @@ function ContactTableRow({
   // text stays reachable via the tooltip on hover.
   const truncate = (v: string, n: number) => (v.length > n ? v.slice(0, n) + '…' : v);
   return (
-    <tr className="border-t border-slate-200 dark:border-white/[0.06] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors align-top">
+    <tr className="border-t border-slate-200 dark:border-white/[0.06] hover:bg-slate-50 dark:hover:bg-white/[0.05] transition-colors align-top">
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-800 dark:text-slate-200 cursor-default" title={name || undefined}>{name ? truncate(name, 25) : '—'}</span>
-          {badge && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">{badge}</span>}
+          <span className="text-sm text-ink dark:text-slate-200 cursor-default" title={name || undefined}>{name ? truncate(name, 25) : '—'}</span>
+          {badge && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 whitespace-nowrap">{badge}</span>}
         </div>
       </td>
-      <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 cursor-default" title={title || undefined}>{title ? truncate(title, 25) : '—'}</td>
+      <td className="px-3 py-2.5 text-sm text-ink-2 cursor-default" title={title || undefined}>{title ? truncate(title, 25) : '—'}</td>
       <td className="px-3 py-2.5">
         {emailList.length ? (
           <div className="space-y-1">
             {emailList.map((email, i) => (
               <span key={i} className="group/cell flex items-center gap-1.5">
-                <a href={`mailto:${email}`} title={email} className="text-sm text-blue-400 hover:underline whitespace-nowrap">{truncate(email, 25)}</a>
+                <a href={`mailto:${email}`} title={email} className="text-sm text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap">{truncate(email, 25)}</a>
                 <button onClick={() => copy(email)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy email"><Copy size={11} className="text-slate-400" /></button>
               </span>
             ))}
@@ -154,7 +156,7 @@ function ContactTableRow({
           <div className="space-y-1">
             {phoneList.map((phone, i) => (
               <span key={i} className="group/cell flex items-center gap-1.5">
-                <a href={`tel:${phone}`} title={phone} className="text-sm text-slate-700 dark:text-slate-300 hover:text-blue-400 whitespace-nowrap">{phone}</a>
+                <a href={`tel:${phone}`} title={phone} className="text-sm text-ink-2 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 whitespace-nowrap">{phone}</a>
                 <button onClick={() => copy(phone)} className="opacity-0 group-hover/cell:opacity-100 flex-shrink-0" title="Copy phone"><Copy size={11} className="text-slate-400" /></button>
               </span>
             ))}
@@ -163,7 +165,7 @@ function ContactTableRow({
       </td>
       <td className="px-3 py-2.5">
         {liHref
-          ? <a href={liHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-400 hover:underline"><Linkedin size={12} /> Profile</a>
+          ? <a href={liHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"><Linkedin size={12} /> Profile</a>
           : <span className="text-sm text-slate-400">—</span>}
       </td>
       {canEdit && (
@@ -171,7 +173,7 @@ function ContactTableRow({
           {onEdit && <button onClick={onEdit} className="btn-ghost text-[10px] py-0.5 px-1.5 text-slate-400" title="Edit contact"><Edit2 size={12} /></button>}
           {onDelete && (
             <button onClick={onDelete}
-              className={cn('btn-ghost text-[10px] py-0.5 px-1.5 ml-1', deleteArmed ? 'bg-red-500/20 text-red-400' : 'text-slate-400')}
+              className={cn('btn-ghost text-[10px] py-0.5 px-1.5 ml-1', deleteArmed ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400' : 'text-slate-400')}
               title="Delete contact">
               {deleteArmed ? <><Trash2 size={11} /> Confirm?</> : <Trash2 size={12} />}
             </button>
@@ -225,34 +227,34 @@ function MultiFieldList({
             />
             {values.length > 1 && (
               <button type="button" onClick={() => setConfirmIdx(i)}
-                className="btn-ghost p-1 text-slate-400 hover:text-red-400 flex-shrink-0" title="Remove">
+                className="btn-ghost p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 flex-shrink-0" title="Remove">
                 <X size={13} />
               </button>
             )}
           </div>
         ))}
         <button type="button" onClick={add}
-          className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 font-medium">
+          className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 font-medium">
           <Plus size={12} /> {addLabel}
         </button>
       </div>
 
       {/* Confirm before removing a row */}
       {confirmIdx !== null && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto">
+          <div className="bg-white dark:bg-surface border border-line rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                <Trash2 size={20} className="text-red-400" />
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-rose-600 dark:text-rose-400" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Remove {fieldLabel}</h3>
-                <p className="text-sm text-slate-500 mt-1">Are you sure you want to remove this {fieldLabel}?</p>
+                <h3 className="font-display text-base font-semibold text-ink">Remove {fieldLabel}</h3>
+                <p className="text-sm text-ink-3 mt-1">Are you sure you want to remove this {fieldLabel}?</p>
               </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button type="button"
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-line text-sm font-medium text-ink-2 hover:bg-slate-50 dark:hover:bg-white/[0.05] transition-colors"
                 onClick={() => setConfirmIdx(null)}
               >
                 No, Cancel
@@ -287,7 +289,7 @@ function EnrichPanel({
   // SignalHire button — only shown for leads generated via Lead Discovery (have a scanJobId).
   const signalhireButton = isDiscoveryLead ? (
     <button
-      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-60"
+      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-60"
       onClick={() => onSignalHire()} disabled={signalhireBusy}>
       {signalhireSubmitting
         ? <><Loader2 size={11} className="animate-spin" /> Submitting…</>
@@ -313,26 +315,26 @@ function EnrichPanel({
         'rounded-xl border p-3.5 transition-all',
         isApolloLoading ? 'bg-violet-500/[0.08] border-violet-500/30'
           : status === 'apollo_found' ? 'bg-violet-500/[0.08] border-violet-500/30'
-          : status === 'apollo_failed' ? 'bg-red-500/[0.06] border-red-500/20'
-          : 'bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06]'
+          : status === 'apollo_failed' ? 'bg-rose-500/[0.06] border-rose-500/20'
+          : 'bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.06]'
       )}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-lg bg-violet-500/20 flex items-center justify-center">
-              <Search size={12} className="text-violet-400" />
+              <Search size={12} className="text-violet-600 dark:text-violet-400" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Apollo.io</p>
-              <p className="text-[10px] text-slate-500">200M+ contacts database</p>
+              <p className="text-xs font-semibold text-ink dark:text-slate-200">Apollo.io</p>
+              <p className="text-[10px] text-ink-3">200M+ contacts database</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {status === 'apollo_found' && <CheckCircle2 size={14} className="text-violet-400" />}
-            {status === 'apollo_failed' && <XCircle size={14} className="text-red-500" />}
+            {status === 'apollo_found' && <CheckCircle2 size={14} className="text-violet-600 dark:text-violet-400" />}
+            {status === 'apollo_failed' && <XCircle size={14} className="text-rose-600" />}
           </div>
         </div>
         <button
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-violet-500/20 text-violet-700 dark:text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
           onClick={() => onApollo()} disabled={isApolloLoading}>
           {isApolloLoading ? <><Loader2 size={12} className="animate-spin" /> Searching Apollo…</>
             : status === 'apollo_found' ? <><Search size={12} /> Search Again</>
@@ -343,18 +345,18 @@ function EnrichPanel({
 
       {/* SignalHire — only for leads generated via Lead Discovery */}
       {isDiscoveryLead && (
-        <div className="rounded-xl border p-3.5 bg-slate-100 dark:bg-slate-950 border-slate-200 dark:border-white/[0.06]">
+        <div className="rounded-xl border p-3.5 bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.06]">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-6 h-6 rounded-lg bg-sky-500/20 flex items-center justify-center">
-              <Search size={12} className="text-sky-400" />
+              <Search size={12} className="text-sky-600 dark:text-sky-400" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">SignalHire</p>
-              <p className="text-[10px] text-slate-500">Email &amp; phone finder · async</p>
+              <p className="text-xs font-semibold text-ink dark:text-slate-200">SignalHire</p>
+              <p className="text-[10px] text-ink-3">Email &amp; phone finder · async</p>
             </div>
           </div>
           <button
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 transition-colors disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-700 dark:text-sky-300 hover:bg-sky-500/30 transition-colors disabled:opacity-60"
             onClick={() => onSignalHire()} disabled={signalhireBusy}>
             {signalhireSubmitting
               ? <><Loader2 size={12} className="animate-spin" /> Submitting…</>
@@ -370,14 +372,14 @@ function EnrichPanel({
               <p className="text-[10px] text-sky-400/80 mt-1.5 text-center">Fetching contacts from SignalHire… they'll appear in the table below.</p>
             </>
           ) : (
-            <p className="text-[10px] text-slate-500 mt-1.5 text-center">Reveals up to 5 decision-makers · arrives via webhook.</p>
+            <p className="text-[10px] text-ink-3 mt-1.5 text-center">Reveals up to 5 decision-makers · arrives via webhook.</p>
           )}
         </div>
       )}
 
       {status === 'apollo_failed' && (
         <div className="p-3 bg-amber-500/[0.06] border border-amber-500/20 rounded-xl">
-          <p className="text-xs text-amber-400 text-center">
+          <p className="text-xs text-amber-600 dark:text-amber-400 text-center">
             No contact found. Check that the company website is correct and retry.
           </p>
         </div>
@@ -1188,8 +1190,23 @@ export default function LeadDetailPage() {
     updateMutation.mutate(editData);
   }
 
-  if (isLoading) return <div className="flex items-center justify-center h-64"><Spinner size={24} /></div>;
-  if (!lead)     return <div className="text-slate-500 text-sm p-6">Lead not found</div>;
+  if (isLoading) return (
+    <div className="space-y-5 animate-pulse" aria-busy="true" aria-label="Loading lead">
+      <div className="h-9 w-32 rounded-xl bg-slate-200/80 dark:bg-white/[0.05]" />
+      <div className="h-40 rounded-2xl bg-slate-200/80 dark:bg-white/[0.05]" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="h-80 rounded-2xl bg-slate-200/60 dark:bg-white/[0.04]" />
+        <div className="h-80 rounded-2xl bg-slate-200/60 dark:bg-white/[0.04]" />
+      </div>
+    </div>
+  );
+  if (!lead) return (
+    <div className="card p-12 flex flex-col items-center text-center gap-3">
+      <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-white/[0.05] text-ink-3 flex items-center justify-center"><IcNotFound size={24} /></div>
+      <p className="font-display text-base font-semibold text-ink">Lead not found</p>
+      <Link href="/dashboard/leads" className="btn-ghost text-sm"><ArrowLeft size={14} /> Back to Leads</Link>
+    </div>
+  );
 
   const agg = lead.aggregated || {};
   const hasContact = !!(lead.contactName || lead.contactEmail || lead.contactTitle || lead.contactLinkedin || lead.contactPhone);
@@ -1199,91 +1216,79 @@ export default function LeadDetailPage() {
   return (
     <div className="space-y-5 w-full">
       <Link href="/dashboard/leads"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-500 dark:hover:text-slate-300">
+        className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-sm font-medium text-ink-2 bg-white dark:bg-white/[0.04] border border-line shadow-sm dark:shadow-none hover:text-blue-600 hover:border-blue-300 dark:hover:text-blue-400 dark:hover:border-blue-500/40 transition-colors">
         <ArrowLeft size={15} /> Back to Leads
       </Link>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
-      <div className="card p-5 flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4 min-w-0">
-          <Avatar initials={getInitials(lead.companyName)} size="lg" />
-          <div className="min-w-0">
-            <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 break-words">{lead.companyName}</h1>
-            <div className="flex flex-col items-start gap-1.5 mt-1.5">
-              {/* Domain badge */}
-              {domainName && (
-                <span className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-400 px-2.5 py-1 rounded-lg font-mono break-all">
-                  {domainName}
-                </span>
-              )}
-              {/* Industry badge */}
-              {(lead.industry || agg.industry) && (
-                <span className="inline-flex items-center gap-1 text-xs bg-blue-500/10 border border-blue-500/20 text-blue-400 px-2.5 py-1 rounded-lg">
-                  <Building2 size={10} />
-                  {lead.industry || agg.industry}
-                </span>
-              )}
-              {/* Visit Site + LinkedIn — single horizontal row, wraps if needed */}
-              {(websiteUrl || lead.linkedinUrl) && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {/* Website link */}
-                  {websiteUrl && (
-                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 px-2.5 py-1 rounded-lg hover:text-blue-400 transition-colors">
-                      <Globe size={11} /> Visit site
-                    </a>
-                  )}
-                  {/* LinkedIn */}
-                  {lead.linkedinUrl && (
-                    <a href={lead.linkedinUrl.startsWith('http') ? lead.linkedinUrl : `https://${lead.linkedinUrl}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 px-2.5 py-1 rounded-lg hover:text-blue-400 transition-colors">
-                      <Linkedin size={11} /> LinkedIn
-                    </a>
-                  )}
-                </div>
-              )}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-6 sm:p-7 shadow-xl shadow-indigo-500/20">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.15] [background-image:radial-gradient(rgba(255,255,255,0.9)_1px,transparent_1px)] [background-size:18px_18px] [mask-image:linear-gradient(to_left,black,transparent_70%)]" />
+        <div className="pointer-events-none absolute -right-16 -top-24 w-72 h-72 rounded-full bg-cyan-400/30 blur-3xl" />
+        <div className="pointer-events-none absolute -left-10 -bottom-24 w-64 h-64 rounded-full bg-fuchsia-500/25 blur-3xl" />
+
+        <div className="relative flex items-start justify-between gap-5 flex-wrap">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-16 h-16 rounded-2xl bg-white/15 ring-1 ring-white/25 backdrop-blur flex items-center justify-center text-white font-display text-xl font-semibold flex-shrink-0 shadow-lg">
+              {getInitials(lead.companyName || lead.contactName || '?')}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-100/90">Lead</p>
+              <h1 className="mt-0.5 font-display text-2xl sm:text-[28px] font-semibold tracking-[-0.025em] text-white break-words">{lead.companyName || lead.contactName || 'Untitled lead'}</h1>
+              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                {/* Domain badge */}
+                {domainName && (
+                  <span className="inline-flex items-center gap-1 h-7 text-xs bg-white/10 ring-1 ring-white/20 text-blue-50 px-2.5 rounded-lg font-mono break-all">
+                    {domainName}
+                  </span>
+                )}
+                {/* Industry badge */}
+                {(lead.industry || agg.industry) && (
+                  <span className="inline-flex items-center gap-1 h-7 text-xs font-medium bg-white/10 ring-1 ring-white/20 text-white px-2.5 rounded-lg">
+                    <Building2 size={12} />
+                    {lead.industry || agg.industry}
+                  </span>
+                )}
+                {/* Website link */}
+                {websiteUrl && (
+                  <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 h-7 text-xs font-semibold bg-white text-indigo-700 px-2.5 rounded-lg shadow-sm hover:bg-blue-50 transition-colors">
+                    <Globe size={12} /> Visit site
+                  </a>
+                )}
+                {/* LinkedIn */}
+                {lead.linkedinUrl && (
+                  <a href={lead.linkedinUrl.startsWith('http') ? lead.linkedinUrl : `https://${lead.linkedinUrl}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 h-7 text-xs font-semibold bg-white text-indigo-700 px-2.5 rounded-lg shadow-sm hover:bg-blue-50 transition-colors">
+                    <Linkedin size={12} /> LinkedIn
+                  </a>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-        {/* Job Postings — between lead name and AI Email button */}
-        {lead.jobPostings?.length > 0 && (
-          <div className="flex-1 min-w-[280px] space-y-2">
-            {(lead.jobPostings as any[]).map((jp: any, i: number) => (
-              <div key={i} className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{jp.title}</p>
-                  {/* {jp.postedAt && <span className="text-xs text-slate-500 flex-shrink-0">{jp.postedAt}</span>} */}
-                </div>
-                {/* {jp.snippet && <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{jp.snippet}</p>} */}
-                <div className="flex items-center gap-3 mt-2">
-                  {/* {jp.workArrangement && (
-                    <span className="text-[10px] text-slate-500">{jp.workArrangement}</span>
-                  )} */}
-                  {/* {jp.salary && (
-                    <span className="text-[10px] text-emerald-400">{jp.salary}</span>
-                  )} */}
-                  {jp.url && (
-                    <a href={jp.url} target="_blank" rel="noopener noreferrer"
-                      className="text-[10px] text-blue-400 hover:underline flex items-center gap-0.5">
-                      View posting <ExternalLink size={9} />
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
-        <div className="flex flex-col items-end gap-3">
-          {/* <button className="btn-primary" onClick={() => generateEmailMutation.mutate()}
-            disabled={generateEmailMutation.isPending}>
-            {generateEmailMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
-            AI Email
-          </button> */}
-          <div className="flex flex-col items-center gap-1">
+          {/* Job Postings — between lead name and AI Email button */}
+          {lead.jobPostings?.length > 0 && (
+            <div className="flex-1 min-w-[260px] space-y-2">
+              {(lead.jobPostings as any[]).map((jp: any, i: number) => (
+                <div key={i} className="p-3 rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur">
+                  <p className="text-sm font-semibold text-white">{jp.title}</p>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    {jp.url && (
+                      <a href={jp.url} target="_blank" rel="noopener noreferrer"
+                        className="text-[11px] font-semibold text-cyan-100 hover:text-white hover:underline flex items-center gap-1">
+                        View posting <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-col items-center gap-1.5 rounded-2xl bg-white dark:bg-surface px-5 py-3.5 shadow-lg">
             <ScoreRing score={lead.leadScore} size={70} />
-            <p className="text-xm text-slate-500">Lead Score</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-3">Lead Score</p>
           </div>
         </div>
       </div>
@@ -1297,7 +1302,7 @@ export default function LeadDetailPage() {
       {!isEditing && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="section-title">Lead Details</h2>
+            <h2 className="section-title flex items-center gap-2.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500/10 text-blue-600 dark:text-blue-400"><IcDetails size={15} /></span>Lead Details</h2>
             {canEditThisLead && (
               <button
                 className="btn-ghost text-xs py-1 px-2"
@@ -1325,80 +1330,80 @@ export default function LeadDetailPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Status</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200 capitalize">{lead.status?.replace(/_/g, ' ') || '—'}</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Status</p>
+              <p className="text-sm text-ink dark:text-slate-200 capitalize">{lead.status?.replace(/_/g, ' ') || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Designation of Contact Name</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactTitle || '—'}</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Designation of Contact Name</p>
+              <p className="text-sm text-ink dark:text-slate-200">{lead.contactTitle || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Lead type</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Lead type</p>
+              <p className="text-sm text-ink dark:text-slate-200">
                 {lead.leadType ? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1) : '—'}
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Follow-up Date</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Follow-up Date</p>
+              <p className="text-sm text-ink dark:text-slate-200">
                 {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Assigned To</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.assignedTo?.name || '—'}</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Assigned To</p>
+              <p className="text-sm text-ink dark:text-slate-200">{lead.assignedTo?.name || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Keyword</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200 break-words" title={lead.keyword || undefined}>{lead.keyword || '—'}</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Keyword</p>
+              <p className="text-sm text-ink dark:text-slate-200 break-words" title={lead.keyword || undefined}>{lead.keyword || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source</p>
               {(() => {
                 const src = lead.source
                   ? (lead.source === 'import' ? 'Imported (CSV)' : lead.source)
                   : (lead.scanJobId ? 'Lead Discovery' : 'Manually added');
-                return <p className="text-sm text-slate-800 dark:text-slate-200 break-words" title={src}>{src}</p>;
+                return <p className="text-sm text-ink dark:text-slate-200 break-words" title={src}>{src}</p>;
               })()}
             </div>
             {/* <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Name</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.contactName || '—'}</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Contact Name</p>
+              <p className="text-sm text-ink dark:text-slate-200">{lead.contactName || '—'}</p>
             </div> */}
             {/* <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Email</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Contact Email</p>
               {lead.contactEmail ? (
-                <a href={`mailto:${lead.contactEmail}`} className="text-sm text-blue-400 hover:underline">{lead.contactEmail}</a>
+                <a href={`mailto:${lead.contactEmail}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">{lead.contactEmail}</a>
               ) : (
-                <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
+                <p className="text-sm text-ink dark:text-slate-200">—</p>
               )}
             </div> */}
             {/* <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Contact Phone</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Contact Phone</p>
               {lead.contactPhone ? (
-                <a href={`tel:${lead.contactPhone}`} className="text-sm text-blue-400 hover:underline">{lead.contactPhone}</a>
+                <a href={`tel:${lead.contactPhone}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">{lead.contactPhone}</a>
               ) : (
-                <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
+                <p className="text-sm text-ink dark:text-slate-200">—</p>
               )}
             </div> */}
             {/* <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source URL</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source URL</p>
               {(() => {
                 const url = lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '');
                 return url ? (
                   <a href={url} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-blue-400 hover:underline break-all">{url}</a>
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline break-all">{url}</a>
                 ) : (
-                  <p className="text-sm text-slate-800 dark:text-slate-200">—</p>
+                  <p className="text-sm text-ink dark:text-slate-200">—</p>
                 );
               })()}
             </div> */}
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Source</p>
-              <p className="text-sm text-slate-800 dark:text-slate-200">{lead.source || '—'}</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source</p>
+              <p className="text-sm text-ink dark:text-slate-200">{lead.source || '—'}</p>
             </div>
             <div className="sm:col-span-2">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Notes</p>
               <LeadNotesView value={lead.notes} fallback={{ date: lead.createdAt, author: lead.createdBy?.name }} />
             </div>
           </div>
@@ -1409,7 +1414,7 @@ export default function LeadDetailPage() {
       {isEditing && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="section-title">Edit Lead</h2>
+            <h2 className="section-title flex items-center gap-2.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"><IcEdit size={15} /></span>Edit Lead</h2>
             <button className="btn-ghost text-xs py-1 px-2" onClick={() => setIsEditing(false)}>
               <X size={13} /> Cancel
             </button>
@@ -1417,7 +1422,7 @@ export default function LeadDetailPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Status</label>
-              <select
+              <Select
                 className="input"
                 title="Lead status"
                 value={editData.status || ''}
@@ -1428,7 +1433,7 @@ export default function LeadDetailPage() {
                     {opt.value}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             {/* <div>
               <label className="label">Contact Name</label>
@@ -1469,10 +1474,14 @@ export default function LeadDetailPage() {
             </div>
             <div>
               <label className="label">Lead type</label>
-              <select
+              <Select
                 className="input"
                 title="Product or Service type"
-                value={editData.leadType || ''}
+                value={
+                  // match the stored type case-insensitively ('Services' / 'service' / 'position' …)
+                  (leadTypeOptions as any[]).find((o: any) => normalizeLeadType(o.value) && normalizeLeadType(o.value) === normalizeLeadType(editData.leadType))?.value.toLowerCase()
+                  ?? (editData.leadType || '')
+                }
                 onChange={(e) => setEditData((d: any) => ({ ...d, leadType: e.target.value }))}
               >
                 <option value="">— Select —</option>
@@ -1481,7 +1490,7 @@ export default function LeadDetailPage() {
                     {opt.value}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="label">Follow-up Date</label>
@@ -1495,7 +1504,7 @@ export default function LeadDetailPage() {
             </div>
             <div>
               <label className="label">Source</label>
-              <select
+              <Select
                 className="input"
                 title="Source"
                 value={editData.source || ''}
@@ -1512,7 +1521,7 @@ export default function LeadDetailPage() {
                   if (editData.source && !vals.includes(editData.source)) vals.unshift(editData.source);
                   return vals.map((v) => <option key={v} value={v}>{v}</option>);
                 })()}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="label">Source URL</label>
@@ -1545,7 +1554,7 @@ export default function LeadDetailPage() {
             </div>
             {editData.status === 'disqualified' && (
               <div className="sm:col-span-2">
-                <label className="label">Disqualification Reason <span className="text-red-400">*</span></label>
+                <label className="label">Disqualification Reason <span className="text-rose-600 dark:text-rose-400">*</span></label>
                 <textarea
                   className="input h-20 resize-none"
                   value={editData.disqualificationReason || ''}
@@ -1571,31 +1580,31 @@ export default function LeadDetailPage() {
 
           {/* ── Aggregated Company Profile ───────────────────────────────── */}
           <div className="card p-5">
-            <h2 className="section-title mb-4">Company Profile</h2>
+            <h2 className="section-title flex items-center gap-2.5 mb-4"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"><IcCompany size={15} /></span>Company Profile</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <InfoRow icon={<Globe size={12} className="text-blue-400" />}
+              <InfoRow icon={<Globe size={12} className="text-blue-600 dark:text-blue-400" />}
                 label="Website" value={websiteUrl || domainName}
                 href={websiteUrl || undefined} copyable />
               <InfoRow icon={<span className="text-[10px] font-bold text-slate-400">DOM</span>}
                 label="Domain Name" value={domainName} copyable />
-              <InfoRow icon={<Building2 size={12} className="text-violet-400" />}
+              <InfoRow icon={<Building2 size={12} className="text-violet-600 dark:text-violet-400" />}
                 label="Industry" value={lead.industry || agg.industry} />
-              <InfoRow icon={<Users2 size={12} className="text-amber-400" />}
+              <InfoRow icon={<Users2 size={12} className="text-amber-600 dark:text-amber-400" />}
                 label="Company Size" value={lead.companySize || agg.companySize} />
-              <InfoRow icon={<MapPin size={12} className="text-pink-400" />}
+              <InfoRow icon={<MapPin size={12} className="text-pink-600 dark:text-pink-400" />}
                 label="Location" value={lead.location || agg.location} />
-              <InfoRow icon={<Linkedin size={12} className="text-blue-400" />}
+              <InfoRow icon={<Linkedin size={12} className="text-blue-600 dark:text-blue-400" />}
                 label="LinkedIn" value={lead.linkedinUrl}
                 href={lead.linkedinUrl?.startsWith('http') ? lead.linkedinUrl : lead.linkedinUrl ? `https://${lead.linkedinUrl}` : undefined}
                 copyable />
-              <InfoRow icon={<Phone size={12} className="text-amber-400" />}
+              <InfoRow icon={<Phone size={12} className="text-amber-600 dark:text-amber-400" />}
                 label="Company Phone" value={lead.companyPhone} copyable />
             </div>
 
             {/* Description */}
             {(lead.description || agg.description) && (
-              <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-950 rounded-xl flex items-start gap-2">
-                <FileText size={12} className="text-slate-500 flex-shrink-0 mt-0.5" />
+              <div className="mt-3 p-3 bg-slate-50 dark:bg-white/[0.03] rounded-xl flex items-start gap-2">
+                <FileText size={12} className="text-ink-3 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-400 leading-relaxed">{lead.description || agg.description}</p>
               </div>
             )}
@@ -1611,12 +1620,12 @@ export default function LeadDetailPage() {
         <div className="min-w-0 lg:relative">
           <div className="card p-5 flex flex-col lg:absolute lg:inset-0">
             {/* Tabs — pinned to the top of the panel */}
-            <div className="flex gap-1 mb-4 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl">
+            <div className="flex gap-1 mb-4 p-1 bg-slate-50 dark:bg-white/[0.03] rounded-xl">
               {/* 'telegram' hidden for now — Telegram can't reliably open a chat by phone. Re-add it to the list to bring the tab back. */}
               {(['analysis', 'email', 'whatsapp' /* , 'telegram' */] as const).map(tab => (
                 <button key={tab} onClick={() => setAiTab(tab)}
                   className={cn('flex-1 py-1.5 rounded-lg text-xs font-medium transition-all',
-                    aiTab === tab ? 'bg-blue-500/20 text-blue-300' : 'text-slate-500 hover:text-slate-500 dark:hover:text-slate-300')}>
+                    aiTab === tab ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-ink-3 hover:text-slate-500 dark:hover:text-slate-300')}>
                   {tab === 'analysis' ? '🤖 Analysis' : tab === 'email' ? '✉️ Email' : tab === 'whatsapp' ? '💬 WhatsApp' : '✈️ Telegram'}
                 </button>
               ))}
@@ -1627,21 +1636,21 @@ export default function LeadDetailPage() {
               {aiTab === 'analysis' && (
                 <div className="space-y-3">
                   {lead.aiSummary && (
-                    <div className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl">
-                      <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Summary</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.aiSummary}</p>
+                    <div className="p-3 bg-slate-50 dark:bg-white/[0.03] rounded-xl">
+                      <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1.5">Summary</p>
+                      <p className="text-xs text-ink-2 leading-relaxed">{lead.aiSummary}</p>
                     </div>
                   )}
                   {lead.opportunity && (
                     <div className="p-3 bg-blue-500/[0.08] border border-blue-500/20 rounded-xl">
-                      <p className="text-[10px] font-semibold text-blue-300 mb-1 uppercase tracking-wider">Opportunity</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.opportunity}</p>
+                      <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 mb-1 uppercase tracking-wider">Opportunity</p>
+                      <p className="text-xs text-ink-2 leading-relaxed">{lead.opportunity}</p>
                     </div>
                   )}
                   {lead.aiPitch && (
                     <div className="p-3 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-xl">
-                      <p className="text-[10px] font-semibold text-emerald-400 mb-1 uppercase tracking-wider">Pitch</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{lead.aiPitch}</p>
+                      <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 mb-1 uppercase tracking-wider">Pitch</p>
+                      <p className="text-xs text-ink-2 leading-relaxed">{lead.aiPitch}</p>
                     </div>
                   )}
                   {!lead.aiSummary && (
@@ -1658,7 +1667,7 @@ export default function LeadDetailPage() {
                 <div className="space-y-3">
                   {!lead.contactEmail && (
                     <div className="p-3 bg-amber-500/[0.08] border border-amber-500/20 rounded-xl">
-                      <p className="text-xs text-amber-400">⚠ No email yet — use Contact Details to search Apollo.</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400">⚠ No email yet — use Contact Details to search Apollo.</p>
                     </div>
                   )}
                   {emailData ? (
@@ -1696,19 +1705,19 @@ export default function LeadDetailPage() {
                         )}
                       </p>
                       {mailRecipients.length === 0 ? (
-                        <p className="text-xs text-amber-400">No contact email yet — add one in Contact Details first.</p>
+                        <p className="text-xs text-amber-600 dark:text-amber-400">No contact email yet — add one in Contact Details first.</p>
                       ) : (
                         <div className="space-y-0.5 max-h-40 overflow-y-auto rounded-lg border border-slate-200 dark:border-white/[0.08] p-1.5">
                           {mailRecipients.map(r => (
                             <label key={r.id}
-                              className="flex items-start gap-2 px-1.5 py-1 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50">
+                              className="flex items-start gap-2 px-1.5 py-1 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.05]">
                               <input type="checkbox" className="mt-0.5 accent-blue-500 cursor-pointer"
                                 checked={selectedEmails.has(r.email)}
                                 onChange={() => toggleRecipient(r.email)} />
                               <span className="min-w-0 flex-1">
                                 <span className="flex items-center gap-1.5">
-                                  <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{r.name}</span>
-                                  {r.badge && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">{r.badge}</span>}
+                                  <span className="text-xs font-medium text-ink dark:text-slate-200 truncate">{r.name}</span>
+                                  {r.badge && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 whitespace-nowrap">{r.badge}</span>}
                                 </span>
                                 <span className="block text-[11px] text-slate-400 truncate">{r.email}</span>
                               </span>
@@ -1720,20 +1729,20 @@ export default function LeadDetailPage() {
 
                     {/* Open the draft in Gmail / Outlook web, or the OS default mail app */}
                     <div className="grid grid-cols-2 gap-2">
-                      <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                      <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-50"
                         onClick={() => openCompose('gmail')} disabled={selectedEmails.size === 0}>
                         <Mail size={13} /> Gmail
                       </button>
-                      <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-50"
+                      <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition-colors disabled:opacity-50"
                         onClick={() => openCompose('outlook')} disabled={selectedEmails.size === 0}>
                         <Mail size={13} /> Outlook
                       </button>
-                      <button className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/[0.08] text-slate-700 dark:text-slate-200 hover:bg-slate-300/70 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                      <button className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-white/[0.05] border border-line text-ink-2 dark:text-slate-200 hover:bg-slate-300/70 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
                         onClick={() => openCompose('default')} disabled={selectedEmails.size === 0}>
                         <Send size={12} /> Default Mail App
                       </button>
                     </div>
-                    <p className="text-[10px] text-slate-500 text-center">Opens a pre-filled draft — you send it from your own mailbox.</p>
+                    <p className="text-[10px] text-ink-3 text-center">Opens a pre-filled draft — you send it from your own mailbox.</p>
                     </>
                   ) : (
                     <button className="btn-ghost w-full justify-center text-xs"
@@ -1754,7 +1763,7 @@ export default function LeadDetailPage() {
                 <div className="space-y-3">
                   {phoneRecipients.length === 0 && (
                     <div className="p-3 bg-amber-500/[0.08] border border-amber-500/20 rounded-xl">
-                      <p className="text-xs text-amber-400">⚠ No phone number yet — add one in Contact Details.</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400">⚠ No phone number yet — add one in Contact Details.</p>
                     </div>
                   )}
                   <div>
@@ -1776,15 +1785,15 @@ export default function LeadDetailPage() {
                       <div className="space-y-0.5 max-h-40 overflow-y-auto rounded-lg border border-slate-200 dark:border-white/[0.08] p-1.5">
                         {phoneRecipients.map(r => (
                           <label key={r.key}
-                            className="flex items-start gap-2 px-1.5 py-1 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50">
+                            className="flex items-start gap-2 px-1.5 py-1 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.05]">
                             <input type="radio" name="wa-phone" className="mt-0.5 accent-green-500 cursor-pointer"
                               checked={selectedPhone === r.phone}
                               onChange={() => setSelectedPhone(r.phone)} />
                             <span className="min-w-0 flex-1">
                               <span className="flex items-center gap-1.5">
-                                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{r.name}</span>
-                                {r.title && <span className="text-[10px] text-slate-500 truncate">· {r.title}</span>}
-                                {r.badge && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 whitespace-nowrap">{r.badge}</span>}
+                                <span className="text-xs font-medium text-ink dark:text-slate-200 truncate">{r.name}</span>
+                                {r.title && <span className="text-[10px] text-ink-3 truncate">· {r.title}</span>}
+                                {r.badge && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 whitespace-nowrap">{r.badge}</span>}
                               </span>
                               <span className="block text-[11px] text-slate-400 truncate">{r.phone}</span>
                             </span>
@@ -1793,11 +1802,11 @@ export default function LeadDetailPage() {
                       </div>
                     </div>
                   )}
-                  <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                  <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 border border-green-500/25 text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-50"
                     onClick={openWhatsApp} disabled={!selectedPhone}>
                     <MessageCircle size={13} /> Open in WhatsApp
                   </button>
-                  <p className="text-[10px] text-slate-500 text-center">Opens WhatsApp with your message pre-filled — you send it yourself.</p>
+                  <p className="text-[10px] text-ink-3 text-center">Opens WhatsApp with your message pre-filled — you send it yourself.</p>
                   <OutreachFollowUp
                     pending={markSentMutation.isPending}
                     onMarkSent={(d) => markSentMutation.mutate({ channel: 'whatsapp', followUp: d })}
@@ -1821,11 +1830,11 @@ export default function LeadDetailPage() {
                       value={chatMessage}
                       onChange={e => setChatMessage(e.target.value)} />
                   </div>
-                  <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors"
+                  <button className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 border border-sky-500/25 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition-colors"
                     onClick={openTelegram}>
                     <Send size={13} /> Open in Telegram
                   </button>
-                  <p className="text-[10px] text-slate-500 text-center">Telegram can not open a chat by phone — this opens Telegram with your message pre-filled; pick the contact to send.</p>
+                  <p className="text-[10px] text-ink-3 text-center">Telegram can not open a chat by phone — this opens Telegram with your message pre-filled; pick the contact to send.</p>
                   <OutreachFollowUp
                     pending={markSentMutation.isPending}
                     onMarkSent={(d) => markSentMutation.mutate({ channel: 'telegram', followUp: d })}
@@ -1842,10 +1851,10 @@ export default function LeadDetailPage() {
       {/* ── Contact Details (full width) ─────────────────────────────────── */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="section-title">Contact Details</h2>
+          <h2 className="section-title flex items-center gap-2.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-500/10 text-violet-600 dark:text-violet-400"><IcContacts size={15} /></span>Contact Details</h2>
               <div className="flex items-center gap-2">
                 {enrichState.status === 'apollo_found' && (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-violet-500/10 text-violet-400 border-violet-500/25">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/25">
                     ✓ via Apollo
                   </span>
                 )}
@@ -1863,13 +1872,13 @@ export default function LeadDetailPage() {
 
             {/* ── Contacts table (primary + additional) ── */}
             {contactsLoading ? (
-              <div className="py-2 flex items-center gap-2 text-xs text-slate-500">
+              <div className="py-2 flex items-center gap-2 text-xs text-ink-3">
                 <Loader2 size={12} className="animate-spin" /> Loading contacts…
               </div>
             ) : (hasContact || savedContacts.length > 0) ? (
               <div className="mb-4 rounded-xl border border-slate-200 dark:border-white/[0.06] overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-100 dark:bg-slate-900 text-slate-500">
+                  <thead className="bg-slate-100 dark:bg-surface text-ink-3">
                     <tr>
                       <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Name</th>
                       <th className="text-left text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Title</th>
@@ -1894,7 +1903,7 @@ export default function LeadDetailPage() {
                           badge="Primary"
                           canEdit={canEditThisLead}
                           onEdit={startEditPrimary}
-                          onDelete={() => handleContactDelete('primary')}
+                          onDelete={permissions.isSalesUser ? undefined : () => handleContactDelete('primary')}
                           deleteArmed={false}
                         />
                       )
@@ -1915,7 +1924,7 @@ export default function LeadDetailPage() {
                           linkedin={c.linkedin || c.contactLinkedin || (Array.isArray(c.additionalLinkedinUrls) ? c.additionalLinkedinUrls[0] : null)}
                           canEdit={canEditThisLead}
                           onEdit={() => startEditContact(c)}
-                          onDelete={() => handleContactDelete(c.id)}
+                          onDelete={permissions.isSalesUser ? undefined : () => handleContactDelete(c.id)}
                           deleteArmed={false}
                         />
                       )
@@ -1928,8 +1937,8 @@ export default function LeadDetailPage() {
             {/* ── Add new contact form ── */}
             {isAddingContact && (
               <div className="border border-blue-500/30 bg-blue-500/[0.04] rounded-xl p-3 mb-4">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2.5 flex items-center gap-1.5">
-                  <UserPlus size={12} className="text-blue-400" /> New Contact
+                <p className="text-xs font-semibold text-ink dark:text-slate-200 mb-2.5 flex items-center gap-1.5">
+                  <UserPlus size={12} className="text-blue-600 dark:text-blue-400" /> New Contact
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="flex items-center gap-1.5">
@@ -1945,19 +1954,19 @@ export default function LeadDetailPage() {
                       onChange={e => setNewContact(c => ({ ...c, title: e.target.value }))} />
                   </div>
                   <MultiFieldList
-                    icon={<Mail size={11} className="text-emerald-400 flex-shrink-0" />}
+                    icon={<Mail size={11} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />}
                     type="email" placeholder="Email address" addLabel="Add email"
                     inputClassName="input text-sm h-8 flex-1"
                     values={newContact.emails}
                     onChange={emails => setNewContact(c => ({ ...c, emails }))} />
                   <MultiFieldList
-                    icon={<Phone size={11} className="text-amber-400 flex-shrink-0" />}
+                    icon={<Phone size={11} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />}
                     numeric placeholder="Add Phone Number" addLabel="Add phone"
                     inputClassName="input text-sm h-8 flex-1"
                     values={newContact.phones}
                     onChange={phones => setNewContact(c => ({ ...c, phones }))} />
                   <div className="flex items-center gap-1.5 sm:col-span-2">
-                    <Linkedin size={11} className="text-blue-400 flex-shrink-0" />
+                    <Linkedin size={11} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
                     <input className="input text-sm h-8 flex-1" placeholder="LinkedIn URL"
                       value={newContact.linkedins[0] ?? ''}
                       onChange={e => setNewContact(c => { const linkedins = [...c.linkedins]; linkedins[0] = e.target.value; return { ...c, linkedins }; })} />
@@ -2009,7 +2018,7 @@ export default function LeadDetailPage() {
           {/* ── Opportunities ────────────────────────────────────────────── */}
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title">Opportunities ({leadOpportunities.length})</h2>
+              <h2 className="section-title flex items-center gap-2.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><IcOpps size={15} /></span>Opportunities <span className="text-xs font-bold tabular-nums px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">{leadOpportunities.length}</span></h2>
               {permissions.canCreateOpportunities && (
                 <button
                   className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5"
@@ -2021,14 +2030,14 @@ export default function LeadDetailPage() {
             </div>
 
             {oppLoading && (
-              <div className="flex items-center gap-2 text-xs text-slate-500 py-3">
+              <div className="flex items-center gap-2 text-xs text-ink-3 py-3">
                 <Loader2 size={12} className="animate-spin" /> Loading…
               </div>
             )}
 
             {!oppLoading && leadOpportunities.length === 0 && (
               <div className="py-6 text-center">
-                <p className="text-xs text-slate-500 mb-3">No opportunities linked to this lead yet</p>
+                <p className="text-xs text-ink-3 mb-3">No opportunities linked to this lead yet</p>
                 {permissions.canCreateOpportunities && (
                   <button className="btn-ghost text-xs py-1.5 px-3 mx-auto flex items-center gap-1.5"
                     onClick={() => { setOppCreateOpen(true); setOppCreateForm(emptyOppForm); }}>
@@ -2042,8 +2051,8 @@ export default function LeadDetailPage() {
             {oppCreateOpen && (
               <div className="mb-4 border border-blue-500/30 bg-blue-500/[0.04] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                    <Plus size={12} className="text-blue-400" /> New Opportunity
+                  <p className="text-xs font-semibold text-ink dark:text-slate-200 flex items-center gap-1.5">
+                    <Plus size={12} className="text-blue-600 dark:text-blue-400" /> New Opportunity
                   </p>
                   <button onClick={() => setOppCreateOpen(false)}>
                     <X size={14} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
@@ -2052,7 +2061,7 @@ export default function LeadDetailPage() {
 
                 {/* Opportunity Name (full row) */}
                 <div>
-                  <label className="label mb-1 block">Opportunity Name <span className="text-red-400">*</span></label>
+                  <label className="label mb-1 block">Opportunity Name <span className="text-rose-600 dark:text-rose-400">*</span></label>
                   <input className="input" placeholder="e.g. ERP Implementation Proposal"
                     value={oppCreateForm.opportunityName}
                     onChange={e => setOppCreateForm((f: any) => ({ ...f, opportunityName: e.target.value }))} />
@@ -2061,17 +2070,17 @@ export default function LeadDetailPage() {
                 {/* Contact Person (auto from lead, read-only) */}
                 <div>
                   <label className="label mb-1 block">Contact Person</label>
-                  <input className="input bg-slate-50 dark:bg-slate-800 cursor-not-allowed text-slate-500"
+                  <input className="input bg-slate-50 dark:bg-white/[0.04] cursor-not-allowed text-ink-3"
                     readOnly value={lead.contactName || '—'} />
                 </div>
 
                 {/* Stage */}
                 <div>
                   <label className="label mb-1 block">Stage / Status</label>
-                  <select className="input" value={oppCreateForm.stage}
+                  <Select className="input" value={oppCreateForm.stage}
                     onChange={e => setOppCreateForm((f: any) => ({ ...f, stage: e.target.value }))}>
                     {OPP_STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                  </select>
+                  </Select>
                 </div>
 
                 {/* Deal Value + Expected Close Date */}
@@ -2099,13 +2108,13 @@ export default function LeadDetailPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="label mb-1 block">Assigned To</label>
-                      <select className="input" value={oppCreateForm.assignedToId}
+                      <Select className="input" value={oppCreateForm.assignedToId}
                         onChange={e => setOppCreateForm((f: any) => ({ ...f, assignedToId: e.target.value }))}>
                         <option value="">— Select assignee —</option>
                         {teamMembers.map((m: any) => (
                           <option key={m.id} value={m.id}>{m.name}</option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                     <div />
                   </div>
@@ -2120,7 +2129,7 @@ export default function LeadDetailPage() {
                     onChange={e => setOppCreateForm((f: any) => ({ ...f, notes: e.target.value }))} />
                 </div>
 
-                {oppCreateError && <p className="text-xs text-red-400">{oppCreateError}</p>}
+                {oppCreateError && <p className="text-xs text-rose-600 dark:text-rose-400">{oppCreateError}</p>}
 
                 <div className="flex gap-2 pt-1">
                   <button className="btn-ghost flex-1" onClick={() => setOppCreateOpen(false)}>Cancel</button>
@@ -2137,8 +2146,8 @@ export default function LeadDetailPage() {
             {leadOpportunities.length > 0 && (
               <div className={`overflow-x-auto rounded-xl border border-slate-200 dark:border-white/[0.06] ${leadOpportunities.length > 7 ? 'max-h-[19rem] overflow-y-auto' : ''}`}>
                 <table className="w-full text-xs border-collapse">
-                  <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900">
-                    <tr className="border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-slate-800/30">
+                  <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-surface">
+                    <tr className="border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.04]">
                       <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Opportunity</th>
                       <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Stage</th>
                       <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Contact</th>
@@ -2150,40 +2159,40 @@ export default function LeadDetailPage() {
                   </thead>
                   <tbody>
                     {leadOpportunities.map((opp: any) => (
-                      <tr key={opp.id} className="border-b border-slate-100 dark:border-white/[0.04] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors last:border-0">
-                        <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                      <tr key={opp.id} className="border-b border-slate-100 dark:border-white/[0.04] hover:bg-slate-50 dark:hover:bg-white/[0.05] transition-colors last:border-0">
+                        <td className="py-2.5 px-3 font-medium text-ink dark:text-slate-200 whitespace-nowrap">
                           {opp.opportunityName || opp.title}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 capitalize whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-ink-2 capitalize whitespace-nowrap">
                           {opp.stage?.replace(/_/g, ' ')}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-500">
+                        <td className="py-2.5 px-3 text-ink-3">
                           {opp.contact?.name || opp.lead?.contactName || lead.contactName || '—'}
                         </td>
-                        <td className="py-2.5 px-3 font-semibold text-emerald-400 whitespace-nowrap">
+                        <td className="py-2.5 px-3 font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                           {fmtUSD(opp.dealValue)}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-ink-3 whitespace-nowrap">
                           {opp.expectedCloseDate ? fmtDate(opp.expectedCloseDate) : '—'}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-500 max-w-[200px] truncate">
+                        <td className="py-2.5 px-3 text-ink-3 max-w-[200px] truncate">
                           {opp.notes || '—'}
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <button title="View"
-                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition-colors"
+                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.05] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                               onClick={() => setOppViewModal(opp)}>
                               <Eye size={12} />
                             </button>
                             <button title="Edit"
-                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition-colors"
+                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.05] text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                               onClick={() => openOppEdit(opp)}>
                               <Edit2 size={12} />
                             </button>
-                            {(permissions.canDeleteOpportunities || (permissions.isSalesUser && opp.assignedToId === user?.id)) && (
+                            {permissions.canDeleteOpportunities && (
                               <button title="Delete"
-                                className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                                className="p-1 rounded hover:bg-rose-500/10 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
                                 disabled={deleteOppMutation.isPending}
                                 onClick={() => setOppDeleteConfirmId(opp.id)}>
                                 <Trash2 size={12} />
@@ -2202,10 +2211,10 @@ export default function LeadDetailPage() {
           {/* ── Tech Stack ───────────────────────────────────────────────── */}
           {lead.techStack?.length > 0 && (
             <div className="card p-5">
-              <h2 className="section-title mb-3">Tech Stack</h2>
+              <h2 className="section-title flex items-center gap-2.5 mb-3"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-500/10 text-ink-2"><IcTech size={15} /></span>Tech Stack</h2>
               <div className="flex flex-wrap gap-2">
                 {lead.techStack.map((t: string) => (
-                  <span key={t} className="bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg px-3 py-1.5 text-sm font-medium">
+                  <span key={t} className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded-lg px-3 py-1.5 text-sm font-medium">
                     {t}
                   </span>
                 ))}
@@ -2216,12 +2225,12 @@ export default function LeadDetailPage() {
           {/* ── Intent Signals ───────────────────────────────────────────── */}
           {lead.intentSignals?.length > 0 && (
             <div className="card p-5">
-              <h2 className="section-title mb-3">Intent Signals</h2>
+              <h2 className="section-title flex items-center gap-2.5 mb-3"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-500/10 text-amber-600 dark:text-amber-400"><IcIntent size={15} /></span>Intent Signals</h2>
               <div className="space-y-2">
                 {(lead.intentSignals as any[]).map((s: any, i: number) => (
-                  <div key={i} className="p-3 bg-slate-100 dark:bg-slate-950 rounded-xl border-l-2 border-blue-500/40 flex items-start gap-2.5">
-                    <Zap size={13} className="text-amber-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-slate-600 dark:text-slate-300">{s.text ?? s.signalText ?? s}</p>
+                  <div key={i} className="p-3 bg-slate-50 dark:bg-white/[0.03] rounded-xl border-l-2 border-blue-500/40 flex items-start gap-2.5">
+                    <Zap size={13} className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-ink-2">{s.text ?? s.signalText ?? s}</p>
                   </div>
                 ))}
               </div>
@@ -2235,20 +2244,20 @@ export default function LeadDetailPage() {
 
       {/* ── Opportunity Delete Confirmation Modal ──────────────────────────── */}
       {mounted && oppDeleteConfirmId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto">
+          <div className="bg-white dark:bg-surface border border-line rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                <Trash2 size={20} className="text-red-400" />
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-rose-600 dark:text-rose-400" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Delete Opportunity</h3>
-                <p className="text-sm text-slate-500 mt-1">Are you sure you want to delete this opportunity? This action cannot be undone.</p>
+                <h3 className="font-display text-base font-semibold text-ink">Delete Opportunity</h3>
+                <p className="text-sm text-ink-3 mt-1">Are you sure you want to delete this opportunity? This action cannot be undone.</p>
               </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-line text-sm font-medium text-ink-2 hover:bg-slate-50 dark:hover:bg-white/[0.05] transition-colors"
                 onClick={() => setOppDeleteConfirmId(null)}
               >
                 No, Cancel
@@ -2270,20 +2279,20 @@ export default function LeadDetailPage() {
 
       {/* ── Contact Delete Confirmation Modal ──────────────────────────────── */}
       {mounted && contactDeleteId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto">
+          <div className="bg-white dark:bg-surface border border-line rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                <Trash2 size={20} className="text-red-400" />
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-rose-600 dark:text-rose-400" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Delete Contact</h3>
-                <p className="text-sm text-slate-500 mt-1">Are you sure you want to delete this contact? This action cannot be undone.</p>
+                <h3 className="font-display text-base font-semibold text-ink">Delete Contact</h3>
+                <p className="text-sm text-ink-3 mt-1">Are you sure you want to delete this contact? This action cannot be undone.</p>
               </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-line text-sm font-medium text-ink-2 hover:bg-slate-50 dark:hover:bg-white/[0.05] transition-colors"
                 onClick={() => setContactDeleteId(null)}
               >
                 No, Cancel
@@ -2304,8 +2313,8 @@ export default function LeadDetailPage() {
 
       {/* ── Opportunity Edit Modal ──────────────────────────────────────────── */}
       {mounted && oppEditModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto">
+          <div className="bg-white dark:bg-surface border border-line rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="section-title">Edit Opportunity</h3>
@@ -2327,15 +2336,15 @@ export default function LeadDetailPage() {
               </div>
               <div>
                 <label className="label mb-1 block">Contact Person</label>
-                <input className="input bg-slate-50 dark:bg-slate-800 cursor-not-allowed text-slate-500"
+                <input className="input bg-slate-50 dark:bg-white/[0.04] cursor-not-allowed text-ink-3"
                   readOnly value={oppEditModal.contact?.name || lead.contactName || '—'} />
               </div>
               <div>
                 <label className="label mb-1 block">Stage / Status</label>
-                <select className="input" value={oppEditForm.stage}
+                <Select className="input" value={oppEditForm.stage}
                   onChange={e => setOppEditForm((f: any) => ({ ...f, stage: e.target.value }))}>
                   {OPP_STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2357,11 +2366,11 @@ export default function LeadDetailPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label mb-1 block">Assigned To</label>
-                    <select className="input" value={oppEditForm.assignedToId}
+                    <Select className="input" value={oppEditForm.assignedToId}
                       onChange={e => setOppEditForm((f: any) => ({ ...f, assignedToId: e.target.value }))}>
                       <option value="">— Select assignee —</option>
                       {teamMembers.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
+                    </Select>
                   </div>
                   <div />
                 </div>
@@ -2372,7 +2381,7 @@ export default function LeadDetailPage() {
                 <textarea className="input min-h-[70px] resize-none" value={oppEditForm.notes}
                   onChange={e => setOppEditForm((f: any) => ({ ...f, notes: e.target.value }))} />
               </div>
-              {oppEditError && <p className="text-xs text-red-400">{oppEditError}</p>}
+              {oppEditError && <p className="text-xs text-rose-600 dark:text-rose-400">{oppEditError}</p>}
               <div className="flex gap-2 pt-1">
                 <button className="btn-ghost flex-1" onClick={() => setOppEditModal(null)}>Cancel</button>
                 <button className="btn-primary flex-1" onClick={handleSaveOpp} disabled={updateOppMutation.isPending}>
@@ -2387,8 +2396,8 @@ export default function LeadDetailPage() {
 
       {/* ── Opportunity View Modal ──────────────────────────────────────────── */}
       {mounted && oppViewModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto">
+          <div className="bg-white dark:bg-surface border border-line rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="section-title">{oppViewModal.opportunityName || oppViewModal.title}</h3>
@@ -2415,20 +2424,20 @@ export default function LeadDetailPage() {
                 { label: 'Created Date',    value: fmtDate(oppViewModal.createdAt) },
                 { label: 'Last Updated',    value: fmtDate(oppViewModal.updatedAt) },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-                  <p className="text-sm text-slate-800 dark:text-slate-200">{value || '—'}</p>
+                <div key={label} className="bg-slate-50 dark:bg-white/[0.03] rounded-xl p-3">
+                  <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">{label}</p>
+                  <p className="text-sm text-ink dark:text-slate-200">{value || '—'}</p>
                 </div>
               ))}
               {oppViewModal.wonLostReason && (
-                <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Won / Lost Reason</p>
-                  <p className="text-sm text-slate-800 dark:text-slate-200">{oppViewModal.wonLostReason}</p>
+                <div className="col-span-2 bg-slate-50 dark:bg-white/[0.03] rounded-xl p-3">
+                  <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Won / Lost Reason</p>
+                  <p className="text-sm text-ink dark:text-slate-200">{oppViewModal.wonLostReason}</p>
                 </div>
               )}
-              <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes / Comments</p>
-                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{oppViewModal.notes || '—'}</p>
+              <div className="col-span-2 bg-slate-50 dark:bg-white/[0.03] rounded-xl p-3">
+                <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Notes / Comments</p>
+                <p className="text-sm text-ink-2 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{oppViewModal.notes || '—'}</p>
               </div>
             </div>
             <div className="flex gap-2 mt-4">

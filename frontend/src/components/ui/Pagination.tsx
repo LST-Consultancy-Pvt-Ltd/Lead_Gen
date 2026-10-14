@@ -64,23 +64,23 @@ export function Pagination({
           type="button"
           onClick={() => setSizeOpen(o => !o)}
           onBlur={() => setTimeout(() => setSizeOpen(false), 150)}
-          className="inline-flex items-center justify-between gap-2 h-9 w-28 px-3 rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+          className="inline-flex items-center justify-between gap-2 h-9 w-28 px-3 rounded-xl border border-line bg-white dark:bg-sunken shadow-sm dark:shadow-none text-xs font-semibold text-ink dark:text-slate-200 hover:border-blue-400 dark:hover:border-blue-500/50 transition-colors"
           title="Rows per page"
         >
           Show {pageSize}
-          <ChevronDown size={14} className={`text-slate-400 transition-transform ${sizeOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown size={14} className={`text-slate-400 transition-transform ${sizeOpen ? 'rotate-180 text-blue-500' : ''}`} />
         </button>
         {sizeOpen && (
-          <div className="absolute bottom-full left-0 mb-1 w-28 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-lg overflow-hidden z-20">
+          <div className="absolute bottom-full left-0 mb-1.5 w-32 p-1.5 rounded-xl border border-line bg-white dark:bg-surface shadow-2xl shadow-slate-900/15 dark:shadow-black/50 z-20 animate-fade-in">
             {pageSizeOptions.map(size => (
               <button
                 key={size}
                 type="button"
                 onMouseDown={(e) => { e.preventDefault(); selectSize(size); }}
-                className={`block w-full text-left px-3 py-2 text-xs transition-colors ${
+                className={`block w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors ${
                   size === pageSize
-                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300 font-semibold'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-sm shadow-blue-500/30'
+                    : 'text-ink-2 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-500/10'
                 }`}
               >
                 Show {size}
@@ -95,7 +95,7 @@ export function Pagination({
         type="button"
         onClick={() => onPageChange(page - 1)}
         disabled={page <= 1}
-        className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 enabled:hover:border-blue-400 enabled:hover:text-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-line bg-white dark:bg-sunken shadow-sm dark:shadow-none text-ink-2 dark:text-slate-300 enabled:hover:border-blue-400 enabled:hover:text-blue-600 enabled:hover:bg-blue-50 dark:enabled:hover:bg-blue-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         title="Previous page"
         aria-label="Previous page"
       >
@@ -103,8 +103,8 @@ export function Pagination({
       </button>
 
       {/* Current / total */}
-      <span className="text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
-        <span className="font-bold text-slate-800 dark:text-slate-100">{page} of {safeTotal}</span> Page
+      <span className="text-xs text-ink-3 whitespace-nowrap">
+        Page <span className="font-bold text-ink tabular-nums">{page}</span> of <span className="font-semibold tabular-nums">{safeTotal}</span>
       </span>
 
       {/* Direct page-number input */}
@@ -118,7 +118,7 @@ export function Pagination({
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         }}
-        className="h-9 w-16 px-2 text-center rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 focus:border-blue-400 focus:outline-none transition-colors"
+        className="h-9 w-16 px-2 text-center rounded-xl border border-line bg-white dark:bg-sunken shadow-sm dark:shadow-none text-xs font-semibold text-ink dark:text-slate-200 tabular-nums focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all"
         title="Go to page"
         aria-label="Go to page"
       />
@@ -128,7 +128,7 @@ export function Pagination({
         type="button"
         onClick={() => onPageChange(page + 1)}
         disabled={page >= safeTotal}
-        className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 enabled:hover:border-blue-400 enabled:hover:text-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-line bg-white dark:bg-sunken shadow-sm dark:shadow-none text-ink-2 dark:text-slate-300 enabled:hover:border-blue-400 enabled:hover:text-blue-600 enabled:hover:bg-blue-50 dark:enabled:hover:bg-blue-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         title="Next page"
         aria-label="Next page"
       >

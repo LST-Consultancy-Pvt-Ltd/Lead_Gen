@@ -15,6 +15,7 @@ const logger = require("../utils/logger");
 const { scopeLeadWhere, buildLeadScope, buildActivityScope, andScope } = require("../middleware/rbac");
 const dashboardEvents = require("../utils/dashboardEvents");
 const { logAudit } = require("../utils/auditLogger");
+const { formatLeadChanges, fieldLabel } = require("../utils/leadChangeSummary");
 
 const ADMIN_ROLES = ["org_admin", "super_admin"];
 const CONTACT_ACTIONS = [
@@ -416,19 +417,28 @@ class ActivityService {
       }
     }
 
-    // Text search across outcome and notes
+    // Text search across outcome, notes, description and the linked lead / opportunity name.
+    // It is ANDed with the role scope below, so a matching name never widens visibility.
     if (search && search.trim().length >= 2) {
+      const contains = { contains: search.trim(), mode: "insensitive" };
       const searchConditions = [
-        { outcome: { contains: search.trim(), mode: "insensitive" } },
-        { notes: { contains: search.trim(), mode: "insensitive" } },
-        { description: { contains: search.trim(), mode: "insensitive" } },
+        { outcome: contains },
+        { notes: contains },
+        { description: contains },
+        { lead: { companyName: contains } },
+        { lead: { contactName: contains } },
+        { opportunity: { opportunityName: contains } },
+        { opportunity: { title: contains } },
       ];
       andClauses.push({ OR: searchConditions });
     }
 
-    // Overdue filter — nextActionDate is in the past
+    // Overdue filter — next action was due before today (same rule as the stats;
+    // follow-ups due today are "due today", not overdue)
     if (overdue === "true") {
-      where.nextActionDate = { lt: new Date() };
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      where.nextActionDate = { lt: todayStart };
     }
 
     if (andClauses.length) where.AND = andClauses;
@@ -599,14 +609,20 @@ class ActivityService {
     });
   }
 
-  async logLeadUpdated(lead, user, changedFields) {
+  /**
+   * `changes` is the output of describeLeadChanges ([{ field, label, from?, to? }]);
+   * a plain list of field names is still accepted and shown with readable labels.
+   */
+  async logLeadUpdated(lead, user, changes) {
+    const list = Array.isArray(changes) ? changes : Object.keys(changes || {});
+    const normalized = list.map((c) => (typeof c === "string" ? { field: c, label: fieldLabel(c) } : c));
     return this.logActivity({
       organizationId: user.organizationId,
       userId: user.id,
       leadId: lead.id,
       action: "lead_updated",
-      description: `Lead updated: ${Array.isArray(changedFields) ? changedFields.join(", ") : Object.keys(changedFields).join(", ")}`,
-      metadata: { changedFields },
+      description: formatLeadChanges(normalized),
+      metadata: { changedFields: normalized.map((c) => c.field), changes: normalized },
     });
   }
 
@@ -685,6 +701,11 @@ class ActivityService {
     });
     if (!activity)
       return { success: false, statusCode: 404, message: "Activity not found" };
+
+    // Sales executives cannot delete anything
+    if (user.role === "sales_user") {
+      return { success: false, statusCode: 403, message: "Sales executives cannot delete activities" };
+    }
 
     if (!ADMIN_ROLES.includes(user.role) && activity.userId !== user.id) {
       return {

@@ -1,0 +1,173 @@
+{
+  "default": "light",
+  "themes": [
+    {
+      "id": "light",
+      "name": "Light Minimal",
+      "description": "Clean white surfaces with crisp blue actions",
+      "appearance": "light",
+      "palettes": {
+        "primary": "blue",
+        "secondary": "indigo",
+        "tertiary": "violet",
+        "neutral": "slate"
+      },
+      "surfaces": {
+        "canvas": "#f8fafc",
+        "chrome": "#ffffff",
+        "surface": "#ffffff",
+        "surface-2": "#ffffff",
+        "sunken": "#f1f5f9",
+        "ink": "#0f172a",
+        "ink-2": "#475569",
+        "ink-3": "#64748b",
+        "line": "#e2e8f0"
+      },
+      "tagline": "White + blue"
+    },
+    {
+      "id": "midnight",
+      "name": "Midnight Dark",
+      "description": "Deep navy surfaces with subtle blue accents",
+      "appearance": "dark",
+      "palettes": {
+        "primary": "blue",
+        "secondary": "indigo",
+        "tertiary": "violet",
+        "neutral": "slate"
+      },
+      "surfaces": {
+        "canvas": "#060b18",
+        "chrome": "#070d1c",
+        "surface": "#0c1426",
+        "surface-2": "#101a2f",
+        "sunken": "#0a1122",
+        "ink": "#f8fafc",
+        "ink-2": "#94a3b8",
+        "ink-3": "#64748b",
+        "line": "#1b2539"
+      },
+      "tagline": "Navy + electric blue"
+    },
+    {
+      "id": "ocean",
+      "name": "Ocean Sky",
+      "description": "Airy sky blue with fresh mint accents",
+      "appearance": "light",
+      "palettes": {
+        "primary": "sky",
+        "secondary": "teal",
+        "tertiary": "cyan",
+        "neutral": "slate"
+      },
+      "surfaces": {
+        "canvas": "#f2f8fd",
+        "chrome": "#ffffff",
+        "surface": "#ffffff",
+        "surface-2": "#f9fcff",
+        "sunken": "#e6f1fa",
+        "ink": "#0b1e33",
+        "ink-2": "#43597a",
+        "ink-3": "#6b809c",
+        "line": "#d8e6f3"
+      },
+      "tagline": "Blue + mint"
+    },
+    {
+      "id": "aurora",
+      "name": "Lavender Bloom",
+      "description": "Soft lilac surfaces with pink highlights",
+      "appearance": "light",
+      "palettes": {
+        "primary": "violet",
+        "secondary": "pink",
+        "tertiary": "purple",
+        "neutral": "zinc"
+      },
+      "surfaces": {
+        "canvas": "#f8f5fe",
+        "chrome": "#ffffff",
+        "surface": "#ffffff",
+        "surface-2": "#fdfbff",
+        "sunken": "#f1ebfc",
+        "ink": "#1e1433",
+        "ink-2": "#5b4b7a",
+        "ink-3": "#85779e",
+        "line": "#e8e0f6"
+      },
+      "tagline": "Lilac + pink"
+    },
+    {
+      "id": "emerald",
+      "name": "Matcha",
+      "description": "Calm matcha green on warm cream",
+      "appearance": "light",
+      "palettes": {
+        "primary": "green",
+        "secondary": "teal",
+        "tertiary": "lime",
+        "neutral": "stone"
+      },
+      "surfaces": {
+        "canvas": "#f7f6ee",
+        "chrome": "#fffef9",
+        "surface": "#ffffff",
+        "surface-2": "#fcfbf5",
+        "sunken": "#efede2",
+        "ink": "#1b2316",
+        "ink-2": "#4f5a47",
+        "ink-3": "#7a836f",
+        "line": "#e4e2d4"
+      },
+      "tagline": "Green + cream"
+    },
+    {
+      "id": "sunset",
+      "name": "Sunset Warm",
+      "description": "Warm neutrals with orange and coral accents",
+      "appearance": "light",
+      "palettes": {
+        "primary": "orange",
+        "secondary": "rose",
+        "tertiary": "amber",
+        "neutral": "stone"
+      },
+      "surfaces": {
+        "canvas": "#fbf7f3",
+        "chrome": "#fffdfa",
+        "surface": "#ffffff",
+        "surface-2": "#fffaf5",
+        "sunken": "#f6efe8",
+        "ink": "#1c1917",
+        "ink-2": "#57534e",
+        "ink-3": "#78716c",
+        "line": "#ece3da"
+      },
+      "tagline": "Cream + coral"
+    },
+    {
+      "id": "pink",
+      "name": "Pink Blossom",
+      "tagline": "Pink + rose",
+      "description": "Soft blush surfaces with vibrant pink accents",
+      "appearance": "light",
+      "palettes": {
+        "primary": "pink",
+        "secondary": "rose",
+        "tertiary": "fuchsia",
+        "neutral": "stone"
+      },
+      "surfaces": {
+        "canvas": "#fdf6f9",
+        "chrome": "#ffffff",
+        "surface": "#ffffff",
+        "surface-2": "#fffafc",
+        "sunken": "#fbecf2",
+        "ink": "#2a1220",
+        "ink-2": "#6b4a5c",
+        "ink-3": "#94778a",
+        "line": "#f3dfe8"
+      }
+    }
+  ]
+}

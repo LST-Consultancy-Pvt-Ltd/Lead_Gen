@@ -36,8 +36,7 @@ router.put('/:id/set-default', authenticate, requireAdmin, ctrl.setDefaultDropdo
 // (the category is only known once the record is loaded, so this is enforced in the controller)
 router.patch('/:id', authenticate, ctrl.updateValue);
 
-// DELETE /api/dropdowns/:id — admin only, except `location` values
-// (the category is only known once the record is loaded, so this is enforced in the controller)
-router.delete('/:id', authenticate, ctrl.deleteValue);
+// DELETE /api/dropdowns/:id — admin only for every category, including `location`
+router.delete('/:id', authenticate, requireAdmin, ctrl.deleteValue);
 
 module.exports = router;

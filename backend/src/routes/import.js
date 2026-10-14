@@ -41,8 +41,15 @@ const excelUpload = multer({
 
 router.use(authenticate);
 
+// Run a multer upload and turn its errors (wrong type, too large) into a 400
+const handleUpload = (mw) => (req, res, next) => mw(req, res, (err) => {
+  if (!err) return next();
+  const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large (max 10 MB)' : err.message || 'Invalid file';
+  return res.status(400).json({ success: false, message });
+});
+
 // POST /api/import/leads/excel — structured Excel import (any authenticated user)
-router.post('/leads/excel', authenticate, excelUpload.single('file'), ctrl.importLeadsFromExcel);
+router.post('/leads/excel', authenticate, handleUpload(excelUpload.single('file')), ctrl.importLeadsFromExcel);
 
 // GET /api/import/template/excel — download Excel template (any authenticated user)
 router.get('/template/excel', authenticate, ctrl.downloadExcelTemplate);
@@ -51,7 +58,7 @@ router.get('/template/excel', authenticate, ctrl.downloadExcelTemplate);
 router.use(requireAdmin);
 
 // POST /api/import/leads — upload file and bulk-create leads
-router.post('/leads', upload.single('file'), ctrl.importLeads);
+router.post('/leads', handleUpload(upload.single('file')), ctrl.importLeads);
 
 // GET /api/import/logs — view import history
 router.get('/logs', ctrl.getImportLogs);

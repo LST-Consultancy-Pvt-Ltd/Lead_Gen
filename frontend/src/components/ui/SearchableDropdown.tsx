@@ -1,5 +1,6 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Plus, Search, X, Edit2, Trash2 } from "lucide-react";
 
 interface DropdownOption {
@@ -45,6 +46,29 @@ export function SearchableDropdown({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; up: boolean }>({ top: 0, left: 0, width: 0, up: false });
+
+  // The menu is portalled to <body> with fixed positioning so cards with
+  // overflow-hidden (or scrolling modals) can't clip it.
+  const place = useCallback(() => {
+    const r = dropdownRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const spaceBelow = window.innerHeight - r.bottom;
+    const up = spaceBelow < 340 && r.top > spaceBelow;
+    setPos({ top: up ? r.top - 6 : r.bottom + 6, left: r.left, width: r.width, up });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [isOpen, place]);
 
   // Normalize options to DropdownOption format
   const normalizedOptions: DropdownOption[] = options.map((opt) => {
@@ -71,7 +95,8 @@ export function SearchableDropdown({
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const t = event.target as Node;
+      if (dropdownRef.current && !dropdownRef.current.contains(t) && !menuRef.current?.contains(t)) {
         setIsOpen(false);
         setSearchQuery("");
       }
@@ -181,8 +206,8 @@ export function SearchableDropdown({
 
   return (
     <div className={`relative ${className}`}>
-      <label className="label">
-        {label} {required && <span className="text-red-400">*</span>}
+      <label className="label mb-1.5 flex items-center gap-1">
+        {label} {required && <span className="text-rose-500 font-bold">*</span>}
       </label>
 
       <div ref={dropdownRef} className="relative">
@@ -192,12 +217,13 @@ export function SearchableDropdown({
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
           className={`
-            input w-full flex items-center justify-between gap-2
+            input w-full flex items-center justify-between gap-2 text-left
             ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-            ${error ? "border-red-400 focus:border-red-400" : ""}
+            ${error ? "!border-rose-400" : ""}
+            ${isOpen ? "!border-blue-500 ring-4 ring-blue-500/15" : ""}
           `}
         >
-          <span className={value ? "text-slate-800 dark:text-slate-200" : "text-slate-500"}>
+          <span className={`truncate ${value ? "text-ink dark:text-slate-100" : "text-slate-400 dark:text-slate-500"}`}>
             {value || placeholder}
           </span>
           <div className="flex items-center gap-1">
@@ -210,16 +236,25 @@ export function SearchableDropdown({
             )}
             <ChevronDown
               size={16}
-              className={`text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+              className={`transition-transform duration-200 ${isOpen ? "rotate-180 text-blue-500" : "text-slate-400"}`}
             />
           </div>
         </button>
 
         {/* Dropdown Menu */}
-        {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden">
+        {isOpen && typeof document !== "undefined" && createPortal(
+          <div
+            ref={menuRef}
+            className="fixed z-[10050] bg-white dark:bg-surface border border-line rounded-xl shadow-2xl shadow-slate-900/15 dark:shadow-black/50 overflow-hidden animate-fade-in"
+            style={{
+              left: pos.left,
+              width: Math.max(pos.width, 240),
+              maxWidth: "calc(100vw - 32px)",
+              ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }),
+            }}
+          >
             {/* Search Input */}
-            <div className="p-2 border-b border-slate-200 dark:border-white/10">
+            <div className="p-2 border-b border-slate-100 dark:border-white/[0.06]">
               <div className="relative">
                 <Search
                   size={14}
@@ -237,21 +272,22 @@ export function SearchableDropdown({
             </div>
 
             {/* Options List */}
-            <div className="max-h-60 overflow-y-auto">
+            <div className="max-h-64 overflow-y-auto p-1.5">
               {/* Existing Options */}
               {filteredOptions.length > 0 ? (
-                <div className="py-1">
-                  <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                <div>
+                  <p className="px-2.5 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-3">
                     {searchQuery ? "Matching Options" : "Select Option"}
                   </p>
                   {filteredOptions.map((option) => (
                     <div
                       key={option.id}
                       className={`
-                        group relative px-3 py-2 text-sm
-                        hover:bg-slate-100 dark:hover:bg-slate-800/60
+                        group relative px-2.5 py-2 rounded-lg text-[13px]
                         transition-colors flex items-center justify-between gap-2
-                        ${value === option.value ? "bg-blue-50 dark:bg-blue-500/10" : ""}
+                        ${value === option.value
+                          ? "bg-gradient-to-r from-blue-600 to-indigo-600 shadow-sm shadow-blue-500/30"
+                          : "hover:bg-blue-50 dark:hover:bg-blue-500/10"}
                       `}
                     >
                       {editingId === option.id ? (
@@ -296,13 +332,13 @@ export function SearchableDropdown({
                           <button
                             type="button"
                             onClick={() => handleSelect(option)}
-                            className="flex-1 text-left text-slate-800 dark:text-slate-200 truncate"
+                            className={`flex-1 text-left truncate ${value === option.value ? "text-white font-semibold" : "text-ink-2 dark:text-slate-200"}`}
                           >
                             {option.value}
                           </button>
                           <div className="flex items-center gap-1">
                             {value === option.value && (
-                              <Check size={14} className="text-blue-500 dark:text-blue-400" />
+                              <Check size={14} className="text-white" />
                             )}
                             {/* Edit/Delete buttons - shown on hover or always if CRUD is enabled */}
                             {(onEdit || onDelete) && (
@@ -311,7 +347,7 @@ export function SearchableDropdown({
                                   <button
                                     type="button"
                                     onClick={(e) => handleEditStart(option.id, option.value, e)}
-                                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400"
+                                    className={`p-1 rounded-md ${value === option.value ? "text-white/90 hover:bg-white/20" : "text-slate-500 hover:text-blue-600 hover:bg-blue-500/10"}`}
                                     title="Edit"
                                   >
                                     <Edit2 size={12} />
@@ -321,7 +357,7 @@ export function SearchableDropdown({
                                   <button
                                     type="button"
                                     onClick={(e) => handleDeleteClick(option.id, option.value, e)}
-                                    className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400"
+                                    className={`p-1 rounded-md ${value === option.value ? "text-white/90 hover:bg-white/20" : "text-rose-500 hover:bg-rose-500/10"}`}
                                     title="Delete"
                                   >
                                     <Trash2 size={12} />
@@ -347,12 +383,12 @@ export function SearchableDropdown({
 
               {/* Create New Option */}
               {showCreateOption && (
-                <div className="py-1 border-t border-slate-200 dark:border-white/10">
+                <div className="pt-1 mt-1 border-t border-slate-100 dark:border-white/[0.06]">
                   <button
                     type="button"
                     onClick={handleCreateNew}
                     disabled={isCreating}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium"
+                    className="w-full text-left px-2.5 py-2 rounded-lg text-[13px] hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold"
                   >
                     <Plus size={14} />
                     {isCreating ? "Creating..." : `Create "${searchQuery}"`}
@@ -360,27 +396,29 @@ export function SearchableDropdown({
                 </div>
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
 
       {/* Error Message */}
-      {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+      {error && <p className="text-xs font-medium text-rose-600 dark:text-rose-400 mt-1.5">{error}</p>}
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={handleDeleteCancel} />
-          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl max-w-md w-full p-6">
+        <div className="fixed inset-0 z-[10060] flex items-center justify-center p-4 animate-fade-in">
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[2px]" onClick={handleDeleteCancel} />
+          <div className="relative bg-white dark:bg-surface border border-line rounded-2xl shadow-2xl max-w-md w-full p-6 pt-7 overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-rose-500 via-red-500 to-orange-400" />
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/20 flex items-center justify-center flex-shrink-0">
-                <Trash2 size={24} className="text-red-600 dark:text-red-400" />
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-md shadow-rose-500/30 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={22} />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                <h3 className="font-display text-base font-semibold text-ink mb-1.5">
                   Delete {label}?
                 </h3>
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                <p className="text-sm text-ink-2 mb-5">
                   Are you sure you want to delete &ldquo;<strong>{deleteConfirm.value}</strong>&rdquo;? 
                   This action cannot be undone.
                 </p>
@@ -388,14 +426,14 @@ export function SearchableDropdown({
                   <button
                     type="button"
                     onClick={handleDeleteCancel}
-                    className="btn-ghost flex-1"
+                    className="btn-ghost flex-1 justify-center py-2.5"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleDeleteConfirm}
-                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium text-sm transition-colors"
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white rounded-xl font-semibold text-sm shadow-md shadow-rose-500/25 transition-all"
                   >
                     Delete
                   </button>

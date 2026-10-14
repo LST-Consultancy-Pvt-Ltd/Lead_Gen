@@ -3,14 +3,18 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { analyticsApi, teamApi } from '../../lib/api';
-import { Spinner } from '../../components/ui';
+import {
+  DashboardHeader, DashboardSkeleton, KpiCard, SectionCard, BarRow, PersonAvatar,
+  ChartTooltip, EmptyBlock, CountPill, FilterSelect,
+} from './DashboardUI';
+import { useChartTheme } from '../../hooks/useChartTheme';
 import { useDashboardSSE } from '../../hooks/useDashboardRefresh';
 import { useUserRole } from '../../lib/rbac';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Cell,
 } from 'recharts';
 import { startOfWeek, startOfMonth, subDays, startOfQuarter, format } from 'date-fns';
-import { TrendingUp, UserPlus, Download, Target, RefreshCw } from 'lucide-react';
+import { TrendingUp, Users, BadgeCheck, Trophy, Clock, Medal, BarChart3, CalendarCheck, UserCheck, CalendarRange, Filter as FunnelIcon, AlertTriangle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 // â”€â”€ Date Range Helper (exported for AdminDashboard compatibility) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -35,22 +39,6 @@ export function buildManagerWidgets(_data: any) { return []; }
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const AVATAR_COLORS = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-red-500', 'bg-cyan-500'];
-
-function getAvatarColor(name: string) {
-  const hash = (name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-
-function Avatar({ name }: { name: string }) {
-  const initials = (name || 'U').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-  return (
-    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${getAvatarColor(name)}`}>
-      {initials}
-    </div>
-  );
-}
-
 function daysOverdue(dateStr: string) {
   if (!dateStr) return 0;
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000));
@@ -69,6 +57,7 @@ export function ManagerDashboard() {
   const role = useUserRole();
   useDashboardSSE(role);
   const router = useRouter();
+  const ct = useChartTheme();
 
   const [datePreset, setDatePreset] = useState('last_30');
   const [selectedExecId, setSelectedExecId] = useState('');
@@ -94,7 +83,7 @@ export function ManagerDashboard() {
   });
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><Spinner size={24} /></div>;
+    return <DashboardSkeleton kpis={4} />;
   }
 
   // â”€â”€ Data derivations â€” ALL sourced from manager dashboard, filtered by date â”€â”€
@@ -126,10 +115,10 @@ export function ManagerDashboard() {
 
   // Pipeline funnel â€” all from date-filtered lead status counts
   const funnelData = [
-    { key: 'new', label: 'Generated', count: teamLeadsTotal, color: '#3b82f6' },
-    { key: 'contacted', label: 'Contacted', count: contactedCount, color: '#10b981' },
-    { key: 'qualified', label: 'Qualified', count: qualifiedCount, color: '#f59e0b' },
-    { key: 'closed_won', label: 'Closed won', count: closedWonCount, color: '#8b5cf6' },
+    { key: 'new', label: 'Generated', count: teamLeadsTotal, color: ct.series[0] },
+    { key: 'contacted', label: 'Contacted', count: contactedCount, color: ct.series[1] },
+    { key: 'qualified', label: 'Qualified', count: qualifiedCount, color: ct.series[2] },
+    { key: 'closed_won', label: 'Closed won', count: closedWonCount, color: ct.series[5] },
   ];
   const funnelMax = Math.max(...funnelData.map((f) => f.count), 1);
 
@@ -139,7 +128,7 @@ export function ManagerDashboard() {
     .slice(0, 3)
     .map((e) => {
       const conv = convList.find((c) => c.user?.id === e.user?.id);
-      return {        id: e.user?.id ?? e.user?.name ?? Math.random().toString(),        name: e.user?.name ?? 'â€”',
+      return {        id: e.user?.id ?? e.user?.name ?? Math.random().toString(),        name: e.user?.name ?? '—',
         leads: e.count ?? 0,
         closed: conv?.converted ?? 0,
         score: Math.round((e.count ?? 0) * 0.2 + (conv?.converted ?? 0) * 0.5),
@@ -158,171 +147,138 @@ export function ManagerDashboard() {
   const pendingFollowUps = overdueLeads.length;
   const qualRate = teamLeadsTotal > 0 ? ((qualifiedCount / teamLeadsTotal) * 100).toFixed(0) : '0';
 
+  const EXEC_BAR_COLORS = [ct.series[0], ct.series[1], ct.series[2], ct.series[5], ct.series[6], ct.series[7]];
+  const STATUS_PILL: Record<string, string> = {
+    new: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    contacted: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+    qualified: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  };
+  const RANK_STYLE = [
+    'bg-gradient-to-br from-amber-300 to-yellow-500 text-amber-950 shadow-md shadow-amber-500/30',
+    'bg-gradient-to-br from-slate-200 to-slate-400 text-slate-800 shadow-md shadow-slate-400/30',
+    'bg-gradient-to-br from-orange-300 to-orange-600 text-orange-950 shadow-md shadow-orange-500/30',
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        {/* <div>
-          <span className="text-xs bg-green-500/10 border border-green-500/20 text-green-400 px-3 py-1 rounded-full font-medium">
-            Full team visibility
-          </span>
-        </div> */}
-        <div className="flex items-center gap-2 ml-auto">
-          {executives.length > 0 && (
-            <select
-              value={selectedExecId}
-              onChange={(e) => setSelectedExecId(e.target.value)}
-              aria-label="Filter by executive"
-              className="text-xs bg-slate-800 border border-white/10 text-slate-300 rounded-xl px-3 py-1.5 outline-none cursor-pointer"
-            >
-              <option value="">All executives</option>
-              {executives.map((exec: any) => (
-                <option key={exec.id} value={exec.id}>{exec.name}</option>
-              ))}
-            </select>
-          )}
-          <select
-            value={datePreset}
-            onChange={(e) => setDatePreset(e.target.value)}
-            aria-label="Date range"
-            className="text-xs bg-slate-800 border border-white/10 text-slate-300 rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+      <DashboardHeader title="Team Dashboard" subtitle={DATE_PRESET_LABELS[datePreset]}>
+        {executives.length > 0 && (
+          <FilterSelect icon={UserCheck} tone="emerald"
+            value={selectedExecId}
+            onChange={(e) => setSelectedExecId(e.target.value)}
+            aria-label="Filter by executive"
           >
-            <option value="this_week">This week</option>
-            <option value="this_month">This month</option>
-            <option value="last_30">Last 30 days</option>
-            <option value="this_quarter">This quarter</option>
-          </select>
-        </div>
-      </div>
+            <option value="">All executives</option>
+            {executives.map((exec: any) => (
+              <option key={exec.id} value={exec.id}>{exec.name}</option>
+            ))}
+          </FilterSelect>
+        )}
+        <FilterSelect icon={CalendarRange} tone="blue"
+          value={datePreset}
+          onChange={(e) => setDatePreset(e.target.value)}
+          aria-label="Date range"
+        >
+          <option value="this_week">This week</option>
+          <option value="this_month">This month</option>
+          <option value="last_30">Last 30 days</option>
+          <option value="this_quarter">This quarter</option>
+        </FilterSelect>
+      </DashboardHeader>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="card p-5">
-          <p className="text-xs text-slate-500 mb-1">Team leads</p>
-          <p className="text-2xl font-bold text-slate-100">{teamLeadsTotal.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1">{DATE_PRESET_LABELS[datePreset]}</p>
-        </div>
-        <div className="card p-5">
-          <p className="text-xs text-slate-500 mb-1">Qualified</p>
-          <p className="text-2xl font-bold text-slate-100">{qualifiedCount}</p>
-          <p className="text-xs text-slate-500 mt-1">{qualRate}% qualification rate</p>
-        </div>
-        <div className="card p-5">
-          <p className="text-xs text-slate-500 mb-1">Closed / won</p>
-          <p className="text-2xl font-bold text-slate-100">{closedWonCount}</p>
-          <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-            <TrendingUp size={10} /> {DATE_PRESET_LABELS[datePreset]}
-          </p>
-        </div>
-        <div className="card p-5">
-          <p className="text-xs text-slate-500 mb-1">Overdue follow-ups</p>
-          <p className="text-2xl font-bold text-slate-100">{pendingFollowUps}</p>
-          {pendingFollowUps > 0 && (
-            <p className="text-xs text-red-400 mt-1">{pendingFollowUps} need attention</p>
-          )}
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={Users} tone="blue" label="Team leads" value={teamLeadsTotal.toLocaleString()}>
+          {DATE_PRESET_LABELS[datePreset]}
+        </KpiCard>
+        <KpiCard icon={BadgeCheck} tone="violet" label="Qualified" value={qualifiedCount}>
+          {qualRate}% qualification rate
+        </KpiCard>
+        <KpiCard icon={Trophy} tone="emerald" label="Closed / won" value={closedWonCount}>
+          <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+            <TrendingUp size={13} /> {DATE_PRESET_LABELS[datePreset]}
+          </span>
+        </KpiCard>
+        <KpiCard icon={Clock} tone={pendingFollowUps > 0 ? 'rose' : 'amber'} label="Overdue follow-ups" value={pendingFollowUps}>
+          {pendingFollowUps > 0 ? (
+            <span className="font-medium text-rose-600 dark:text-rose-400">{pendingFollowUps} need attention</span>
+          ) : null}
+        </KpiCard>
       </div>
 
       {/* Middle Row: Pipeline Funnel + Exec Leaderboard */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Pipeline funnel */}
-        <div className="card p-5">
-          <h2 className="section-title mb-1">Pipeline funnel</h2>
-          <p className="text-xs text-slate-500 mb-5">{DATE_PRESET_LABELS[datePreset]}</p>
-          <div className="space-y-4">
+        <SectionCard title="Pipeline funnel" subtitle={DATE_PRESET_LABELS[datePreset]} icon={FunnelIcon} tone="indigo">
+          <div className="space-y-5">
             {funnelData.map((stage) => (
-              <div key={stage.key}>
-                <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="text-slate-300">{stage.label}</span>
-                  <span className="text-slate-400 font-semibold">{stage.count.toLocaleString()}</span>
-                </div>
-                <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700 ease-out"
-                    style={{ width: `${(stage.count / funnelMax) * 100}%`, backgroundColor: stage.color }}
-                  />
-                </div>
-              </div>
+              <BarRow
+                key={stage.key}
+                label={stage.label}
+                count={stage.count.toLocaleString()}
+                pct={(stage.count / funnelMax) * 100}
+                barColor={stage.color}
+              />
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        {/* Exec leaderboard */}
-        <div className="card p-5">
-          <h2 className="section-title mb-1">Exec leaderboard</h2>
-          <p className="text-xs text-slate-500 mb-4">{DATE_PRESET_LABELS[datePreset]}</p>
+        <SectionCard title="Exec leaderboard" subtitle={DATE_PRESET_LABELS[datePreset]} icon={Medal} tone="amber">
           {leaderboard.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">No exec data for this period</p>
+            <EmptyBlock icon={Medal} message="No exec data for this period" />
           ) : (
-            <div className="space-y-3">
+            <div className="-mx-2 space-y-1">
               {leaderboard.map((exec, i) => (
-                <div key={exec.id} className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-500 w-4">{i + 1}</span>
-                  <Avatar name={exec.name} />
+                <div key={exec.id} className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-gradient-to-r hover:from-amber-50 hover:to-transparent dark:hover:from-amber-500/[0.08] transition-colors duration-150">
+                  <span className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold tabular-nums flex-shrink-0 ${RANK_STYLE[i] ?? 'bg-slate-400/10 text-slate-500'}`}>
+                    #{i + 1}
+                  </span>
+                  <PersonAvatar name={exec.name} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-200 truncate">{exec.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-[13px] font-medium text-ink truncate">{exec.name}</p>
+                    <p className="text-xs text-ink-3">
                       {exec.leads} leads &middot; {exec.closed} closed
                     </p>
                   </div>
-
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </SectionCard>
       </div>
 
       {/* Lower Row: Lead count by exec + Overdue follow-ups */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Lead count by exec (bar chart) */}
-        <div className="card p-5">
-          <h2 className="section-title mb-1">Lead count by exec</h2>
-          <p className="text-xs text-slate-500 mb-4">{DATE_PRESET_LABELS[datePreset]}</p>
+        <SectionCard title="Lead count by exec" subtitle={DATE_PRESET_LABELS[datePreset]} icon={BarChart3} tone="blue">
           {execBarData.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-8">No leads in this period</p>
+            <EmptyBlock icon={BarChart3} message="No leads in this period" />
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={200}>
               <BarChart data={execBarData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip
-                  content={({ active, payload, label }: any) =>
-                    active && payload?.length ? (
-                      <div className="bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs shadow-xl">
-                        <span className="text-slate-400">{label}: </span>
-                        <span className="text-blue-400 font-semibold">{payload[0].value} leads</span>
-                      </div>
-                    ) : null
-                  }
-                />
-                <Bar dataKey="leads" radius={[3, 3, 0, 0]}>
+                <CartesianGrid vertical={false} stroke={ct.grid} />
+                <XAxis dataKey="name" tick={ct.tick} axisLine={false} tickLine={false} />
+                <YAxis tick={ct.tick} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip cursor={ct.cursor} content={<ChartTooltip suffix=" leads" />} />
+                <Bar dataKey="leads" radius={[6, 6, 0, 0]} maxBarSize={36} animationDuration={500}>
                   {execBarData.map((_, idx) => (
-                    <Cell
-                      key={idx}
-                      fill={['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'][idx % 6]}
-                    />
+                    <Cell key={idx} fill={EXEC_BAR_COLORS[idx % EXEC_BAR_COLORS.length]} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
-        </div>
+        </SectionCard>
 
-        {/* Overdue follow-ups */}
-        <div className="card p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="section-title">Overdue follow-ups</h2>
-            {overdueLeads.length > 0 && (
-              <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full border bg-red-500/15 text-red-400 border-red-500/25">
-                {overdueLeads.length}
-              </span>
-            )}
-          </div>
+        <SectionCard
+          title="Overdue follow-ups"
+          icon={AlertTriangle}
+          tone="rose"
+          action={overdueLeads.length > 0 ? <CountPill>{overdueLeads.length}</CountPill> : undefined}
+        >
           {overdueLeads.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">No overdue follow-ups</p>
+            <EmptyBlock icon={CalendarCheck} message="No overdue follow-ups" />
           ) : (
-            <div className="space-y-3 max-h-64 overflow-y-auto">
+            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
               {overdueLeads.slice(0, 5).map((lead: any, i: number) => {
                 const days = daysOverdue(lead.followUpDate);
                 const src = lead.source ?? 'manual';
@@ -335,61 +291,34 @@ export function ManagerDashboard() {
                   <div
                     key={lead.id || i}
                     onClick={() => lead.id && router.push(`/dashboard/leads/${lead.id}`)}
-                    className="p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && lead.id) router.push(`/dashboard/leads/${lead.id}`); }}
+                    role="button"
+                    tabIndex={0}
+                    className="group relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 pl-4 pr-3 py-3 rounded-xl border border-rose-100 dark:border-rose-500/15 bg-gradient-to-r from-rose-50/80 to-white dark:from-rose-500/[0.08] dark:to-surface-2 hover:border-rose-300 dark:hover:border-rose-500/30 hover:-translate-y-px transition-all duration-150 cursor-pointer overflow-hidden"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <p className="text-sm font-medium text-slate-200 truncate">{lead.companyName}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border font-medium flex-shrink-0 ${
-                        lead.status === 'qualified'
-                          ? 'bg-amber-500/15 text-amber-400 border-amber-500/25'
-                          : lead.status === 'contacted'
-                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
-                            : lead.status === 'new'
-                              ? 'bg-blue-500/15 text-blue-400 border-blue-500/25'
-                              : 'bg-slate-500/15 text-slate-400 border-slate-500/25'
-                      }`}>
+                    <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-rose-500/80" />
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-[13px] font-semibold text-ink truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{lead.companyName}</p>
+                      <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium flex-shrink-0 ${STATUS_PILL[lead.status] ?? 'bg-slate-400/10 text-slate-600 dark:text-slate-400'}`}>
                         {lead.status?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 mb-1.5">
-                      Assigned to {lead.assignedTo?.name ?? 'Unassigned'} Â· {days > 0 ? `${days} day${days !== 1 ? 's' : ''} overdue` : 'Due today'}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] px-2 py-0.5 rounded-md border border-white/[0.06] text-slate-400">
-                        {srcLabel}
+                    <p className="text-xs text-ink-3 mb-2">
+                      Assigned to {lead.assignedTo?.name ?? 'Unassigned'} ·{' '}
+                      <span className="font-medium text-rose-600 dark:text-rose-400">
+                        {days > 0 ? `${days} day${days !== 1 ? 's' : ''} overdue` : 'Due today'}
                       </span>
-                      {/* <button
-                        onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/leads/${lead.id}`); }}
-                        className="ml-auto text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                      >
-                        Re-assign â†’
-                      </button> */}
-                    </div>
+                    </p>
+                    <span className="badge bg-slate-100 dark:bg-slate-400/[0.08] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-400/[0.12]">
+                      {srcLabel}
+                    </span>
                   </div>
                 );
               })}
             </div>
           )}
-        </div>
+        </SectionCard>
       </div>
-
-      {/* Actions Bar */}
-      {/* <div className="card p-4">
-        <div className="flex flex-wrap gap-3">
-          <button onClick={() => router.push('/dashboard/leads')} className="btn-ghost text-sm">
-            <Target size={14} /> Assign leads
-          </button>
-          <button onClick={() => router.push('/dashboard/team')} className="btn-ghost text-sm">
-            <RefreshCw size={14} /> Set targets
-          </button>
-          <button onClick={() => router.push('/dashboard/leads?export=1')} className="btn-ghost text-sm">
-            <Download size={14} /> Export
-          </button>
-          <button onClick={() => router.push('/dashboard/leads/new')} className="btn-ghost text-sm">
-            <UserPlus size={14} /> Add manual lead
-          </button>
-        </div>
-      </div> */}
     </div>
   );
 }

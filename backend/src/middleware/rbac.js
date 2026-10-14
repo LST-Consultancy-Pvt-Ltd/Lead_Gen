@@ -66,7 +66,7 @@ const ownerOrManagerAdmin = (getOwnerIdFn) => {
  * search/filter conditions via AND (never by spreading, which lets an `OR`
  * search overwrite the scope):
  *   org_admin / super_admin → every lead in their organization
- *   manager                 → leads they created OR that are assigned to them
+ *   manager                 → leads they created, assigned to them, or assigned to a member of their team
  *   sales_user              → only leads currently assigned to them
  */
 function buildLeadScope(user) {
@@ -75,7 +75,11 @@ function buildLeadScope(user) {
   if (user.role === 'manager') {
     return {
       organizationId,
-      OR: [{ createdById: user.id }, { assignedToId: user.id }],
+      OR: [
+        { createdById: user.id },
+        { assignedToId: user.id },
+        { assignedTo: { managerId: user.id } },
+      ],
     };
   }
   return { organizationId, assignedToId: user.id };
@@ -148,7 +152,9 @@ function canAccessLead(user, lead) {
   if (!user || !lead || lead.organizationId !== user.organizationId) return false;
   if (ADMIN_ROLES.includes(user.role)) return true;
   if (user.role === 'manager') {
-    return lead.createdById === user.id || lead.assignedToId === user.id;
+    return lead.createdById === user.id
+      || lead.assignedToId === user.id
+      || (lead.assignedTo?.managerId === user.id);
   }
   return lead.assignedToId === user.id;
 }
@@ -157,14 +163,14 @@ function canAccessLead(user, lead) {
  * canAssignLeadTo(user, target)
  * target: { id, organizationId, managerId, isActive }
  *   admin   → any active user in the same organization
- *   manager → an active member of their own team (managerId = manager); not themselves
+ *   manager → themselves, or an active member of their own team (managerId = manager)
  *   others  → never
  */
 function canAssignLeadTo(user, target) {
   if (!user || !target || target.isActive === false) return false;
   if (target.organizationId !== user.organizationId) return false;
   if (ADMIN_ROLES.includes(user.role)) return true;
-  if (user.role === 'manager') return target.id !== user.id && target.managerId === user.id;
+  if (user.role === 'manager') return target.id === user.id || target.managerId === user.id;
   return false;
 }
 

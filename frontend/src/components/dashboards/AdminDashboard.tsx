@@ -3,7 +3,21 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { analyticsApi, usersApi } from "../../lib/api";
-import { Spinner } from "../../components/ui";
+import {
+  DashboardHeader,
+  DashboardSkeleton,
+  KpiCard,
+  SectionCard,
+  BarRow,
+  PersonAvatar,
+  ChartTooltip,
+  EmptyBlock,
+  FilterSelect,
+  chartTick,
+  chartGridStroke,
+  chartCursor,
+} from "./DashboardUI";
+import { useChartTheme } from "../../hooks/useChartTheme";
 import { useDashboardSSE } from "../../hooks/useDashboardRefresh";
 import { useUserRole } from "../../lib/rbac";
 import {
@@ -12,52 +26,24 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
 import {
   TrendingUp,
   TrendingDown,
   Users,
-  UserPlus,
-  Download,
-  Settings,
+  UserCheck,
+  CalendarRange,
+  Percent,
+  PieChart,
+  BarChart3,
+  Activity,
+  Briefcase,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-const AVATAR_COLORS = [
-  "bg-blue-500",
-  "bg-emerald-500",
-  "bg-amber-500",
-  "bg-violet-500",
-  "bg-red-500",
-  "bg-cyan-500",
-  "bg-pink-500",
-];
-
-function getAvatarColor(name: string) {
-  const hash = (name || "")
-    .split("")
-    .reduce((a, c) => a + c.charCodeAt(0), 0);
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-
-function Avatar({ name }: { name: string }) {
-  const initials = (name || "U")
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-  return (
-    <div
-      className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${getAvatarColor(name)}`}
-    >
-      {initials}
-    </div>
-  );
-}
 
 const ROLE_LABELS: Record<string, string> = {
   sales_user: "Lead exec",
@@ -72,20 +58,20 @@ const LEAD_TYPE_LABELS: Record<string, string> = {
   manual: "Manual entry",
 };
 
-const LEAD_TYPE_COLORS: Record<string, string> = {
-  position_discovery: "bg-blue-500",
-  product_discovery: "bg-emerald-500",
-  manual: "bg-amber-500",
+const LEAD_TYPE_COLORS: Record<string, "blue" | "violet" | "amber"> = {
+  position_discovery: "blue",
+  product_discovery: "violet",
+  manual: "amber",
 };
 
-const ACTIVITY_DOT_COLORS = [
-  "bg-blue-400",
-  "bg-emerald-400",
-  "bg-amber-400",
-  "bg-orange-400",
-  "bg-violet-400",
-  "bg-red-400",
-];
+// Timeline dot colour by audit action (presentation only)
+function activityDotClass(action: string) {
+  const a = (action || "").toLowerCase();
+  if (a.includes("creat") || a.includes("add")) return "bg-emerald-500 ring-emerald-500/20";
+  if (a.includes("assign")) return "bg-blue-500 ring-blue-500/20";
+  if (a.includes("delet") || a.includes("remov") || a.includes("fail")) return "bg-amber-500 ring-amber-500/20";
+  return "bg-violet-500 ring-violet-500/20";
+}
 
 function timeAgo(dateStr: string) {
   if (!dateStr) return "";
@@ -106,6 +92,7 @@ export function AdminDashboard() {
   const role = useUserRole();
   useDashboardSSE(role);
   const router = useRouter();
+  const ct = useChartTheme();
 
   const [selectedManagerId, setSelectedManagerId] = useState<string>("");
   const [selectedExecId, setSelectedExecId] = useState<string>("");
@@ -164,11 +151,7 @@ export function AdminDashboard() {
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Spinner size={24} />
-      </div>
-    );
+    return <DashboardSkeleton kpis={4} />;
   }
 
   // ── KPI derivations ──────────────────────────────────────────
@@ -240,292 +223,201 @@ export function AdminDashboard() {
       ? (((totalLeadsNum - leadsLastMonth) / leadsLastMonth) * 100).toFixed(1)
       : null;
 
+  const periodLabel =
+    selectedPeriod === "today" ? "Leads today" : selectedPeriod === "week" ? "Leads this week" : selectedPeriod === "quarter" ? "Leads this quarter" : "Leads this month";
+  const periodHint =
+    selectedPeriod === "today" ? "Since midnight" : selectedPeriod === "week" ? "Since Monday" : selectedPeriod === "quarter" ? "Current quarter" : "Since 1st";
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h1 className="page-title">Admin Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            View All Teams
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Period filter */}
-          <select
-            title="Filter by time period"
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="text-xs bg-slate-800 border border-white/10 text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
-          >
-            <option value="today">Today</option>
-            <option value="week">This week</option>
-            <option value="month">This month</option>
-            <option value="quarter">This quarter</option>
-          </select>
+      <DashboardHeader title="Admin Dashboard" subtitle="View All Teams">
+        {/* Period filter */}
+        <FilterSelect icon={CalendarRange} tone="blue"
+          title="Filter by time period"
+          value={selectedPeriod}
+          onChange={(e) => setSelectedPeriod(e.target.value)}
+        >
+          <option value="today">Today</option>
+          <option value="week">This week</option>
+          <option value="month">This month</option>
+          <option value="quarter">This quarter</option>
+        </FilterSelect>
 
-          {/* Manager dropdown */}
-          <select
-            title="Filter by sales manager"
-            value={selectedManagerId}
-            onChange={(e) => {
-              setSelectedManagerId(e.target.value);
-              setSelectedExecId("");
-            }}
-            className="text-xs bg-slate-800 border border-white/10 text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
-          >
-            <option value="">All sales managers</option>
-            {managers.map((m: any) => (
-              <option key={m.id} value={m.id}>
-                {m.name || m.email}
-              </option>
-            ))}
-          </select>
-
-          {/* Executive dropdown — disabled until manager is selected */}
-          <select
-            title={selectedManagerId ? "Filter by executive" : "Select a manager first"}
-            value={selectedExecId}
-            onChange={(e) => setSelectedExecId(e.target.value)}
-            disabled={!selectedManagerId}
-            className={`text-xs bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500 transition-opacity ${
-              selectedManagerId
-                ? "text-slate-300 cursor-pointer opacity-100"
-                : "text-slate-500 cursor-not-allowed opacity-50"
-            }`}
-          >
-            <option value="">
-              {selectedManagerId ? "All executives" : "Select manager first"}
+        {/* Manager dropdown */}
+        <FilterSelect icon={Briefcase} tone="violet"
+          title="Filter by sales manager"
+          value={selectedManagerId}
+          onChange={(e) => {
+            setSelectedManagerId(e.target.value);
+            setSelectedExecId("");
+          }}
+        >
+          <option value="">All sales managers</option>
+          {managers.map((m: any) => (
+            <option key={m.id} value={m.id}>
+              {m.name || m.email}
             </option>
-            {executives.map((e: any) => (
-              <option key={e.id} value={e.id}>
-                {e.name || e.email}
-              </option>
-            ))}
-          </select>
+          ))}
+        </FilterSelect>
 
-          {/* <span className="text-xs bg-violet-500/10 border border-violet-500/20 text-violet-400 px-3 py-1 rounded-full font-medium">
-            Admin
-          </span> */}
-        </div>
-      </div>
+        {/* Executive dropdown — disabled until manager is selected */}
+        <FilterSelect icon={UserCheck} tone="emerald"
+          title={selectedManagerId ? "Filter by executive" : "Select a manager first"}
+          value={selectedExecId}
+          onChange={(e) => setSelectedExecId(e.target.value)}
+          disabled={!selectedManagerId}
+        >
+          <option value="">
+            {selectedManagerId ? "All executives" : "Select manager first"}
+          </option>
+          {executives.map((e: any) => (
+            <option key={e.id} value={e.id}>
+              {e.name || e.email}
+            </option>
+          ))}
+        </FilterSelect>
+      </DashboardHeader>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="card p-5">
-          <p className="text-xs text-slate-500 mb-1">Total leads</p>
-          <p className="text-2xl font-bold text-slate-100">
-            {totalLeads.toLocaleString()}
-          </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={Users} tone="blue" label="Total leads" value={totalLeads.toLocaleString()}>
           {monthGrowth !== null ? (
-            <p className={`text-xs mt-1 flex items-center gap-1 ${Number(monthGrowth) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {Number(monthGrowth) >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-              {Number(monthGrowth) >= 0 ? "+" : ""}{monthGrowth}% vs last month
-            </p>
+            <span className={`inline-flex items-center gap-1 font-medium ${Number(monthGrowth) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+              {Number(monthGrowth) >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+              {Number(monthGrowth) >= 0 ? "+" : ""}{monthGrowth}%
+              <span className="font-normal text-ink-3">vs last month</span>
+            </span>
           ) : (
-            <p className="text-xs text-slate-500 mt-1">All time total</p>
+            "All time total"
           )}
-        </div>
-        <div className="card p-5">
-          <p className="text-xs text-slate-500 mb-1">Active users</p>
-          <p className="text-2xl font-bold text-slate-100">{activeUsers}</p>
-          <p className="text-xs text-slate-500 mt-1">
-            {managerCount} sales mgrs · {execCount} execs
-          </p>
-        </div>
-        <div className="card p-5">
-          <p className="text-xs text-slate-500 mb-1">
-            {selectedPeriod === "today" ? "Leads today" : selectedPeriod === "week" ? "Leads this week" : selectedPeriod === "quarter" ? "Leads this quarter" : "Leads this month"}
-          </p>
-          <p className="text-2xl font-bold text-slate-100">{leadsThisWeek}</p>
-          <p className="text-xs text-slate-500 mt-1">
-            {selectedPeriod === "today" ? "Since midnight" : selectedPeriod === "week" ? "Since Monday" : selectedPeriod === "quarter" ? "Current quarter" : "Since 1st"}
-          </p>
-        </div>
-        <div className="card p-5">
-          <p className="text-xs text-slate-500 mb-1">Conversion rate</p>
-          <p className="text-2xl font-bold text-slate-100">{avgConvRate}%</p>
-          <p className="text-xs text-slate-500 mt-1">
-            {convList.length} exec{convList.length !== 1 ? "s" : ""} tracked
-          </p>
-        </div>
+        </KpiCard>
+        <KpiCard icon={UserCheck} tone="indigo" label="Active users" value={activeUsers}>
+          {managerCount} sales mgrs · {execCount} execs
+        </KpiCard>
+        <KpiCard icon={CalendarRange} tone="violet" label={periodLabel} value={leadsThisWeek}>
+          {periodHint}
+        </KpiCard>
+        <KpiCard icon={Percent} tone="emerald" label="Conversion rate" value={`${avgConvRate}%`}>
+          {convList.length} exec{convList.length !== 1 ? "s" : ""} tracked
+        </KpiCard>
       </div>
 
       {/* Middle Row: Lead source breakdown + Leads over time */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Lead source breakdown */}
-        <div className="card p-5">
-          <h2 className="section-title mb-5">Lead source breakdown</h2>
+        <SectionCard title="Lead source breakdown" icon={PieChart} tone="violet">
           {sourceBreakdown.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">No data</p>
+            <EmptyBlock icon={PieChart} message="No data" />
           ) : (
-            <div className="overflow-y-auto max-h-[200px] pr-1 space-y-5 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+            <div className="overflow-y-auto max-h-[200px] pr-1 space-y-5">
               {sourceBreakdown.map((s) => (
-                <div key={s.type}>
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-slate-300">
-                      {LEAD_TYPE_LABELS[s.type] ?? s.type}
-                    </span>
-                    <span className="text-slate-400 font-semibold">
-                      {s.count.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ease-out ${LEAD_TYPE_COLORS[s.type] ?? "bg-blue-500"}`}
-                      style={{ width: `${(s.count / maxSource) * 100}%` }}
-                    />
-                  </div>
-                </div>
+                <BarRow
+                  key={s.type}
+                  label={LEAD_TYPE_LABELS[s.type] ?? s.type}
+                  count={s.count.toLocaleString()}
+                  pct={(s.count / maxSource) * 100}
+                  tone={LEAD_TYPE_COLORS[s.type] ?? "blue"}
+                />
               ))}
             </div>
           )}
-        </div>
+        </SectionCard>
 
-        {/* Leads over time */}
-        <div className="card p-5 flex flex-col">
-          <h2 className="section-title mb-4">Leads over time</h2>
+        <SectionCard title="Leads over time" icon={BarChart3} tone="blue">
           {leadsOverTime.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-10">No data</p>
+            <EmptyBlock icon={BarChart3} message="No data" />
           ) : (
             <div className="mt-auto">
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart
-                data={leadsOverTime}
-                margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
-              >
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 10, fill: "#64748b" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: "#64748b" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  content={({ active, payload, label }: any) =>
-                    active && payload?.length ? (
-                      <div className="bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs shadow-xl">
-                        <span className="text-slate-400">{label}: </span>
-                        <span className="text-blue-400 font-semibold">
-                          {payload[0].value}
-                        </span>
-                      </div>
-                    ) : null
-                  }
-                />
-                <Bar dataKey="count" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart
+                  data={leadsOverTime}
+                  margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="adminLeadsBar" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={ct.series[1]} />
+                      <stop offset="100%" stopColor={ct.series[0]} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} stroke={ct.grid} />
+                  <XAxis dataKey="month" tick={ct.tick} axisLine={false} tickLine={false} />
+                  <YAxis tick={ct.tick} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={ct.cursor} content={<ChartTooltip />} />
+                  <Bar dataKey="count" fill="url(#adminLeadsBar)" radius={[6, 6, 0, 0]} maxBarSize={36} animationDuration={500} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )}
-        </div>
+        </SectionCard>
       </div>
 
       {/* Lower Row: Team overview + Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Team overview */}
-        <div className="card p-5">
-          <h2 className="section-title mb-4">Team overview</h2>
+        <SectionCard title="Team overview" icon={Users} tone="emerald">
           {displayedTeamUsers.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">
-              No team data
-            </p>
+            <EmptyBlock icon={Users} message="No team data" />
           ) : (
-            <div className="overflow-y-auto max-h-[200px] pr-1 space-y-3 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+            <div className="overflow-y-auto max-h-[220px] -mx-2 pr-1">
               {displayedTeamUsers.map((user: any) => (
-                <div key={user.id} className="flex items-center gap-3">
-                  <Avatar name={user.name || user.email || "U"} />
+                <div key={user.id} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-gradient-to-r hover:from-emerald-50 hover:to-transparent dark:hover:from-emerald-500/[0.08] transition-colors duration-150">
+                  <PersonAvatar name={user.name || user.email || "U"} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-200 truncate">
+                    <p className="text-[13px] font-medium text-ink truncate">
                       {user.name || user.email}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-ink-3">
                       {ROLE_LABELS[user.role] ?? user.role}
                     </p>
                   </div>
                   <span
-                    className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
+                    className={`inline-flex items-center gap-1.5 text-xs font-medium ${
                       user.isActive
-                        ? "bg-green-500/15 text-green-400 border-green-500/25"
-                        : "bg-slate-500/15 text-slate-400 border-slate-500/25"
+                        ? "px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20"
+                        : "px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-1 ring-rose-500/20"
                     }`}
                   >
+                    <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? "bg-emerald-500" : "bg-rose-500"}`} />
                     {user.isActive ? "Active" : "Inactive"}
                   </span>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </SectionCard>
 
-        {/* Recent system activity */}
-        <div className="card p-5">
-          <h2 className="section-title mb-4">Recent system activity</h2>
+        <SectionCard title="Recent system activity" icon={Activity} tone="amber">
           {auditLogs.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">
-              No recent activity
-            </p>
+            <EmptyBlock icon={Activity} message="No recent activity" />
           ) : (
-            <div className="overflow-y-auto max-h-[200px] pr-1 space-y-4 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-              {auditLogs.map((log: any, i: number) => (
-                <div key={log.id || i} className="flex items-start gap-3">
-                  <div
-                    className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${ACTIVITY_DOT_COLORS[i % ACTIVITY_DOT_COLORS.length]}`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      <span className="font-medium">
-                        {log.changedBy?.name ?? "System"}
-                      </span>{" "}
-                      {(log.action ?? "")
-                        .toLowerCase()
-                        .replace(/_/g, " ")}{" "}
-                      {(log.entityType ?? "").toLowerCase()}
-                    </p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">
-                      {timeAgo(log.changedAt ?? log.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-y-auto max-h-[220px] pr-1">
+              <ol className="relative">
+                {auditLogs.map((log: any, i: number) => (
+                  <li key={log.id || i} className="relative flex gap-3 pb-4 last:pb-0">
+                    {i < auditLogs.length - 1 && (
+                      <span className="absolute left-[3.5px] top-3 bottom-0 w-px bg-slate-200 dark:bg-slate-400/[0.15]" />
+                    )}
+                    <span className={`relative mt-1.5 w-2 h-2 rounded-full ring-4 flex-shrink-0 ${activityDotClass(log.action)}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-ink-2 leading-snug">
+                        <span className="font-medium text-ink">
+                          {log.changedBy?.name ?? "System"}
+                        </span>{" "}
+                        {(log.action ?? "")
+                          .toLowerCase()
+                          .replace(/_/g, " ")}{" "}
+                        {(log.entityType ?? "").toLowerCase()}
+                      </p>
+                      <p className="text-[11px] text-ink-3 mt-0.5">
+                        {timeAgo(log.changedAt ?? log.createdAt)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
-        </div>
+        </SectionCard>
       </div>
-
-      {/* Actions Bar */}
-      {/* <div className="card p-4">
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => router.push("/dashboard/team")}
-            className="btn-ghost text-sm"
-          >
-            <UserPlus size={14} /> Add user
-          </button>
-          <button
-            onClick={() => router.push("/dashboard/settings?tab=roles")}
-            className="btn-ghost text-sm"
-          >
-            <Users size={14} /> Manage roles
-          </button>
-          <button
-            onClick={() => router.push("/dashboard/leads?export=1")}
-            className="btn-ghost text-sm"
-          >
-            <Download size={14} /> Export data
-          </button>
-          <button
-            onClick={() => router.push("/dashboard/settings")}
-            className="btn-ghost text-sm"
-          >
-            <Settings size={14} /> System settings
-          </button>
-        </div>
-      </div> */}
     </div>
   );
 }

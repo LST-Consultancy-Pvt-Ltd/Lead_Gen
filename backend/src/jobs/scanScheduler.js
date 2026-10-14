@@ -4,6 +4,7 @@ const logger = require('../utils/logger');
 const { runDiscoveryScan } = require('../services/discoveryService');
 const { analyzeLeadIntent } = require('../services/aiService');
 const { createBulkNotifications } = require('../utils/notificationService');
+const { checkLeadQuota, incrementLeadUsage } = require('../utils/leadQuota');
 
 // ── Follow-up Alert ──────────────────────────────────────────────────────────
 // Rule: Follow-up date passes with no activity logged →
@@ -72,7 +73,7 @@ async function checkFollowUpAlerts() {
 
 // ── Stuck Deal Alert ─────────────────────────────────────────────────────────
 // Rule: Opportunity in same stage for N days (configurable via org.settings.stuckDealDays) →
-//       notify sales owner + managers in the org
+//       notify sales owner + the owner's manager + org admins
 async function checkStuckDeals() {
   logger.info('[Scheduler] Running stuck deal alert check');
   try {
@@ -105,21 +106,22 @@ async function checkStuckDeals() {
           updatedAt: true,
           assignedToId: true,
           organizationId: true,
+          assignedTo: { select: { managerId: true } },
         },
       });
 
       if (!stuckOpps.length) continue;
 
-      // Collect manager IDs in this org
-      const managers = await prisma.user.findMany({
+      // Collect admin IDs in this org
+      const admins = await prisma.user.findMany({
         where: {
           organizationId: org.id,
-          role: { in: ['manager', 'org_admin'] },
+          role: 'org_admin',
           isActive: true,
         },
         select: { id: true },
       });
-      const managerIds = managers.map((m) => m.id);
+      const adminIds = admins.map((m) => m.id);
 
       const notifications = [];
       for (const opp of stuckOpps) {
@@ -138,11 +140,12 @@ async function checkStuckDeals() {
         // Notify the sales owner
         notifications.push({ ...base, userId: opp.assignedToId });
 
-        // Notify all managers (avoid duplicate if manager is also the owner)
-        for (const managerId of managerIds) {
-          if (managerId !== opp.assignedToId) {
-            notifications.push({ ...base, userId: managerId });
-          }
+        // Notify the owner's own manager and the org admins (duplicates are dropped by the helper)
+        if (opp.assignedTo?.managerId) {
+          notifications.push({ ...base, userId: opp.assignedTo.managerId });
+        }
+        for (const adminId of adminIds) {
+          notifications.push({ ...base, userId: adminId });
         }
       }
 
@@ -185,15 +188,24 @@ function startScheduler() {
             await prisma.scanJob.update({ where: { id: job.id }, data: { progress } });
           });
 
+          let saved = 0;
           for (const item of discovered) {
             const existing = await prisma.lead.findFirst({
               where: { organizationId: org.id, companyName: { equals: item.companyName, mode: 'insensitive' } },
             });
             if (existing) continue;
 
+            // Scheduled scans are Lead Discovery too: they use (and respect) the lead quota
+            const quota = await checkLeadQuota(org.id);
+            if (!quota.allowed) {
+              logger.info(`Scheduled scan: lead quota reached for org ${org.name}, remaining results skipped`, { quota: quota.quota, used: quota.used });
+              break;
+            }
+
             const analysis = await analyzeLeadIntent(item, services);
             await prisma.lead.create({
               data: {
+                scanJobId: job.id, // marks it as a Lead Discovery lead (quota is released if it is deleted)
                 organizationId: org.id,
                 companyName: item.companyName,
                 website: item.website,
@@ -205,6 +217,8 @@ function startScheduler() {
                 sourceUrl: item.sourceUrl,
               },
             });
+            await incrementLeadUsage(org.id);
+            saved++;
           }
 
           await prisma.scanJob.update({
@@ -212,7 +226,7 @@ function startScheduler() {
             data: { status: 'completed', progress: 100, leadsFound: discovered.length, completedAt: new Date() },
           });
 
-          logger.info(`Scheduled scan complete for org ${org.name}`, { leadsFound: discovered.length });
+          logger.info(`Scheduled scan complete for org ${org.name}`, { leadsFound: discovered.length, saved });
         } catch (err) {
           await prisma.scanJob.update({ where: { id: job.id }, data: { status: 'failed', error: err.message } });
           logger.error(`Scheduled scan failed for org ${org.name}`, { err: err.message });

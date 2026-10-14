@@ -3,7 +3,10 @@
  * Non-throwing notification helpers. Failures never crash the caller.
  */
 
-async function createNotification(prisma, { userId, organizationId, type, title, message, entityType, entityId }) {
+// `actorId` (optional) is the user who performed the action — they never get a
+// notification about their own action.
+async function createNotification(prisma, { userId, organizationId, type, title, message, entityType, entityId, actorId }) {
+  if (!userId || (actorId && userId === actorId)) return;
   try {
     await prisma.notification.create({
       data: {
@@ -21,10 +24,20 @@ async function createNotification(prisma, { userId, organizationId, type, title,
   }
 }
 
-async function createBulkNotifications(prisma, notifications) {
+async function createBulkNotifications(prisma, notifications, { actorId } = {}) {
+  // Drop self-notifications and duplicate recipients for the same entity
+  const seen = new Set();
+  const list = notifications.filter((n) => {
+    if (!n.userId || (actorId && n.userId === actorId)) return false;
+    const key = `${n.userId}|${n.type}|${n.entityId || ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (!list.length) return;
   try {
     await prisma.notification.createMany({
-      data: notifications.map((n) => ({
+      data: list.map((n) => ({
         userId: n.userId,
         organizationId: n.organizationId,
         type: n.type,

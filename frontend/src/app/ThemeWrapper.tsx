@@ -1,37 +1,25 @@
 'use client';
 import { useEffect } from 'react';
 import { useThemeStore } from '../store/themeStore';
+import { useAuthStore } from '../store/authStore';
+import { applyThemeToDocument } from '../lib/themes';
 
+// Keeps <html> in sync with the selected theme and switches to the signed-in
+// user's own theme on login. The initial theme is applied before paint by
+// THEME_BOOT_SCRIPT in the root layout; this handles changes.
 export function ThemeWrapper({ children }: { children: React.ReactNode }) {
   const theme = useThemeStore((s) => s.theme);
+  const activateUser = useThemeStore((s) => s.activateUser);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const authHydrated = useAuthStore((s) => s._hasHydrated);
 
   useEffect(() => {
-    const root = document.documentElement;
-
-    function applyTheme(mode: 'light' | 'dark') {
-      if (mode === 'dark') {
-        root.classList.add('dark');
-        root.classList.remove('light');
-        document.body.style.background = '#060b18';
-        document.body.style.color = '#e2e8f0';
-      } else {
-        root.classList.add('light');
-        root.classList.remove('dark');
-        document.body.style.background = '#f8fafc';
-        document.body.style.color = '#1e293b';
-      }
-    }
-
-    if (theme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      applyTheme(mq.matches ? 'dark' : 'light');
-      const handler = (e: MediaQueryListEvent) => applyTheme(e.matches ? 'dark' : 'light');
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
-    } else {
-      applyTheme(theme);
-    }
+    applyThemeToDocument(theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (authHydrated) activateUser(userId);
+  }, [authHydrated, userId, activateUser]);
 
   return <>{children}</>;
 }

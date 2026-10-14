@@ -121,6 +121,8 @@ async function validateExcelFile(buffer) {
       continue;
     }
 
+    // Real spreadsheet row number, so error messages point at the right row
+    Object.defineProperty(record, '__row', { value: rowNum, enumerable: false });
     records.push(record);
   }
 

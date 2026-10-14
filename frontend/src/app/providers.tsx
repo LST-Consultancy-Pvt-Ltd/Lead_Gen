@@ -2,30 +2,21 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'react-hot-toast';
-import { useState, useEffect } from 'react';
-import { useThemeStore } from '../store/themeStore';
+import { useState } from 'react';
 
+// Toasts read the active theme's tokens directly, so they follow every theme.
 function ThemedToaster() {
-  const theme = useThemeStore((s) => s.theme);
-  const [isDark, setIsDark] = useState(true);
-
-  useEffect(() => {
-    if (theme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      setIsDark(mq.matches);
-      const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
-    } else {
-      setIsDark(theme === 'dark');
-    }
-  }, [theme]);
-
   return (
     <Toaster position="top-right" toastOptions={{
-      style: isDark
-        ? { background: '#0d1628', color: '#e2e8f0', border: '1px solid rgba(255,255,255,.1)' }
-        : { background: '#ffffff', color: '#1e293b', border: '1px solid #e2e8f0' },
+      style: {
+        background: 'rgb(var(--surface))',
+        color: 'rgb(var(--ink))',
+        border: '1px solid rgb(var(--line))',
+        borderRadius: '12px',
+        fontSize: '13px',
+        fontWeight: 500,
+        boxShadow: '0 12px 32px -12px rgba(0,0,0,0.35)',
+      },
     }} />
   );
 }

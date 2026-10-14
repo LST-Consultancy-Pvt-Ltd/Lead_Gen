@@ -1,8 +1,29 @@
 "use client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { analyticsApi } from "../../../lib/api";
-import { StatCard, ProgressBar, Spinner } from "../../../components/ui";
-import { Users, Mail, TrendingUp, Calendar, RefreshCw } from "lucide-react";
+import { Spinner } from "../../../components/ui";
+import { PageHero } from "../../../components/ui/PageHero";
+import {
+  KpiCard,
+  SectionCard,
+  BarRow,
+  EmptyBlock,
+  ChartTooltip,
+  chartTick,
+  chartGridStroke,
+  chartCursor,
+} from "../../../components/dashboards/DashboardUI";
+import { useChartTheme } from "../../../hooks/useChartTheme";
+import {
+  Users,
+  Mail,
+  TrendingUp,
+  Calendar,
+  RefreshCw,
+  BarChart3,
+  Radar,
+  Gauge,
+} from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -13,18 +34,9 @@ import {
   CartesianGrid,
 } from "recharts";
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs">
-      <p className="text-slate-400 mb-1">{label}</p>
-      <p className="font-bold text-blue-300">{payload[0].value} leads</p>
-    </div>
-  );
-};
-
 export default function AnalyticsPage() {
   const queryClient = useQueryClient();
+  const ct = useChartTheme();
 
   const refetchOptions = {
     staleTime: 0,
@@ -69,152 +81,166 @@ export default function AnalyticsPage() {
     );
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="page-title">Analytics</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            AI-powered sales performance insights
-          </p>
-        </div>
+    <div className="space-y-6">
+      <PageHero
+        icon={BarChart3}
+        eyebrow="Insights"
+        title="Analytics"
+        subtitle="AI-powered sales performance insights"
+      >
         <button
           onClick={handleRefresh}
-          className="btn-ghost p-2"
+          className="inline-flex items-center gap-2 h-10 px-3.5 rounded-xl text-sm font-medium text-white bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20 transition-all"
           title="Refresh analytics"
         >
           <RefreshCw
             size={15}
             className={overviewFetching ? "animate-spin" : ""}
           />
+          Refresh
         </button>
-      </div>
+      </PageHero>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <KpiCard
+          icon={Users}
+          tone="blue"
           label="Total Leads"
           value={overview?.totalLeads?.toLocaleString() ?? "—"}
-          delta={`+${overview?.leadsToday ?? 0} today`}
-          icon={Users}
-        />
-        <StatCard
+        >
+          {`+${overview?.leadsToday ?? 0} today`}
+        </KpiCard>
+        <KpiCard
+          icon={Mail}
+          tone="violet"
           label="Emails Sent"
           value={overview?.emailsSent?.toLocaleString() ?? "—"}
-          delta={
-            overview?.emailsToday != null
-              ? `+${overview.emailsToday} today`
-              : undefined
-          }
-          icon={Mail}
-        />
-        <StatCard
+        >
+          {overview?.emailsToday != null
+            ? `+${overview.emailsToday} today`
+            : undefined}
+        </KpiCard>
+        <KpiCard
+          icon={TrendingUp}
+          tone="emerald"
           label="Reply Rate"
           value={
             overview?.replyRate != null ? `${overview.replyRate}%` : "0.0%"
           }
-          delta={
-            overview?.replyRateChange != null
-              ? `${overview.replyRateChange >= 0 ? "↑" : "↓"} this week`
-              : "↑ this week"
-          }
-          icon={TrendingUp}
-        />
-        <StatCard
+        >
+          {overview?.replyRateChange != null
+            ? `${overview.replyRateChange >= 0 ? "↑" : "↓"} this week`
+            : "↑ this week"}
+        </KpiCard>
+        <KpiCard
+          icon={Calendar}
+          tone="amber"
           label="Meetings Booked"
           value={overview?.meetingsBooked ?? "—"}
-          delta={`+${overview?.meetingsToday ?? 0} today`}
-          icon={Calendar}
-        />
+        >
+          {`+${overview?.meetingsToday ?? 0} today`}
+        </KpiCard>
       </div>
 
       {/* Bar Chart */}
-      <div className="card p-6">
-        <h2 className="section-title mb-6">Leads Discovered (Monthly)</h2>
+      <SectionCard
+        title="Leads Discovered (Monthly)"
+        subtitle="New leads added per month"
+        icon={BarChart3}
+        tone="blue"
+      >
         {monthlyData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={240}>
             <BarChart data={monthlyData} barCategoryGap="30%">
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="rgba(100,116,139,0.15)"
+                stroke={ct.grid}
+                vertical={false}
               />
               <XAxis
                 dataKey="month"
-                tick={{ fill: "#475569", fontSize: 11 }}
+                tick={ct.tick}
                 axisLine={false}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fill: "#475569", fontSize: 11 }}
+                tick={ct.tick}
                 axisLine={false}
                 tickLine={false}
               />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="count" fill="url(#barGrad)" radius={[4, 4, 0, 0]} />
+              <Tooltip content={<ChartTooltip suffix=" leads" />} cursor={ct.cursor} />
+              <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
               <defs>
                 <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2563eb" />
-                  <stop offset="100%" stopColor="#06b6d4" />
+                  <stop offset="0%" stopColor={ct.series[1]} />
+                  <stop offset="100%" stopColor={ct.series[0]} />
                 </linearGradient>
               </defs>
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className="h-40 flex items-center justify-center text-slate-600 text-sm">
-            No data yet — run scans to populate analytics
-          </div>
+          <EmptyBlock
+            icon={BarChart3}
+            message="No data yet — run scans to populate analytics"
+            className="h-40"
+          />
         )}
-      </div>
+      </SectionCard>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card p-5">
-          <h2 className="section-title mb-4">Lead Quality Distribution</h2>
-          <div className="space-y-4">
+        <SectionCard
+          title="Lead Quality Distribution"
+          subtitle="Share of total leads by temperature"
+          icon={Gauge}
+          tone="amber"
+        >
+          <div className="space-y-5">
             {[
-              { label: "🔥 Hot Leads", key: "hot", color: "amber" },
-              { label: "🟡 Warm Leads", key: "warm", color: "amber" },
-              { label: "❄️ Cold Leads", key: "cold", color: "blue" },
+              { label: "Hot Leads", key: "hot", color: "rose" as const },
+              { label: "Warm Leads", key: "warm", color: "amber" as const },
+              { label: "Cold Leads", key: "cold", color: "cyan" as const },
             ].map(({ label, key, color }) => {
               const total = overview?.totalLeads ?? 0;
               const count = overview?.[`${key}Leads`] ?? 0;
               const pct = total > 0 ? Math.round((count / total) * 100) : 0;
               return (
-                <div key={key}>
-                  <div className="flex justify-between mb-1.5 text-xs">
-                    <span className="text-slate-400">{label}</span>
-                    <span className="font-semibold text-slate-600 dark:text-slate-300">{pct}%</span>
-                  </div>
-                  <ProgressBar value={pct} color={color as any} />
-                </div>
+                <BarRow
+                  key={key}
+                  label={label}
+                  count={`${pct}%`}
+                  pct={pct}
+                  tone={color}
+                />
               );
             })}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="card p-5">
-          <h2 className="section-title mb-4">Top Signal Sources</h2>
+        <SectionCard
+          title="Top Signal Sources"
+          subtitle="Where your leads come from"
+          icon={Radar}
+          tone="violet"
+        >
           {sourcesData.length > 0 ? (
-            <div className="space-y-4">
-              {sourcesData.slice(0, 5).map((s: any) => (
-                <div key={s.source}>
-                  <div className="flex justify-between mb-1.5 text-xs">
-                    <span className="text-slate-400">{s.source}</span>
-                    <span className="font-semibold text-slate-600 dark:text-slate-300">
-                      {s.count}
-                    </span>
-                  </div>
-                  <ProgressBar
-                    value={s.count}
-                    max={sourcesData[0]?.count ?? 1}
-                    color="blue"
+            <div className="space-y-5">
+              {sourcesData.slice(0, 5).map((s: any) => {
+                const max = sourcesData[0]?.count ?? 1;
+                return (
+                  <BarRow
+                    key={s.source}
+                    label={s.source}
+                    count={s.count}
+                    pct={max > 0 ? (s.count / max) * 100 : 0}
+                    tone="violet"
                   />
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <p className="text-xs text-slate-600 text-center py-6">
-              No source data yet
-            </p>
+            <EmptyBlock icon={Radar} message="No source data yet" />
           )}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );

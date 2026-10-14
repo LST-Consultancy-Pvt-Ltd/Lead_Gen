@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { activitiesApi } from "../../lib/api";
+import { readableActivityText } from "../../lib/activityText";
 import { Spinner, Avatar } from "../ui";
 import {
   Phone,
@@ -26,6 +27,7 @@ import toast from "react-hot-toast";
 import type { Activity } from "../../lib/types";
 import { usePermissions } from "../../lib/rbac";
 import { useAuthStore } from "../../store/authStore";
+import { Select } from '../ui/Select';
 
 interface ActivitiesListProps {
   leadId?: string;
@@ -55,13 +57,13 @@ const activityIcons: Record<string, any> = {
 };
 
 const activityColors: Record<string, string> = {
-  call: "text-blue-400 bg-blue-500/10",
-  meeting: "text-purple-400 bg-purple-500/10",
+  call: "text-blue-600 dark:text-blue-400 bg-blue-500/10",
+  meeting: "text-purple-600 dark:text-purple-400 bg-purple-500/10",
   note: "text-slate-400 bg-slate-700/40",
-  email: "text-amber-400 bg-amber-500/10",
-  whatsapp: "text-emerald-400 bg-emerald-500/10",
-  follow_up: "text-orange-400 bg-orange-500/10",
-  demo: "text-violet-400 bg-violet-500/10",
+  email: "text-amber-600 dark:text-amber-400 bg-amber-500/10",
+  whatsapp: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10",
+  follow_up: "text-orange-600 dark:text-orange-400 bg-orange-500/10",
+  demo: "text-violet-600 dark:text-violet-400 bg-violet-500/10",
   linkedin: "text-blue-500 bg-blue-500/10",
 };
 
@@ -88,7 +90,7 @@ const emptyForm = (leadId?: string, opportunityId?: string) => ({
 
 export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
   const queryClient = useQueryClient();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, isSalesUser } = usePermissions();
   const currentUser = useAuthStore((s) => s.user);
 
   const [isAdding, setIsAdding] = useState(false);
@@ -120,6 +122,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
     onSuccess: () => {
       toast.success("Activity added!");
       queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["activities-stats"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       setIsAdding(false);
       setForm(emptyForm(leadId, opportunityId));
@@ -133,6 +136,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
     onSuccess: () => {
       toast.success("Activity updated");
       queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["activities-stats"] });
       setEditingId(null);
     },
     onError: (e: any) =>
@@ -144,6 +148,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
     onSuccess: () => {
       toast.success("Activity deleted");
       queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["activities-stats"] });
       setDeletingId(null);
     },
     onError: (e: any) =>
@@ -209,7 +214,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-800 dark:text-slate-200">
+        <h3 className="font-semibold text-ink dark:text-slate-200">
           Activity Timeline
         </h3>
         {!isAdding && (
@@ -230,7 +235,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
           className="rounded-xl border border-blue-500/20 bg-blue-500/[0.03] p-4 space-y-3"
         >
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+            <p className="text-xs font-semibold text-ink-2 dark:text-slate-300">
               Log Activity
             </p>
             <button
@@ -257,7 +262,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
             </div>
             <div>
               <label className="label text-xs">Activity Type</label>
-              <select
+              <Select
                 value={form.type}
                 onChange={(e) => field("type", e.target.value)}
                 className="input h-9 text-xs"
@@ -267,7 +272,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                     {t.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -275,7 +280,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label text-xs">
-                Next Action Date <span className="text-red-400">*</span>
+                Next Action Date <span className="text-rose-600 dark:text-rose-400">*</span>
               </label>
               <input
                 type="date"
@@ -288,7 +293,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
               />
             </div>
             <div>
-              <label className="label text-xs">Activity Date <span className="text-red-400">*</span></label>
+              <label className="label text-xs">Activity Date <span className="text-rose-600 dark:text-rose-400">*</span></label>
               <input
                 type="date"
                 className="input h-9 text-xs"
@@ -302,7 +307,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
 
           {/* Row 2: Outcome */}
           <div>
-            <label className="label text-xs">Outcome <span className="text-red-400">*</span></label>
+            <label className="label text-xs">Outcome <span className="text-rose-600 dark:text-rose-400">*</span></label>
             <input
               type="text"
               value={form.outcome}
@@ -314,7 +319,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
 
           {/* Row 3: Notes / Description */}
           <div>
-            <label className="label text-xs">Notes/Description <span className="text-red-400">*</span></label>
+            <label className="label text-xs">Notes/Description <span className="text-rose-600 dark:text-rose-400">*</span></label>
             <textarea
               value={form.description}
               onChange={(e) => field("description", e.target.value)}
@@ -352,7 +357,7 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
       ) : activities.length === 0 ? (
         <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] p-8 text-center">
           <Clock size={28} className="mx-auto mb-2 text-slate-400" />
-          <p className="text-sm text-slate-500">No activities yet</p>
+          <p className="text-sm text-ink-3">No activities yet</p>
           {!isAdding && (
             <button
               onClick={() => { setIsAdding(true); setForm(emptyForm(leadId, opportunityId)); setFormKey(k => k + 1); }}
@@ -366,8 +371,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
         // Show ~7 rows; anything beyond scrolls inside the table (header stays visible)
         <div className={`overflow-x-auto rounded-xl border border-slate-200 dark:border-white/[0.06] ${activities.length > 7 ? 'max-h-[19rem] overflow-y-auto' : ''}`}>
           <table className="w-full text-xs border-collapse">
-            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900">
-              <tr className="border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-slate-800/30">
+            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-surface">
+              <tr className="border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.04]">
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Type</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Date</th>
                 <th className="text-left py-2.5 px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Duration</th>
@@ -406,23 +411,26 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 ── end old inline code ── */
 
                 return (
-                  <tr key={activity.id} className="border-b border-slate-100 dark:border-white/[0.04] hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors last:border-0">
+                  <tr key={activity.id} className="border-b border-slate-100 dark:border-white/[0.04] hover:bg-slate-50 dark:hover:bg-white/[0.05] transition-colors last:border-0">
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-800 dark:text-slate-200 capitalize whitespace-nowrap">{activity.action?.replace(/_/g, " ")}</span>
+                        <span className="font-medium text-ink dark:text-slate-200 capitalize whitespace-nowrap">{activity.action?.replace(/_/g, " ")}</span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.activityDate ? new Date(activity.activityDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
-                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.duration != null ? `${activity.duration} mins` : '—'}</td>
-                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{activity.nextActionDate ? new Date(activity.nextActionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
-                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-ink-3 whitespace-nowrap">{activity.activityDate ? new Date(activity.activityDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                    <td className="py-2.5 px-3 text-ink-3 whitespace-nowrap">{activity.duration != null ? `${activity.duration} mins` : '—'}</td>
+                    <td className="py-2.5 px-3 text-ink-3 whitespace-nowrap">{activity.nextActionDate ? new Date(activity.nextActionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                    <td className="py-2.5 px-3 text-ink-2 dark:text-slate-300 whitespace-nowrap">
                       {activity.outcome
                         ? <span title={activity.outcome}>{activity.outcome.length > 12 ? activity.outcome.slice(0, 12) + '…' : activity.outcome}</span>
                         : '—'}
                     </td>
-                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-ink-3 whitespace-nowrap">
                       {activity.description
-                        ? <span title={activity.description}>{activity.description.length > 12 ? activity.description.slice(0, 12) + '…' : activity.description}</span>
+                        ? (() => {
+                            const text = readableActivityText(activity.description);
+                            return <span title={text}>{text.length > 12 ? text.slice(0, 12) + '…' : text}</span>;
+                          })()
                         : '—'}
                     </td>
                     <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap">{timeAgo(activity.createdAt)}</td>
@@ -436,8 +444,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                             <Pencil size={12} />
                           </button>
                         )}
-                        {canEdit && (
-                          <button title="Delete" className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-colors" onClick={() => setDeletingId(activity.id)}>
+                        {canEdit && !isSalesUser && (
+                          <button title="Delete" className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-500/10 transition-colors" onClick={() => setDeletingId(activity.id)}>
                             <Trash2 size={12} />
                           </button>
                         )}
@@ -458,8 +466,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
         const ViewIcon = activityIcons[viewActivity.action] || FileText;
         const viewColorClass = activityColors[viewActivity.action] || activityColors.note;
         return createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto">
+            <div className="bg-white dark:bg-surface border border-line rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${viewColorClass}`}>
@@ -479,32 +487,32 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                   { label: 'Next Action',    value: viewActivity.nextActionDate ? new Date(viewActivity.nextActionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
                   { label: 'Logged',         value: timeAgo(viewActivity.createdAt) },
                 ].map(({ label, value }) => (
-                  <div key={label} className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-                    <p className="text-sm text-slate-800 dark:text-slate-200 capitalize break-words">{value || '—'}</p>
+                  <div key={label} className="bg-slate-50 dark:bg-white/[0.03] rounded-xl p-3">
+                    <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">{label}</p>
+                    <p className="text-sm text-ink dark:text-slate-200 capitalize break-words">{value || '—'}</p>
                   </div>
                 ))}
-                <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Outcome</p>
-                  <p className="text-sm text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap">{viewActivity.outcome || '—'}</p>
+                <div className="col-span-2 bg-slate-50 dark:bg-white/[0.03] rounded-xl p-3">
+                  <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Outcome</p>
+                  <p className="text-sm text-ink dark:text-slate-200 break-words whitespace-pre-wrap">{viewActivity.outcome || '—'}</p>
                 </div>
-                <div className="col-span-2 bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Notes / Description</p>
-                  <p className="text-sm text-slate-800 dark:text-slate-200 break-words whitespace-pre-wrap">{viewActivity.description || '—'}</p>
+                <div className="col-span-2 bg-slate-50 dark:bg-white/[0.03] rounded-xl p-3">
+                  <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Notes / Description</p>
+                  <p className="text-sm text-ink dark:text-slate-200 break-words whitespace-pre-wrap">{readableActivityText(viewActivity.description) || '—'}</p>
                 </div>
                 {viewActivity.createdBy?.name && (
-                  <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Created By</p>
+                  <div className="bg-slate-50 dark:bg-white/[0.03] rounded-xl p-3">
+                    <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Created By</p>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Avatar initials={getInitials(viewActivity.createdBy.name)} size="xs" />
-                      <p className="text-sm text-slate-800 dark:text-slate-200">{viewActivity.createdBy.name}</p>
+                      <p className="text-sm text-ink dark:text-slate-200">{viewActivity.createdBy.name}</p>
                     </div>
                   </div>
                 )}
               </div>
               <div className="mt-4">
                 <button
-                  className="w-full py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-center"
+                  className="w-full py-2.5 rounded-xl text-sm font-medium text-ink-2 bg-white/60 dark:bg-white/[0.05] backdrop-blur-sm border border-line hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-center"
                   onClick={() => setViewingId(null)}
                 >
                   Close
@@ -517,8 +525,8 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
 
       {/* ── Activity Edit Modal ── */}
       {mounted && editingId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto">
+          <div className="bg-white dark:bg-surface border border-line rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="section-title">Edit Activity</h3>
               <button onClick={() => setEditingId(null)}>
@@ -536,25 +544,25 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
                 </div>
                 <div>
                   <label className="label mb-1 block">Activity Type</label>
-                  <select className="input" value={editForm.type}
+                  <Select className="input" value={editForm.type}
                     onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}>
                     {ACTIVITY_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
               {/* Row 2: Next Action Date + Activity Date */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label mb-1 block">Next Action Date <span className="text-red-400">*</span></label>
+                  <label className="label mb-1 block">Next Action Date <span className="text-rose-600 dark:text-rose-400">*</span></label>
                   <input type="date" className="input" value={editForm.nextActionDate}
                     min={getToday()}
                     onKeyDown={(e) => e.preventDefault()}
                     onChange={(e) => setEditForm((f) => ({ ...f, nextActionDate: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="label mb-1 block">Activity Date <span className="text-red-400">*</span></label>
+                  <label className="label mb-1 block">Activity Date <span className="text-rose-600 dark:text-rose-400">*</span></label>
                   <input type="date" className="input" value={editForm.activityDate}
                     max={getToday()}
                     onKeyDown={(e) => e.preventDefault()}
@@ -563,14 +571,14 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
               </div>
               {/* Outcome */}
               <div>
-                <label className="label mb-1 block">Outcome <span className="text-red-400">*</span></label>
+                <label className="label mb-1 block">Outcome <span className="text-rose-600 dark:text-rose-400">*</span></label>
                 <input type="text" className="input" value={editForm.outcome}
                   onChange={(e) => setEditForm((f) => ({ ...f, outcome: e.target.value }))}
                   placeholder="e.g. Connected, Left voicemail…" />
               </div>
               {/* Notes */}
               <div>
-                <label className="label mb-1 block">Notes/Description <span className="text-red-400">*</span></label>
+                <label className="label mb-1 block">Notes/Description <span className="text-rose-600 dark:text-rose-400">*</span></label>
                 <textarea className="input min-h-[72px] resize-none" value={editForm.description}
                   onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="What happened during this activity?" />
@@ -590,20 +598,20 @@ export function ActivitiesList({ leadId, opportunityId }: ActivitiesListProps) {
 
       {/* ── Delete Activity Popup ── */}
       {mounted && deletingId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-black/60 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-12 pb-6 px-4 bg-slate-950/60 backdrop-blur-[2px] overflow-y-auto">
+          <div className="bg-white dark:bg-surface border border-line rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                <Trash2 size={20} className="text-red-400" />
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+                <Trash2 size={20} className="text-rose-600 dark:text-rose-400" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Delete Activity</h3>
-                <p className="text-sm text-slate-500 mt-1">Are you sure you want to delete this activity? This action cannot be undone.</p>
+                <h3 className="text-base font-semibold text-ink">Delete Activity</h3>
+                <p className="text-sm text-ink-3 mt-1">Are you sure you want to delete this activity? This action cannot be undone.</p>
               </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-line text-sm font-medium text-ink-2 hover:bg-slate-50 dark:hover:bg-white/[0.05] transition-colors"
                 onClick={() => setDeletingId(null)}
               >
                 No, Cancel

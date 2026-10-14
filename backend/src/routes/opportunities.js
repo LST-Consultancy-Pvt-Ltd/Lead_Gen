@@ -9,7 +9,7 @@
 const router = require('express').Router();
 const { body, param, query } = require('express-validator');
 const { authenticate } = require('../middleware/auth');
-const { requireAdmin } = require('../middleware/rbac');
+const { requireAdmin, requireManagerOrAdmin } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const ctrl = require('../controllers/opportunityController');
 
@@ -63,6 +63,7 @@ router.post('/', createValidation, validate, ctrl.createOpportunity);
 router.patch('/:id', updateValidation, validate, ctrl.updateOpportunity);
 
 // DELETE /api/opportunities/:id — ownership enforced in service (sales_user own only, manager/admin any)
-router.delete('/:id', [param('id').isUUID()], validate, ctrl.deleteOpportunity);
+// Sales executives cannot delete opportunities — managers and admins only
+router.delete('/:id', requireManagerOrAdmin, [param('id').isUUID()], validate, ctrl.deleteOpportunity);
 
 module.exports = router;

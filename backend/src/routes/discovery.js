@@ -4,6 +4,15 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 router.use(authenticate);
 
+// Lead Discovery is not available to sales executives — block every discovery
+// endpoint (including read-only history/status) for that role.
+router.use((req, res, next) => {
+  if (req.user?.role === 'sales_user') {
+    return res.status(403).json({ success: false, message: 'Lead Discovery is not available for your role' });
+  }
+  next();
+});
+
 // Service-based scan
 router.post('/scan', authorize('org_admin', 'manager'), ctrl.startScan);
 

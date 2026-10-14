@@ -8,6 +8,7 @@ const activityService = require('../services/activity.service');
 const opportunityService = require('../services/opportunity.service');
 const { success, error, paginated } = require('../utils/response');
 const logger = require('../utils/logger');
+const { describeLeadChanges } = require('../utils/leadChangeSummary');
 
 /**
  * GET /api/leads
@@ -132,13 +133,16 @@ async function updateLead(req, res) {
 
     // (assignment changes are logged to the Activity Timeline by leadsService)
 
-    // Log general update
-    const changedFields = Object.keys(req.body);
-    await activityService.logLeadUpdated(result.lead, req.user, changedFields);
+    // Log general update — only fields whose value really changed, with readable labels.
+    // Status and assignment have their own timeline entries, so they are not repeated here.
+    const changes = describeLeadChanges(currentLead.lead, result.lead, Object.keys(req.body));
+    if (changes.length > 0) {
+      await activityService.logLeadUpdated(result.lead, req.user, changes);
+    }
 
     logger.info('Lead updated', {
       leadId: result.lead.id,
-      changedFields,
+      changedFields: changes.map((c) => c.field),
       userId: req.user.id,
     });
 

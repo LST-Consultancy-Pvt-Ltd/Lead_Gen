@@ -432,7 +432,8 @@ async function deleteValue(req, res) {
       return error(res, 'Dropdown value not found', 404);
     }
 
-    if (!OPEN_CATEGORIES.includes(existing.category) && !ADMIN_ROLES.includes(req.user.role)) {
+    // Any role may add/edit `location` values, but deleting any value is admin-only
+    if (!ADMIN_ROLES.includes(req.user.role)) {
       return error(res, 'Insufficient permissions', 403);
     }
 

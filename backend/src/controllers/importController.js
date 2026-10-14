@@ -11,9 +11,10 @@ const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
 const { getTeamMemberIds } = require('../middleware/rbac');
 const dashboardEvents = require('../utils/dashboardEvents');
-const { checkLeadQuota, incrementLeadUsage } = require('../utils/leadQuota');
 const { validateExcelFile } = require('../services/excelValidationService');
 const { generateTemplate } = require('../services/excelTemplateService');
+const { createBulkNotifications } = require('../utils/notificationService');
+const { getReportingLineIds, roleLabel } = require('../utils/reportingLine');
 
 const ALLOWED_MIME_TYPES = [
   'text/csv',
@@ -68,23 +69,16 @@ async function importLeads(req, res) {
           if (val !== undefined && val !== null && val !== '') hasData = true;
         }
       });
-      if (hasData) rows.push(obj);
+      if (hasData) {
+        Object.defineProperty(obj, '__row', { value: r, enumerable: false });
+        rows.push(obj);
+      }
     }
 
     if (rows.length === 0) return error(res, 'File contains no data rows', 422);
     if (rows.length > MAX_ROWS) return error(res, `File exceeds maximum of ${MAX_ROWS} rows`, 422);
 
-    // ── Lead Quota Check ────────────────────────────────────────────────────
-    const quota = await checkLeadQuota(req.user.organizationId, 1);
-    if (!quota.allowed) {
-      return error(res, `Lead limit reached (${quota.quota}). You have used all your available leads. Please upgrade your plan to import more.`, 403);
-    }
-    // Cap importable rows to remaining quota
-    const maxImportable = quota.remaining;
-    let quotaExhaustedWarning = false;
-    if (rows.length > maxImportable) {
-      quotaExhaustedWarning = true;
-    }
+    // Lead quota only applies to Lead Discovery leads, so imports are not capped or counted
 
     // ── Round-robin assignment setup ────────────────────────────────────────
     const roundRobin = req.body.roundRobin === true || req.body.roundRobin === 'true';
@@ -112,16 +106,11 @@ async function importLeads(req, res) {
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
+      const rowNo = row.__row ?? i + 2;
       try {
-        // Check if quota is exhausted mid-import
-        if (successLeads.length >= maxImportable) {
-          importErrors.push({ row: i + 2, error: `Lead quota exhausted (limit: ${quota.quota}). Remaining rows skipped.` });
-          break;
-        }
-
         const companyName = String(row.companyName || row['Company Name'] || row.company || '').trim();
         if (!companyName) {
-          importErrors.push({ row: i + 2, error: 'companyName is required' });
+          importErrors.push({ row: rowNo, error: 'companyName is required' });
           continue;
         }
 
@@ -129,7 +118,7 @@ async function importLeads(req, res) {
         if (contactEmail) {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(contactEmail)) {
-            importErrors.push({ row: i + 2, field: 'contactEmail', error: 'Invalid email format', value: contactEmail });
+            importErrors.push({ row: rowNo, field: 'contactEmail', error: 'Invalid email format', value: contactEmail });
             continue;
           }
         }
@@ -138,12 +127,9 @@ async function importLeads(req, res) {
         const contactPhone = String(row.contactPhone || row['Contact Phone'] || row.phone || '').trim() || null;
 
         if (contactPhone) {
-          if (!/^\d+$/.test(contactPhone)) {
-            importErrors.push({ row: i + 2, field: 'contactPhone', error: 'Phone number must contain digits only (must be between 3 and 16 digits)', value: contactPhone });
-            continue;
-          }
-          if (contactPhone.length < 3 || contactPhone.length > 16) {
-            importErrors.push({ row: i + 2, field: 'contactPhone', error: 'Phone number must be between 3 and 16 digits', value: contactPhone });
+          const problem = phoneProblem(contactPhone);
+          if (problem) {
+            importErrors.push({ row: rowNo, field: 'contactPhone', error: problem, value: contactPhone });
             continue;
           }
         }
@@ -162,7 +148,7 @@ async function importLeads(req, res) {
           });
           if (duplicate) {
             importErrors.push({
-              row: i + 2,
+              row: rowNo,
               error: `Duplicate: a lead already exists with the same email or phone (existing lead: "${duplicate.companyName}", id: ${duplicate.id})`,
               duplicateId: duplicate.id,
             });
@@ -193,7 +179,7 @@ async function importLeads(req, res) {
         });
         successLeads.push(lead.id);
       } catch (rowErr) {
-        importErrors.push({ row: i + 2, error: rowErr.message });
+        importErrors.push({ row: rowNo, error: rowErr.message });
       }
     }
 
@@ -219,23 +205,17 @@ async function importLeads(req, res) {
       failed: importErrors.length,
     });
 
-    // ── Update lead usage counter ───────────────────────────────────────────
     if (successLeads.length > 0) {
-      await incrementLeadUsage(req.user.organizationId, successLeads.length);
       dashboardEvents.notifyOrg(req.user.organizationId, 'lead');
     }
 
     let message = `Import complete: ${successLeads.length} leads created, ${importErrors.length} skipped`;
-    if (quotaExhaustedWarning) {
-      message += `. Note: Only ${maxImportable} of ${rows.length} rows were imported due to your lead quota (${quota.quota}).`;
-    }
 
     return success(res, {
       totalRows: rows.length,
       successRows: successLeads.length,
       failedRows: importErrors.length,
       errors: importErrors.slice(0, 50),
-      quotaRemaining: quota.remaining - successLeads.length,
     }, message, 201);
   } catch (err) {
     logger.error('importLeads error', { error: err.message, userId: req.user.id });
@@ -280,6 +260,40 @@ async function getImportLogs(req, res) {
   }
 }
 
+
+/**
+ * Parse an Excel "Follow-up Date" cell. Text must be DD/MM/YYYY or DD-MM-YYYY
+ * (day first, as the template says); Excel date cells arrive as serial numbers
+ * or Date objects. Returns null for empty or impossible dates (e.g. 31/02/2026).
+ */
+function parseFollowUpDate(raw) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
+  if (typeof raw === 'number') return new Date(Math.round((raw - 25569) * 86400 * 1000));
+  const m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(String(raw).trim());
+  if (!m) return null;
+  const day = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  const year = parseInt(m[3], 10);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
+  return d;
+}
+
+/**
+ * Phone check for imports: digits with optional formatting — a leading "+",
+ * spaces, dashes and brackets (e.g. +91 98765 43210, (555) 123-4567).
+ * Returns an error reason, or null when the number is acceptable.
+ */
+function phoneProblem(value) {
+  const v = String(value).trim();
+  if (!/^\+?[\d\s\-()]+$/.test(v)) {
+    return 'Phone number may contain only digits, a leading +, spaces, dashes and brackets';
+  }
+  const digits = v.replace(/\D/g, '').length;
+  if (digits < 3 || digits > 16) return 'Phone number must have between 3 and 16 digits';
+  return null;
+}
 
 function normaliseLeadType(raw) {
   if (!raw) return null;
@@ -335,9 +349,9 @@ async function importLeadsFromExcel(req, res) {
             name: { equals: name, mode: 'insensitive' },
           })),
         },
-        select: { id: true, name: true },
+        select: { id: true, name: true, managerId: true },
       });
-      matchedUsers.forEach(u => userMap.set(u.name.toLowerCase(), u.id));
+      matchedUsers.forEach(u => userMap.set(u.name.toLowerCase(), u));
     }
 
     // ── Load valid statuses from org's dropdown config ─────────────────────
@@ -360,36 +374,25 @@ async function importLeadsFromExcel(req, res) {
     const isSalesUser = req.user.role === 'sales_user';
 
     const leadsData = records.map(record => {
-      const followUpRaw = record['Follow-up Date'];
-      let followUpDate = null;
-      if (followUpRaw) {
-        if (followUpRaw instanceof Date) {
-          followUpDate = isNaN(followUpRaw.getTime()) ? null : followUpRaw;
-        } else if (typeof followUpRaw === 'number') {
-          followUpDate = new Date((followUpRaw - 25569) * 86400 * 1000);
-        } else {
-          const parsed = new Date(followUpRaw);
-          followUpDate = isNaN(parsed.getTime()) ? null : parsed;
-        }
-      }
+      const followUpDate = parseFollowUpDate(record['Follow-up Date']);
 
       const resolvedAssignedToId = isSalesUser
         ? req.user.id
-        : (userMap.get(record['Assign Lead To']?.toString().trim().toLowerCase()) || null);
+        : (userMap.get(record['Assign Lead To']?.toString().trim().toLowerCase())?.id || null);
 
       return {
-        companyName:  record['Company Name']?.toString().trim() || '-',
+        companyName:  record['Company Name']?.toString().trim() || null,
         contactName:  record['Contact Name']?.toString().trim() || null,
-        contactTitle: record['Job Title']?.toString().trim() || '-',
+        contactTitle: record['Job Title']?.toString().trim() || null,
         contactEmail: record['Email']?.toString().trim().toLowerCase() || null,
         contactPhone: record['Phone']?.toString().trim() || null,
         assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
         leadType:     normaliseLeadType(record['Lead Type']),
         website:      record['Website']?.toString().trim() || null,
-        industry:     record['Industry']?.toString().trim() || '-',
-        location:     record['Location']?.toString().trim() || '-',
-        notes:        record['Description / Notes']?.toString().trim() || '-',
+        industry:     record['Industry']?.toString().trim() || null,
+        location:     record['Location']?.toString().trim() || null,
+        notes:        record['Description / Notes']?.toString().trim() || null,
         followUpDate,
         organizationId,
         createdById:  req.user.id,
@@ -409,16 +412,17 @@ async function importLeadsFromExcel(req, res) {
     for (let i = 0; i < leadsData.length; i++) {
       const leadData = leadsData[i];
       const record = records[i];
+      const rowNo = record.__row ?? i + 2;
 
       // ── Status validation against DB ──────────────────────────────────────
       const rawStatus = String(record['Lead Status'] ?? '').trim().toLowerCase();
       if (rawStatus && !validStatuses.has(rawStatus)) {
         excelImportErrors.push({
-          row: i + 2,
+          row: rowNo,
           field: 'Lead Status',
           invalidValue: record['Lead Status'],
           validOptions: [...validStatuses].join(', '),
-          error: `Invalid status "${record['Lead Status']}" in row ${i + 2}. Allowed values are: ${[...validStatuses].join(', ')}. Row skipped.`,
+          error: `Invalid status "${record['Lead Status']}" in row ${rowNo}. Allowed values are: ${[...validStatuses].join(', ')}. Row skipped.`,
           isStatusError: true,
         });
         continue;
@@ -429,11 +433,11 @@ async function importLeadsFromExcel(req, res) {
       const rawSource = String(record['Lead Source'] ?? '').trim().toLowerCase();
       if (rawSource && validSources.size > 0 && !validSources.has(rawSource)) {
         excelImportErrors.push({
-          row: i + 2,
+          row: rowNo,
           field: 'Lead Source',
           invalidValue: record['Lead Source'],
           validOptions: [...validSources].join(', '),
-          error: `Invalid source "${record['Lead Source']}" in row ${i + 2}. Allowed values are: ${[...validSources].join(', ')}. Row skipped.`,
+          error: `Invalid source "${record['Lead Source']}" in row ${rowNo}. Allowed values are: ${[...validSources].join(', ')}. Row skipped.`,
           isSourceError: true,
         });
         continue;
@@ -450,11 +454,8 @@ async function importLeadsFromExcel(req, res) {
 
       const phoneVal = String(record['Phone'] ?? '').trim();
       if (phoneVal) {
-        if (!/^\d+$/.test(phoneVal)) {
-          fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Phone number must contain digits only (no spaces, dashes, or special characters)' });
-        } else if (phoneVal.length < 3 || phoneVal.length > 16) {
-          fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: 'Phone number must be between 3 and 16 digits' });
-        }
+        const problem = phoneProblem(phoneVal);
+        if (problem) fieldErrors.push({ field: 'Phone', invalidValue: phoneVal, reason: problem });
       }
 
       const scoreRaw = record['Score'];
@@ -478,7 +479,26 @@ async function importLeadsFromExcel(req, res) {
             fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: `Day "${dateMatch[1]}" is invalid — must be between 01 and 31` });
           } else if (month < 1 || month > 12) {
             fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: `Month "${dateMatch[2]}" is invalid — must be between 01 and 12` });
+          } else if (!parseFollowUpDate(dateStr)) {
+            fieldErrors.push({ field: 'Follow-up Date', invalidValue: dateStr, reason: 'This date does not exist in the calendar (e.g. 31/02)' });
           }
+        }
+      }
+
+      const leadTypeVal = String(record['Lead Type'] ?? '').trim();
+      if (leadTypeVal && !['service', 'product'].includes(normaliseLeadType(leadTypeVal))) {
+        fieldErrors.push({ field: 'Lead Type', invalidValue: leadTypeVal, reason: 'Must be "Services" or "Product"' });
+      }
+
+      // Assign Lead To (ignored for sales executives — their imports are always their own)
+      if (!isSalesUser) {
+        const assignName = String(record['Assign Lead To'] ?? '').trim();
+        const target = assignName ? userMap.get(assignName.toLowerCase()) : null;
+        if (assignName && !target) {
+          fieldErrors.push({ field: 'Assign Lead To', invalidValue: assignName, reason: 'No active user with this name in your organisation' });
+        } else if (target && req.user.role === 'manager' && target.id !== req.user.id && target.managerId !== req.user.id) {
+          // Managers may only assign to themselves or their own team members
+          fieldErrors.push({ field: 'Assign Lead To', invalidValue: assignName, reason: 'You can only assign leads to yourself or members of your own team' });
         }
       }
 
@@ -493,11 +513,11 @@ async function importLeadsFromExcel(req, res) {
       if (fieldErrors.length > 0) {
         fieldErrors.forEach(fe => {
           excelImportErrors.push({
-            row: i + 2,
+            row: rowNo,
             field: fe.field,
             invalidValue: fe.invalidValue,
             reason: fe.reason,
-            error: `Row ${i + 2} – ${fe.field}: ${fe.reason} (got: "${fe.invalidValue}")`,
+            error: `Row ${rowNo} – ${fe.field}: ${fe.reason} (got: "${fe.invalidValue}")`,
             isFieldError: true,
           });
         });
@@ -521,10 +541,15 @@ async function importLeadsFromExcel(req, res) {
             select: { id: true, companyName: true },
           });
           if (duplicate) {
+            const reason = `Duplicate — a lead with this email or phone already exists${duplicate.companyName ? ` ("${duplicate.companyName}")` : ''}`;
             excelImportErrors.push({
-              row: i + 2,
-              error: `Duplicate: a lead already exists with the same email or phone (existing lead: "${duplicate.companyName}", id: ${duplicate.id})`,
+              row: rowNo,
+              field: 'Email / Phone',
+              invalidValue: [rawEmail, rawPhone].filter(Boolean).join(' / '),
+              reason,
+              error: `Row ${rowNo} – ${reason}`,
               duplicateId: duplicate.id,
+              isFieldError: true,
             });
             continue;
           }
@@ -545,13 +570,51 @@ async function importLeadsFromExcel(req, res) {
           });
         }
       } catch (rowErr) {
-        excelImportErrors.push({ row: i + 2, error: rowErr.message });
+        logger.warn('Excel import row failed', { row: rowNo, err: rowErr.message });
+        excelImportErrors.push({
+          row: rowNo,
+          field: 'Row',
+          invalidValue: '',
+          reason: 'Could not save this row',
+          error: `Row ${rowNo} – could not be saved`,
+          isFieldError: true,
+        });
       }
     }
 
     if (pendingNotifications.length > 0) {
       await prisma.notification.createMany({ data: pendingNotifications });
     }
+
+    // One summary notification to the importer's reporting line (manager / admin)
+    if (insertedCount > 0 && ['manager', 'sales_user'].includes(req.user.role)) {
+      try {
+        const recipients = await getReportingLineIds(req.user);
+        await createBulkNotifications(prisma, recipients.map((id) => ({
+          userId: id,
+          organizationId,
+          type: 'leads_imported',
+          title: 'Leads Imported',
+          message: `${req.user.name} (${roleLabel(req.user.role)}) imported ${insertedCount} lead${insertedCount !== 1 ? 's' : ''} from Excel`,
+          entityType: 'Lead',
+        })), { actorId: req.user.id });
+      } catch (notifyErr) {
+        logger.warn('Import summary notification failed (non-fatal)', { error: notifyErr.message });
+      }
+    }
+
+    await prisma.importLog.create({
+      data: {
+        organizationId,
+        userId: req.user.id,
+        fileName: req.file.originalname,
+        totalRows: records.length + skippedRows.length,
+        successRows: insertedCount,
+        failedRows: excelImportErrors.length,
+        errors: excelImportErrors.slice(0, 200).map(({ row, field, invalidValue, reason, error: msg }) => ({ row, field, invalidValue, reason, error: msg })),
+        status: 'completed',
+      },
+    }).catch((e) => logger.warn('Excel import log failed', { err: e.message }));
 
     logger.info('Excel import completed', {
       userId: req.user.id,
