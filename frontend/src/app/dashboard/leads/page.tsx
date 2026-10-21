@@ -11,7 +11,7 @@ import { usePermissions } from '../../../lib/rbac';
 import { usePermissions as useAuthPermissions } from '../../../store/authStore';
 import { useAuthStore } from '../../../store/authStore';
 import { getInitials, downloadBlob, statusColors, normalizeLeadType, formatLabel, pluralize, assignableUsers } from '../../../lib/utils';
-import { Users, Plus, Download, Search, Trash2, Edit2, Eye, UserCog, X, Loader2, Clock, CalendarDays, Upload, CheckCircle2, ArrowUp, ArrowDown, CircleDot, UserCircle, AlertTriangle, FileSpreadsheet, ExternalLink, Package, Briefcase, Sparkles, Hand } from 'lucide-react';
+import { Users, Plus, Download, Search, Trash2, Edit2, Eye, UserCog, X, Loader2, Clock, CalendarDays, Upload, CheckCircle2, ArrowUp, ArrowDown, CircleDot, UserCircle, AlertTriangle, FileSpreadsheet, ExternalLink, Package, Briefcase, Sparkles, Hand, Tag } from 'lucide-react';
 import { PageHero } from '../../../components/ui/PageHero';
 import { FilterSelect } from '../../../components/dashboards/DashboardUI';
 import { isToday, isPast, isTomorrow, format, parseISO } from 'date-fns';
@@ -655,6 +655,9 @@ export default function LeadsPage() {
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-violet-500/10 text-violet-700 dark:text-violet-300"><Package size={11} /> Product</span>
                       ) : (normalizeLeadType(l.leadType) === 'service' || normalizeLeadType(l.subSource) === 'service') ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-500/10 text-blue-700 dark:text-blue-300"><Briefcase size={11} /> Services</span>
+                      ) : l.leadType?.trim() ? (
+                        // Custom lead type added via admin dropdowns — show it as-is
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-400/10 text-ink-2 whitespace-nowrap"><Tag size={11} /> {l.leadType.trim()}</span>
                       ) : (
                         <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
                       )}

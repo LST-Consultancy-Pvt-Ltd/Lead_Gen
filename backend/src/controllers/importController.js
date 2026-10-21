@@ -370,6 +370,24 @@ async function importLeadsFromExcel(req, res) {
     const validSources = new Set(sourceRows.map(r => r.value.toLowerCase()));
     const defaultSource = (sourceRows.find(r => r.isDefault)?.value ?? sourceRows[0]?.value ?? null)?.toLowerCase() ?? null;
 
+    // ── Load valid lead types from org's dropdown config ───────────────────
+    const leadTypeRows = await prisma.dropdownConfig.findMany({
+      where: { organizationId, category: 'lead_type', isActive: true },
+      select: { value: true },
+    });
+    const validLeadTypes = leadTypeRows.length ? leadTypeRows.map(r => r.value) : ['Services', 'Product'];
+    // Services / Product keep their canonical stored form; custom types are stored as configured
+    const resolveLeadType = (raw) => {
+      const v = String(raw ?? '').trim();
+      if (!v) return null;
+      const match = validLeadTypes.find(t =>
+        t.toLowerCase() === v.toLowerCase() ||
+        (['service', 'product'].includes(normaliseLeadType(t)) && normaliseLeadType(t) === normaliseLeadType(v)));
+      if (!match) return undefined;
+      const canonical = normaliseLeadType(match);
+      return ['service', 'product'].includes(canonical) ? canonical : match;
+    };
+
     // ── Map records to Lead model objects ──────────────────────────────────
     const isSalesUser = req.user.role === 'sales_user';
 
@@ -388,7 +406,7 @@ async function importLeadsFromExcel(req, res) {
         contactPhone: record['Phone']?.toString().trim() || null,
         assignedToId: resolvedAssignedToId,
         leadScore:    parseInt(record['Score'], 10) || 0,
-        leadType:     normaliseLeadType(record['Lead Type']),
+        leadType:     resolveLeadType(record['Lead Type']) || null,
         website:      record['Website']?.toString().trim() || null,
         industry:     record['Industry']?.toString().trim() || null,
         location:     record['Location']?.toString().trim() || null,
@@ -486,8 +504,8 @@ async function importLeadsFromExcel(req, res) {
       }
 
       const leadTypeVal = String(record['Lead Type'] ?? '').trim();
-      if (leadTypeVal && !['service', 'product'].includes(normaliseLeadType(leadTypeVal))) {
-        fieldErrors.push({ field: 'Lead Type', invalidValue: leadTypeVal, reason: 'Must be "Services" or "Product"' });
+      if (leadTypeVal && resolveLeadType(leadTypeVal) === undefined) {
+        fieldErrors.push({ field: 'Lead Type', invalidValue: leadTypeVal, reason: `Must be one of: ${validLeadTypes.join(', ')}` });
       }
 
       // Assign Lead To (ignored for sales executives — their imports are always their own)
