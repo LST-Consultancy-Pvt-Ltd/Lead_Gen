@@ -5,6 +5,7 @@ const { success, error } = require('../utils/response');
 const { createNotification } = require('../utils/notificationService');
 const dashboardEvents = require('../utils/dashboardEvents');
 const { syncOpenOpportunityOwner } = require('../utils/opportunityOwner');
+const { revokeAllSessions } = require('../services/sessionService');
 
 const ADMIN_ROLES = ['org_admin', 'super_admin'];
 
@@ -160,6 +161,8 @@ async function updateUser(req, res) {
       data: updateData,
       select: { id: true, name: true, email: true, role: true, isActive: true },
     });
+    // Role change or deactivation signs the user out on every device
+    if (role || isActive === false) await revokeAllSessions(user.id);
     return success(res, user);
   } catch (err) {
     return error(res, 'Failed to update user', 500);
@@ -172,6 +175,7 @@ async function deleteUser(req, res) {
     if (!target) return error(res, 'User not found', 404);
     if (target.id === req.user.id) return error(res, 'Cannot delete your own account', 422);
     const user = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: false }, select: { id: true, isActive: true } });
+    await revokeAllSessions(user.id); // signed out on every device
     return success(res, user, 'User deactivated');
   } catch (err) {
     return error(res, 'Failed to delete user', 500);

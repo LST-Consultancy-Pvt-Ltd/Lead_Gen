@@ -5,7 +5,6 @@
 
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const prisma = require('../utils/prisma');
 const config = require('../config');
 const emailService = require('../services/emailService');
@@ -13,11 +12,7 @@ const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
 const { getOwnedUserIds } = require('./teamController');
 
-function generateTokens(userId) {
-  const accessToken = jwt.sign({ userId }, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
-  const refreshToken = jwt.sign({ userId }, config.jwt.refreshSecret, { expiresIn: config.jwt.refreshExpiresIn });
-  return { accessToken, refreshToken };
-}
+const { createSession } = require('../services/sessionService');
 
 /**
  * POST /api/invitations
@@ -166,10 +161,10 @@ async function acceptInvitation(req, res) {
       data: { status: 'accepted' },
     });
 
-    const { accessToken, refreshToken } = generateTokens(user.id);
+    const { accessToken, refreshToken } = await createSession(user.id, req);
     await prisma.user.update({
       where: { id: user.id },
-      data: { refreshToken, lastLoginAt: new Date() },
+      data: { lastLoginAt: new Date() },
     });
 
     const organization = await prisma.organization.findUnique({ where: { id: organizationId } });

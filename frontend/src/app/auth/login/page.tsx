@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../../../store/authStore';
 import { authApi } from '../../../lib/api';
+import { safeReturnPath } from '../../../lib/tokenRefresh';
 import { Sparkles, Eye, EyeOff, Loader2, LogIn, Mail, Lock, Radar, TrendingUp, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
@@ -23,7 +24,8 @@ export default function LoginPage() {
       if (data?.data?.user && data?.data?.accessToken && data?.data?.refreshToken) {
         setAuth(data.data.user, data.data.accessToken, data.data.refreshToken);
         toast.success('Login successful!');
-        router.replace('/dashboard');
+        // Back to where the session expired (e.g. a half-filled Lead form), if any
+        router.replace(safeReturnPath(new URLSearchParams(window.location.search).get('redirect')));
       } else {
         throw new Error('Invalid response format from server');
       }

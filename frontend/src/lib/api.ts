@@ -99,6 +99,9 @@
 
 import axios, { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../store/authStore';
+import { createTokenRefresher, isSessionEndedError } from './tokenRefresh';
+import { SESSION_EXPIRED_EVENT } from './formDraft';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
@@ -124,20 +127,41 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto-refresh on 401 & Global 403 handling
-let isRefreshing = false;
-let failedQueue: any[] = [];
+// Auto-refresh on 401 & Global 403 handling.
+// One refresh at a time per tab (and across tabs); every request that hits a 401
+// while it runs waits for the same new token, then is retried once.
+const refreshAccessToken = createTokenRefresher({
+  store: {
+    getAccessToken: () => localStorage.getItem('accessToken'),
+    getRefreshToken: () => localStorage.getItem('refreshToken'),
+    setTokens: (accessToken, refreshToken) => useAuthStore.getState().setTokens(accessToken, refreshToken),
+  },
+  // Plain axios (not `api`) so the refresh call never re-enters this interceptor
+  request: async (refreshToken) => {
+    const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
+    return {
+      accessToken: data.data?.accessToken || data.accessToken,
+      refreshToken: data.data?.refreshToken || data.refreshToken,
+    };
+  },
+});
 
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
+let sessionEnding = false;
+
+// The refresh token is expired / revoked / the user is inactive. Let open forms save
+// their drafts first, then drop only the auth state (drafts and preferences stay)
+// and send the user to login, returning to the current page afterwards.
+function endSession() {
+  if (sessionEnding || typeof window === 'undefined') return;
+  sessionEnding = true;
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  useAuthStore.getState().clearAuth();
+  toast.error('Your session has expired. Please log in again.');
+  const returnTo = window.location.pathname + window.location.search;
+  setTimeout(() => {
+    window.location.href = `/auth/login?redirect=${encodeURIComponent(returnTo)}`;
+  }, 1000);
+}
 
 api.interceptors.response.use(
   (r) => r,
@@ -151,66 +175,28 @@ api.interceptors.response.use(
                           original?.url?.includes('/auth/refresh');
 
     // Handle 401 - Unauthorized (Token expired)
-    if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
-      if (isRefreshing) {
-        // Queue requests while refresh is in progress
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          original.headers.Authorization = `Bearer ${token}`;
-          return api(original);
-        }).catch((err) => {
-          return Promise.reject(err);
-        });
+    if (error.response?.status === 401 && original && !original._retry && !isAuthEndpoint) {
+      const sentHeader = original.headers?.Authorization ?? original.headers?.get?.('Authorization');
+      const failedToken = typeof sentHeader === 'string' ? sentHeader.replace(/^Bearer /, '') : null;
+
+      // Anonymous request (no session to refresh) — surface the original error
+      if (!failedToken && !localStorage.getItem('refreshToken')) {
+        return Promise.reject(error);
       }
 
       original._retry = true;
-      isRefreshing = true;
-
       try {
-        const refresh = localStorage.getItem('refreshToken');
-        
-        if (!refresh) {
-          throw new Error('No refresh token available');
-        }
-
-        console.log('Attempting to refresh token...');
-        const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken: refresh });
-        
-        const newAccessToken = data.data?.accessToken || data.accessToken;
-        const newRefreshToken = data.data?.refreshToken || data.refreshToken;
-        
-        if (!newAccessToken) {
-          throw new Error('No access token in refresh response');
-        }
-
-        localStorage.setItem('accessToken', newAccessToken);
-        if (newRefreshToken) {
-          localStorage.setItem('refreshToken', newRefreshToken);
-        }
-        
+        const newAccessToken = await refreshAccessToken(failedToken);
         original.headers.Authorization = `Bearer ${newAccessToken}`;
-        processQueue(null, newAccessToken);
-        isRefreshing = false;
-        
-        console.log('Token refreshed successfully');
         return api(original);
       } catch (refreshError: any) {
-        console.error('Token refresh failed:', refreshError);
-        processQueue(refreshError, null);
-        isRefreshing = false;
-        
-        // Only logout if refresh token is actually invalid
-        if (refreshError.response?.status === 401 || refreshError.response?.status === 403) {
-          if (typeof window !== 'undefined') {
-            localStorage.clear();
-            toast.error('Your session has expired. Please log in again.');
-            setTimeout(() => {
-              window.location.href = '/auth/login';
-            }, 1000);
-          }
-        }
-        
+        // Never log the error object itself — its request config contains the refresh token
+        console.warn('Token refresh failed:', refreshError?.response?.status ?? refreshError?.message);
+
+        // Only end the session if the refresh token is actually invalid
+        // (network / server errors leave the user signed in)
+        if (isSessionEndedError(refreshError)) endSession();
+
         return Promise.reject(refreshError);
       }
     }

@@ -117,7 +117,7 @@ model User {
   googleId       String?   @unique
   isActive       Boolean   @default(true)
   lastLoginAt    DateTime?
-  refreshToken   String?
+  refreshToken   String? // legacy single-session token; only read to migrate old logins to UserSession
   roleChangedAt  DateTime?
   managerId      String?
   invitedById    String?
@@ -146,6 +146,22 @@ model User {
   salesOpportunities    Opportunity[] @relation("SalesOwner")
   auditLogs             AuditLog[]
   notifications         Notification[]
+  sessions              UserSession[]
+}
+
+// One row per signed-in device. Stores only a hash of the current refresh token.
+model UserSession {
+  id               String   @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  userAgent        String?
+  createdAt        DateTime @default(now())
+  lastUsedAt       DateTime @default(now())
+  expiresAt        DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Service {

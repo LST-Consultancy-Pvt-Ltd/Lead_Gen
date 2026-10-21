@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, usersApi, dropdownsApi, api } from '../../../lib/api';
 import { Badge, Avatar, ScoreRing, Spinner, EmptyState, Pagination } from '../../../components/ui';
-import { CreateLeadModal } from '../../../components/crm/CreateLeadModal';
+import { CreateLeadModal, LEAD_CREATE_DRAFT_ID } from '../../../components/crm/CreateLeadModal';
+import { loadDraft } from '../../../lib/formDraft';
 import { RoleGuard } from '../../../components/common/RoleGuard';
 import { usePermissions } from '../../../lib/rbac';
 import { usePermissions as useAuthPermissions } from '../../../store/authStore';
@@ -58,6 +59,13 @@ export default function LeadsPage() {
   const authPerms = useAuthPermissions();
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
+
+  // Session expired while the Create Lead form was open → reopen it with the saved draft
+  useEffect(() => {
+    if (user?.id && permissions.canCreateLead && loadDraft(user.id, LEAD_CREATE_DRAFT_ID)?.interrupted) {
+      setIsCreateModalOpen(true);
+    }
+  }, [user?.id]);
 
   // Fetch team members for owner filter (only for managers/admins)
   const { data: usersData } = useQuery({

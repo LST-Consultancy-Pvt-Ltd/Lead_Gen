@@ -8,14 +8,10 @@ const config = require('../config');
 const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
 const { seedDefaultDropdowns } = require('./dropdownController');
+const sessions = require('../services/sessionService');
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
-function generateTokens(userId) {
-  const accessToken = jwt.sign({ userId }, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
-  const refreshToken = jwt.sign({ userId }, config.jwt.refreshSecret, { expiresIn: config.jwt.refreshExpiresIn });
-  return { accessToken, refreshToken };
-}
 
 function generateOtp() {
   return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit
@@ -205,10 +201,11 @@ async function login(req, res) {
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) return error(res, 'Invalid email or password', 401);
 
-    const { accessToken, refreshToken } = generateTokens(user.id);
+    // New device session — other devices the user is signed in on are unaffected
+    const { accessToken, refreshToken } = await sessions.createSession(user.id, req);
     await prisma.user.update({
       where: { id: user.id },
-      data: { refreshToken, lastLoginAt: new Date(), roleChangedAt: null },
+      data: { lastLoginAt: new Date(), roleChangedAt: null },
     });
 
     return success(res, {
@@ -254,8 +251,8 @@ async function googleAuth(req, res) {
 
     if (!user.isActive) return error(res, 'Account disabled', 403);
 
-    const { accessToken, refreshToken } = generateTokens(user.id);
-    await prisma.user.update({ where: { id: user.id }, data: { refreshToken, lastLoginAt: new Date(), googleId: payload.sub } });
+    const { accessToken, refreshToken } = await sessions.createSession(user.id, req);
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date(), googleId: payload.sub } });
 
     return success(res, {
       accessToken, refreshToken,
@@ -267,20 +264,70 @@ async function googleAuth(req, res) {
   }
 }
 
+/**
+ * POST /api/auth/refresh — rotates the refresh token of ONE device session.
+ * Each success issues a new 2d access token and a new 7d refresh token for that
+ * session, so its window rolls forward; the presented token stops working
+ * immediately. Other devices' sessions are never touched.
+ */
 async function refresh(req, res) {
   try {
     const { refreshToken } = req.body;
     if (!refreshToken) return error(res, 'Refresh token required', 401);
 
-    const decoded = jwt.verify(refreshToken, config.jwt.refreshSecret);
-    const user = await prisma.user.findFirst({
-      where: { id: decoded.userId, refreshToken },
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, config.jwt.refreshSecret);
+    } catch {
+      return error(res, 'Invalid or expired refresh token', 401);
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
       include: { organization: true },
     });
     if (!user) return error(res, 'Invalid refresh token', 401);
 
-    const tokens = generateTokens(user.id);
-    await prisma.user.update({ where: { id: user.id }, data: { refreshToken: tokens.refreshToken } });
+    let tokens;
+    if (!decoded.sid) {
+      // Token issued before per-device sessions existed: accept it once (if it is still
+      // the stored one) and move this device onto its own session.
+      const { count } = await prisma.user.updateMany({ where: { id: user.id, refreshToken }, data: { refreshToken: null } });
+      if (count !== 1) return error(res, 'Invalid refresh token', 401);
+      if (!user.isActive) return error(res, 'Account disabled', 401);
+      if (user.roleChangedAt && Math.floor(user.roleChangedAt.getTime() / 1000) > decoded.iat) {
+        return error(res, 'Session invalidated. Your role was changed. Please log in again.', 401);
+      }
+      tokens = await sessions.createSession(user.id, req);
+    } else {
+      const session = await prisma.userSession.findUnique({ where: { id: decoded.sid } });
+      // Signed out, revoked or expired on this device
+      if (!session || session.userId !== user.id) return error(res, 'Invalid refresh token', 401);
+
+      if (sessions.isReuse(session, refreshToken)) {
+        // An already-rotated token of this device was presented again. Unless this is
+        // tabs of the same browser racing, treat it as theft and end this session.
+        if (sessions.reuseEndsSession(session)) {
+          await sessions.revokeSession(session.id);
+          logger.warn('Refresh token reuse detected; session revoked', { userId: user.id, sessionId: session.id });
+        }
+        return error(res, 'Invalid refresh token', 401);
+      }
+
+      if (!user.isActive) {
+        await sessions.revokeAllSessions(user.id);
+        return error(res, 'Account disabled', 401);
+      }
+
+      if (user.roleChangedAt && Math.floor(user.roleChangedAt.getTime() / 1000) > decoded.iat) {
+        await sessions.revokeAllSessions(user.id);
+        return error(res, 'Session invalidated. Your role was changed. Please log in again.', 401);
+      }
+
+      // Compare-and-swap: of several concurrent refreshes with the same token, one wins
+      tokens = await sessions.rotateSession(session, refreshToken);
+      if (!tokens) return error(res, 'Invalid refresh token', 401);
+    }
 
     return success(res, {
       accessToken: tokens.accessToken,
@@ -288,12 +335,20 @@ async function refresh(req, res) {
       user: { id: user.id, name: user.name, email: user.email, role: user.role, organization: user.organization },
     });
   } catch (err) {
-    return error(res, 'Token refresh failed', 401);
+    // Server-side failure (e.g. DB down) — not a reason to log the user out
+    logger.error('Token refresh error', { err: err.message });
+    return error(res, 'Token refresh failed', 500);
   }
 }
 
+// Signs out only the device that made the request
 async function logout(req, res) {
-  await prisma.user.update({ where: { id: req.user.id }, data: { refreshToken: null } });
+  if (req.sessionId) {
+    await sessions.revokeSession(req.sessionId);
+  } else {
+    // access token from before per-device sessions
+    await prisma.user.update({ where: { id: req.user.id }, data: { refreshToken: null } });
+  }
   return success(res, null, 'Logged out');
 }
 
@@ -453,7 +508,8 @@ async function resetPassword(req, res) {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({ where: { email }, data: { passwordHash } });
+    const user = await prisma.user.update({ where: { email }, data: { passwordHash, refreshToken: null } });
+    await sessions.revokeAllSessions(user.id); // new password → sign out every device
     await prisma.passwordResetOtp.delete({ where: { email } });
 
     logger.info('Password reset successful', { email });

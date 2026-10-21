@@ -17,6 +17,7 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
+  setTokens: (accessToken: string, refreshToken: string) => void;
   clearAuth: () => void;
   _hasHydrated: boolean;
   setHasHydrated: (state: boolean) => void;
@@ -69,6 +70,12 @@ export const useAuthStore = create<AuthState>()(
         localStorage.setItem('refreshToken', refreshToken);
         set({ user, accessToken, refreshToken, isAuthenticated: true });
       },
+      // Rotated tokens from /auth/refresh — keep localStorage and the persisted store in sync
+      setTokens: (accessToken, refreshToken) => {
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        set({ accessToken, refreshToken });
+      },
       clearAuth: () => {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
@@ -88,10 +95,20 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
-        // When store is rehydrated, sync tokens to localStorage
+        // The standalone keys are written on every login / refresh (and by other tabs),
+        // so they are the newest tokens. Only fall back to the persisted copy when they
+        // are missing — overwriting them would restore an already-rotated refresh token.
         if (state?.accessToken && state?.refreshToken) {
-          localStorage.setItem('accessToken', state.accessToken);
-          localStorage.setItem('refreshToken', state.refreshToken);
+          const storedAccess = localStorage.getItem('accessToken');
+          const storedRefresh = localStorage.getItem('refreshToken');
+          if (storedAccess && storedRefresh) {
+            if (storedAccess !== state.accessToken || storedRefresh !== state.refreshToken) {
+              state.setTokens(storedAccess, storedRefresh);
+            }
+          } else {
+            localStorage.setItem('accessToken', state.accessToken);
+            localStorage.setItem('refreshToken', state.refreshToken);
+          }
         }
         state?.setHasHydrated(true);
       },

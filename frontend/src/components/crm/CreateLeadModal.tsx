@@ -13,6 +13,7 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import { Select } from '../ui/Select';
 import { assignableUsers } from "../../lib/utils";
+import { loadDraft, saveDraft, clearDraft, hasDraftContent, SESSION_EXPIRED_EVENT } from "../../lib/formDraft";
 import {
   Briefcase, Building2, User, BadgeCheck, Mail, Phone, Activity, Hash, CalendarClock,
   Calendar, UserCheck, UserCircle, Globe, FileText, AlertCircle, AlertTriangle, Info,
@@ -135,6 +136,11 @@ const defaultValues: LeadFormData = {
   keyword: "",
 };
 
+/** Draft id for the Create Lead form (see lib/formDraft). */
+export const LEAD_CREATE_DRAFT_ID = "lead-create";
+// Filled automatically from dropdown defaults — on their own they are not user input
+const PREFILLED_FIELDS = ["status", "source", "leadType", "industry", "location", "temperature", "pipeline", "assignedToId"];
+
 export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   const queryClient = useQueryClient();
   const { canReassignLead, canManageDropdowns, isAdmin, isManager } = usePermissions();
@@ -217,12 +223,58 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
     reset,
     setValue,
     watch,
+    getValues,
     formState: { errors },
   } = useForm({
     defaultValues,
     resolver: yupResolver(schema) as any,
     mode: "onBlur",
   });
+
+  // ── Draft: survive a session expiry while the form is being filled ──────
+  const userId = currentUser?.id;
+  const draftCheckedRef = useRef(false);
+
+  // Restore a saved draft when the form opens (e.g. after logging back in)
+  useEffect(() => {
+    if (!isOpen) { draftCheckedRef.current = false; return; }
+    if (draftCheckedRef.current || !userId) return;
+    draftCheckedRef.current = true;
+    const draft = loadDraft<LeadFormData>(userId, LEAD_CREATE_DRAFT_ID);
+    if (draft && hasDraftContent(draft.values as any, PREFILLED_FIELDS)) {
+      reset({ ...defaultValues, ...draft.values });
+      saveDraft(userId, LEAD_CREATE_DRAFT_ID, draft.values); // restored — no longer pending
+      toast.success("Restored your unsaved lead details.");
+    }
+  }, [isOpen, userId]);
+
+  // Autosave while open; save immediately if the session expires (before redirect)
+  useEffect(() => {
+    if (!isOpen || !userId) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const persist = (interrupted = false) => {
+      const values = getValues();
+      if (hasDraftContent(values as any, PREFILLED_FIELDS)) {
+        saveDraft(userId, LEAD_CREATE_DRAFT_ID, values, { interrupted });
+      } else {
+        clearDraft(userId, LEAD_CREATE_DRAFT_ID);
+      }
+    };
+    const subscription = watch(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => persist(), 400);
+    });
+    const onSessionExpired = () => {
+      clearTimeout(timer);
+      persist(true);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    return () => {
+      clearTimeout(timer);
+      subscription.unsubscribe();
+      window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    };
+  }, [isOpen, userId]);
 
   const industry = watch("industry") || "";
   const location = watch("location") || "";
@@ -477,6 +529,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
       toast.success("Lead created successfully!");
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      clearDraft(userId, LEAD_CREATE_DRAFT_ID);
       onClose();
       resetForm();
     },
@@ -501,6 +554,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
   };
 
   const handleClose = () => {
+    clearDraft(userId, LEAD_CREATE_DRAFT_ID); // deliberate cancel discards the draft
     resetForm();
     onClose();
   };
