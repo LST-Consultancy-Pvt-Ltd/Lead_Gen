@@ -78,3 +78,6 @@ Requirements:
 
 Goal:
 Build a clean, fast, minimal CRM UI focused on usability, not heavy design.
+
+# TypeScript incremental build cache
+*.tsbuildinfo

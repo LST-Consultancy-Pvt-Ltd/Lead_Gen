@@ -19,6 +19,7 @@ import { isToday, isPast, isTomorrow, format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Select } from '../../../components/ui/Select';
+import { ScrollArrowArea } from '../../../components/ui/ScrollArrowArea';
 
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
@@ -516,7 +517,7 @@ export default function LeadsPage() {
             // }
           />
         ) : (
-          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
+          <ScrollArrowArea className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
             <table className="w-full">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-surface-2">
                 <tr className="border-b border-line">
@@ -751,7 +752,7 @@ export default function LeadsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollArrowArea>
         )}
       </div>
 
