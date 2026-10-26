@@ -8,6 +8,7 @@ const { analyzeLeadIntent, generateOutreachEmail } = require('../services/aiServ
 const { sendEmail } = require('../services/emailService');
 const logger = require('../utils/logger');
 const { scopeLeadWhere } = require('../middleware/rbac');
+const { toList, ownerWhere, followUpWhere } = require('../utils/leadFilters');
 const XLSX = require('xlsx');
 const { enrichViaSignalHire, enrichViaApollo } = require('../services/leadEnrichmentPipeline');
 const { decrementLeadUsage } = require('../utils/leadQuota');
@@ -426,6 +427,9 @@ async function sendOutreach(req, res) {
   }
 }
 
+// Export has no validator chain, so keep only a sane browser timezone offset
+const tzOffsetOf = (v) => (/^-?\d{1,3}$/.test(String(v ?? '')) && Math.abs(Number(v)) <= 840 ? Number(v) : undefined);
+
 async function exportLeads(req, res) {
   try {
     const isSalesUser = req.user.role === 'sales_user';
@@ -443,14 +447,15 @@ async function exportLeads(req, res) {
           { contactEmail: { contains: req.query.search, mode: 'insensitive' } },
         ];
       }
-      if (req.query.status) {
-        filters.status = { equals: String(req.query.status), mode: 'insensitive' };
+      const and = [];
+      const statuses = toList(req.query.status);
+      if (statuses.length) {
+        and.push({ OR: statuses.map((st) => ({ status: { equals: st, mode: 'insensitive' } })) });
       }
       // Only non-sales roles can pick whose leads are exported (still within scope)
       if (!isSalesUser) {
-        if (req.query.assignedTo) {
-          filters.assignedToId = req.query.assignedTo;
-        }
+        const owner = ownerWhere(toList(req.query.assignedTo));
+        if (owner) and.push(owner);
         if (req.query.unassigned === 'true') {
           filters.assignedToId = null;
         }
@@ -458,6 +463,10 @@ async function exportLeads(req, res) {
           filters.assignedToId = req.user.id;
         }
       }
+      // Follow-up buckets apply to every role (still within scope)
+      const followUp = followUpWhere(toList(req.query.followUp), { tzOffset: tzOffsetOf(req.query.tzOffset) });
+      if (followUp) and.push(followUp);
+      if (and.length) filters.AND = and;
     }
     const where = scopeLeadWhere(req.user, filters);
 

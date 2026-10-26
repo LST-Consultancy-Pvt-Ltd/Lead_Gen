@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
 import type { LucideIcon } from 'lucide-react';
 import { Select } from '../ui/Select';
+import { MultiSelect, type MultiSelectProps } from '../ui/MultiSelect';
 
 // ── Tones ───────────────────────────────────────────────────────────────────
 export type Tone = 'blue' | 'indigo' | 'violet' | 'emerald' | 'amber' | 'rose' | 'cyan';
@@ -105,6 +106,26 @@ export function FilterSelect({
       <Select {...props} hideChevron className={cn(filterSelectCls, Icon ? 'pl-10' : 'pl-3.5', className)}>
         {children}
       </Select>
+      <ChevronDown
+        size={15}
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-hover:text-blue-500"
+      />
+    </div>
+  );
+}
+
+// ── Multi-select filter ────────────────────────────────────────────────────
+export function MultiFilterSelect({
+  icon: Icon, tone = 'blue', className, ...props
+}: Omit<MultiSelectProps, 'triggerClassName'> & { icon?: LucideIcon; tone?: Tone; className?: string }) {
+  return (
+    <div className={cn('relative group inline-flex', props.disabled && 'opacity-50')}>
+      {Icon && (
+        <span className={cn('pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center z-[1]', TONES[tone].soft)}>
+          <Icon size={14} />
+        </span>
+      )}
+      <MultiSelect {...props} triggerClassName={cn(filterSelectCls, Icon ? 'pl-10' : 'pl-3.5', className)} />
       <ChevronDown
         size={15}
         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-hover:text-blue-500"

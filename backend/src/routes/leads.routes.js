@@ -6,12 +6,14 @@
 const express = require('express');
 const router = express.Router();
 const { body, query, param } = require('express-validator');
+const isUUID = require('validator/lib/isUUID');
 const { authenticate } = require('../middleware/auth');
 const { requireAdmin, requireManagerOrAdmin } = require('../middleware/rbac');
 const validate = require('../middleware/validate');
 const leadsController = require('../controllers/leads.controller');
 const leadController = require('../controllers/leadController');
 const { getQuotaInfo } = require('../utils/leadQuota');
+const { FOLLOW_UP_BUCKETS } = require('../utils/leadFilters');
 
 // Validation rules
 const createLeadValidation = [
@@ -243,8 +245,8 @@ const getLeadsValidation = [
   
   query('assignedTo')
     .optional()
-    .isUUID()
-    .withMessage('Assigned to must be a valid UUID'),
+    .custom((val) => String(val).split(',').every((v) => v === 'unassigned' || isUUID(v)))
+    .withMessage('Assigned to must be a list of valid UUIDs'),
   
   query('sortBy')
     .optional()
@@ -262,8 +264,13 @@ const getLeadsValidation = [
 
   query('followUp')
     .optional()
-    .isIn(['overdue', 'today', 'future', 'none'])
-    .withMessage('followUp must be one of: overdue, today, future, none'),
+    .custom((val) => String(val).split(',').every((v) => FOLLOW_UP_BUCKETS.includes(v)))
+    .withMessage(`followUp must be a list of: ${FOLLOW_UP_BUCKETS.join(', ')}`),
+
+  query('tzOffset')
+    .optional()
+    .isInt({ min: -840, max: 840 })
+    .withMessage('tzOffset must be minutes between -840 and 840'),
 ];
 
 const leadIdValidation = [

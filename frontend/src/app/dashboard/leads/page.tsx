@@ -14,19 +14,36 @@ import { useAuthStore } from '../../../store/authStore';
 import { getInitials, downloadBlob, statusColors, normalizeLeadType, formatLabel, pluralize, assignableUsers } from '../../../lib/utils';
 import { Users, Plus, Download, Search, Trash2, Edit2, Eye, UserCog, X, Loader2, Clock, CalendarDays, Upload, CheckCircle2, ArrowUp, ArrowDown, CircleDot, UserCircle, AlertTriangle, FileSpreadsheet, ExternalLink, Package, Briefcase, Sparkles, Tag } from 'lucide-react';
 import { PageHero } from '../../../components/ui/PageHero';
-import { FilterSelect } from '../../../components/dashboards/DashboardUI';
+import { MultiFilterSelect } from '../../../components/dashboards/DashboardUI';
 import { isToday, isPast, isTomorrow, format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Select } from '../../../components/ui/Select';
 import { ScrollArrowArea } from '../../../components/ui/ScrollArrowArea';
 
+// Next follow-up buckets, matched against the viewer's own calendar day
+const FOLLOW_UP_OPTIONS = [
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'today', label: 'Today' },
+  { value: 'tomorrow', label: 'Tomorrow' },
+  { value: 'week', label: 'Next 7 days' },
+  { value: 'later', label: 'Later' },
+  { value: 'none', label: 'No follow-up' },
+];
+
+function followUpParams(buckets: string[]) {
+  return buckets.length
+    ? { followUp: buckets.join(','), tzOffset: new Date().getTimezoneOffset() }
+    : {};
+}
+
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [ownerFilter, setOwnerFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
+  const [followUpFilter, setFollowUpFilter] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -80,7 +97,8 @@ export default function LeadsPage() {
     page,
     limit,
     search: search || undefined,
-    status: statusFilter || undefined,
+    status: statusFilter.length ? statusFilter.join(',') : undefined,
+    ...followUpParams(followUpFilter),
     sortBy,
     sortDir,
   };
@@ -88,10 +106,9 @@ export default function LeadsPage() {
   // Sales users only see their own leads
   if (!permissions.canViewAllLeads) {
     queryParams.assignedToMe = true;
-  } else if (ownerFilter === 'unassigned') {
-    queryParams.unassigned = true;
-  } else if (ownerFilter) {
-    queryParams.assignedTo = ownerFilter;
+  } else if (ownerFilter.length) {
+    // User ids and/or "unassigned", comma-separated
+    queryParams.assignedTo = ownerFilter.join(',');
   } else if (authPerms.isManager) {
     queryParams.includeUnassigned = true;
   }
@@ -173,15 +190,14 @@ export default function LeadsPage() {
       } else {
         // Otherwise, export with current filters
         if (search) params.search = search;
-        if (statusFilter) params.status = statusFilter;
+        if (statusFilter.length) params.status = statusFilter.join(',');
+        Object.assign(params, followUpParams(followUpFilter));
 
         // Apply role-based filters
         if (!permissions.canViewAllLeads) {
           params.assignedToMe = true;
-        } else if (ownerFilter === 'unassigned') {
-          params.unassigned = true;
-        } else if (ownerFilter) {
-          params.assignedTo = ownerFilter;
+        } else if (ownerFilter.length) {
+          params.assignedTo = ownerFilter.join(',');
         }
       }
 
@@ -459,26 +475,28 @@ export default function LeadsPage() {
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <FilterSelect icon={CircleDot} tone="violet" className="w-52" title="Filter by status" value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
-          <option value="">All Status</option>
-          {(Array.isArray(leadStatusOptions) ? leadStatusOptions : [])
+        <MultiFilterSelect icon={CircleDot} tone="violet" className="w-52" title="Filter by status"
+          placeholder="All Status" noun="statuses" value={statusFilter}
+          onChange={v => { setStatusFilter(v); setPage(1); }}
+          options={(Array.isArray(leadStatusOptions) ? leadStatusOptions : [])
             .filter((opt: any) => opt.isActive !== false)
-            .map((opt: any) => (
-              <option key={opt.id} value={opt.value}>{opt.value}</option>
-            ))
-          }
-        </FilterSelect>
+            .map((opt: any) => ({ value: opt.value, label: opt.value }))}
+        />
         <RoleGuard permission="canViewAllLeads">
-          <FilterSelect icon={UserCircle} tone="emerald" className="w-52" title="Filter by owner" value={ownerFilter}
-            onChange={e => { setOwnerFilter(e.target.value); setPage(1); }}>
-            <option value="">All Owners</option>
-            <option value="unassigned">Unassigned</option>
-            {assignableUsers(usersData as any[], user).map((u: any) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </FilterSelect>
+          <MultiFilterSelect icon={UserCircle} tone="emerald" className="w-52" title="Filter by owner"
+            placeholder="All Owners" noun="owners" value={ownerFilter}
+            onChange={v => { setOwnerFilter(v); setPage(1); }}
+            options={[
+              { value: 'unassigned', label: 'Unassigned' },
+              ...assignableUsers(usersData as any[], user).map((u: any) => ({ value: u.id, label: u.name })),
+            ]}
+          />
         </RoleGuard>
+        <MultiFilterSelect icon={CalendarDays} tone="amber" className="w-52" title="Filter by next follow-up"
+          placeholder="Follow-Up" noun="follow-ups" value={followUpFilter}
+          onChange={v => { setFollowUpFilter(v); setPage(1); }}
+          options={FOLLOW_UP_OPTIONS}
+        />
         {selectedLeads.size > 0 && (
           <span className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold bg-blue-500/10 text-blue-700 dark:text-blue-300">
             <CheckCircle2 size={13} /> {selectedLeads.size} selected

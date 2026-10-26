@@ -7,6 +7,7 @@ const prisma = require('../utils/prisma');
 const logger = require('../utils/logger');
 const activityService = require('./activity.service');
 const { buildLeadScope, scopeLeadWhere, canAssignLeadTo, canAccessLead, ADMIN_ROLES } = require('../middleware/rbac');
+const { toList, ownerWhere, followUpWhere } = require('../utils/leadFilters');
 
 // Display names for a set of user ids (used in the assignment note)
 const userNames = async (ids) => {
@@ -97,9 +98,12 @@ class LeadsService {
     // Filters/search live in their own object and are ANDed with the role scope,
     // so no filter (notably the search OR) can widen or replace the scope.
     const where = {};
+    // Filters that need their own OR (owner, follow-up) go here so they can't clash with search
+    const and = [];
 
-    // Status filter
-    if (status) where.status = status;
+    // Status filter — one value or a comma-separated list
+    const statuses = toList(status);
+    if (statuses.length) where.status = { in: statuses };
 
     // Intent level filter
     if (intent) where.intentLevel = intent;
@@ -113,29 +117,16 @@ class LeadsService {
     // Unassigned filter (managers/admins only)
     } else if ((unassigned === 'true' || unassigned === true) && ['manager', 'org_admin', 'super_admin'].includes(user.role)) {
       where.assignedToId = null;
-    // Assigned to specific user (managers/admins only)
+    // Assigned to specific user(s), optionally plus "unassigned" (managers/admins only)
     } else if (assignedTo && ['manager', 'org_admin', 'super_admin'].includes(user.role)) {
-      where.assignedToId = assignedTo;
+      const owner = ownerWhere(toList(assignedTo));
+      if (owner) and.push(owner);
     }
 
-    // Follow-up urgency filter
-    const { followUp } = queryParams;
-    if (followUp) {
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const todayEnd = new Date(todayStart);
-      todayEnd.setDate(todayEnd.getDate() + 1);
-
-      if (followUp === 'overdue') {
-        where.followUpDate = { lt: todayStart };
-      } else if (followUp === 'today') {
-        where.followUpDate = { gte: todayStart, lt: todayEnd };
-      } else if (followUp === 'future') {
-        where.followUpDate = { gte: todayEnd };
-      } else if (followUp === 'none') {
-        where.followUpDate = null;
-      }
-    }
+    // Follow-up date filter — one bucket or a comma-separated list
+    const followUp = followUpWhere(toList(queryParams.followUp), { tzOffset: queryParams.tzOffset });
+    if (followUp) and.push(followUp);
+    if (and.length) where.AND = and;
 
     // Search across multiple fields
     if (search) {

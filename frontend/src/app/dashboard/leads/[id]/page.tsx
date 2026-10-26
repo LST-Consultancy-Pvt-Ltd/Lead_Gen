@@ -1381,8 +1381,11 @@ export default function LeadDetailPage() {
               <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source</p>
               {(() => {
                 // Same value the Edit form shows; discovery leads without a source say so
+                const configured = (Array.isArray(sourceOptionsRaw) ? sourceOptionsRaw : [])
+                  .map((o: any) => (typeof o === 'string' ? o : o.value))
+                  .find((v: string) => v && lead.source && v.toLowerCase().trim() === lead.source.toLowerCase().trim());
                 const src = lead.source
-                  ? (lead.source === 'import' ? 'Imported (CSV)' : lead.source)
+                  ? (lead.source === 'import' ? 'Imported (CSV)' : (configured ?? lead.source))
                   : (lead.scanJobId ? 'Lead Discovery' : '—');
                 return <p className="text-sm text-ink dark:text-slate-200 break-words" title={src}>{src}</p>;
               })()}
@@ -1538,7 +1541,15 @@ export default function LeadDetailPage() {
               <Select
                 className="input"
                 title="Source"
-                value={editData.source || ''}
+                value={(() => {
+                  // Show the configured option even when the stored value differs in case ('linkedin' → 'LinkedIn')
+                  const stored = editData.source || '';
+                  const items: any[] = Array.isArray(sourceOptionsRaw) ? sourceOptionsRaw : [];
+                  const hit = items
+                    .map((o: any) => (typeof o === 'string' ? o : o.value))
+                    .find((v: string) => v && v.toLowerCase().trim() === stored.toLowerCase().trim());
+                  return hit ?? stored;
+                })()}
                 onChange={(e) => setEditData((d: any) => ({ ...d, source: e.target.value }))}
               >
                 <option value="">— Select —</option>
@@ -1549,8 +1560,11 @@ export default function LeadDetailPage() {
                     .map((o: any) => (typeof o === 'string' ? o : o.value))
                     .filter(Boolean);
                   // keep the lead's current value selectable even if it is not in the dropdown list
-                  if (editData.source && !vals.includes(editData.source)) vals.unshift(editData.source);
-                  return vals.map((v) => <option key={v} value={v}>{v}</option>);
+                  const stored = editData.source || '';
+                  if (stored && !vals.some((v) => v.toLowerCase().trim() === stored.toLowerCase().trim())) vals.unshift(stored);
+                  // same wording as View mode for system values
+                  const label = (v: string) => (v === 'import' ? 'Imported (CSV)' : v);
+                  return vals.map((v) => <option key={v} value={v}>{label(v)}</option>);
                 })()}
               </Select>
             </div>
