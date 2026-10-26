@@ -529,6 +529,17 @@ export default function LeadDetailPage() {
     staleTime: 0,
   });
 
+  // Stored lead types vary ('service', 'Services', 'PRODUCT', 'Manual'); match them to a
+  // configured option case-insensitively — exact name first, then synonyms.
+  const matchLeadTypeOption = (raw?: string | null): any => {
+    const stored = (raw || '').toLowerCase().trim();
+    if (!stored) return null;
+    const opts = leadTypeOptions as any[];
+    return opts.find((o: any) => o.value.toLowerCase().trim() === stored)
+      ?? opts.find((o: any) => normalizeLeadType(o.value) && normalizeLeadType(o.value) === normalizeLeadType(stored))
+      ?? null;
+  };
+
   const lead: any = data;
   const isOwnLead = lead?.assignedTo?.id === user?.id;
   const canEditThisLead = permissions.canEditAllLeads || (permissions.canEditOwnLeads && isOwnLead);
@@ -537,6 +548,7 @@ export default function LeadDetailPage() {
   useEffect(() => {
     if (isEditing && lead && Object.keys(editData).length === 0) {
       setEditData({
+        companyName: lead.companyName || '',
         status: lead.status,
         followUpDate: lead.followUpDate ? lead.followUpDate.split('T')[0] : '',
         disqualificationReason: lead.disqualificationReason || '',
@@ -647,10 +659,16 @@ export default function LeadDetailPage() {
       qc.invalidateQueries({ queryKey: ['lead', id] });
       qc.invalidateQueries({ queryKey: ['leads'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
+      // A company rename is copied into opportunities, activities and notifications
+      qc.invalidateQueries({ queryKey: ['opportunities'] });
+      qc.invalidateQueries({ queryKey: ['lead-opportunities', id] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+      qc.invalidateQueries({ queryKey: ['lead-activities', id] });
+      qc.invalidateQueries({ queryKey: ['notifications'] });
       toast.success('Lead updated successfully');
       setIsEditing(false);
     },
-    onError: () => toast.error('Failed to update lead'),
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to update lead'),
   });
 
   // Records an outreach on a channel: sets the lead's follow-up date + last-contacted
@@ -1165,6 +1183,11 @@ export default function LeadDetailPage() {
   const originalFollowUp = lead?.followUpDate ? lead.followUpDate.split('T')[0] : '';
 
   function handleSaveEdit() {
+    const companyName = (editData.companyName ?? '').trim();
+    if (companyName.length < 2) {
+      toast.error('Company name is required (at least 2 characters)');
+      return;
+    }
     // Validate past-date only if follow-up date is provided
     if (editData.followUpDate) {
       const today = new Date();
@@ -1187,7 +1210,7 @@ export default function LeadDetailPage() {
         return;
       }
     }
-    updateMutation.mutate(editData);
+    updateMutation.mutate({ ...editData, companyName });
   }
 
   if (isLoading) return (
@@ -1309,6 +1332,7 @@ export default function LeadDetailPage() {
                 onClick={() => {
                   setIsEditing(true);
                   setEditData({
+                    companyName: lead.companyName || '',
                     status: lead.status,
                     followUpDate: lead.followUpDate ? lead.followUpDate.split('T')[0] : '',
                     disqualificationReason: lead.disqualificationReason || '',
@@ -1330,17 +1354,21 @@ export default function LeadDetailPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Company Name</p>
+              <p className="text-sm font-medium text-ink dark:text-slate-200 break-words">{lead.companyName || '—'}</p>
+            </div>
+            <div>
               <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Status</p>
               <p className="text-sm text-ink dark:text-slate-200 capitalize">{lead.status?.replace(/_/g, ' ') || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Designation of Contact Name</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Contact Designation</p>
               <p className="text-sm text-ink dark:text-slate-200">{lead.contactTitle || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Lead type</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Lead Type</p>
               <p className="text-sm text-ink dark:text-slate-200">
-                {lead.leadType ? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1) : '—'}
+                {lead.leadType ? (matchLeadTypeOption(lead.leadType)?.value ?? lead.leadType.charAt(0).toUpperCase() + lead.leadType.slice(1)) : '—'}
               </p>
             </div>
             <div>
@@ -1350,21 +1378,34 @@ export default function LeadDetailPage() {
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Assigned To</p>
-              <p className="text-sm text-ink dark:text-slate-200">{lead.assignedTo?.name || '—'}</p>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source</p>
+              {(() => {
+                // Same value the Edit form shows; discovery leads without a source say so
+                const src = lead.source
+                  ? (lead.source === 'import' ? 'Imported (CSV)' : lead.source)
+                  : (lead.scanJobId ? 'Lead Discovery' : '—');
+                return <p className="text-sm text-ink dark:text-slate-200 break-words" title={src}>{src}</p>;
+              })()}
+            </div>
+            <div>
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source URL</p>
+              {(() => {
+                const url = lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '');
+                return url ? (
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline break-all">{url}</a>
+                ) : (
+                  <p className="text-sm text-ink dark:text-slate-200">—</p>
+                );
+              })()}
             </div>
             <div>
               <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Keyword</p>
               <p className="text-sm text-ink dark:text-slate-200 break-words" title={lead.keyword || undefined}>{lead.keyword || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source</p>
-              {(() => {
-                const src = lead.source
-                  ? (lead.source === 'import' ? 'Imported (CSV)' : lead.source)
-                  : (lead.scanJobId ? 'Lead Discovery' : 'Manually added');
-                return <p className="text-sm text-ink dark:text-slate-200 break-words" title={src}>{src}</p>;
-              })()}
+              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Assigned To</p>
+              <p className="text-sm text-ink dark:text-slate-200">{lead.assignedTo?.name || '—'}</p>
             </div>
             {/* <div>
               <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Contact Name</p>
@@ -1386,22 +1427,6 @@ export default function LeadDetailPage() {
                 <p className="text-sm text-ink dark:text-slate-200">—</p>
               )}
             </div> */}
-            {/* <div>
-              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source URL</p>
-              {(() => {
-                const url = lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '');
-                return url ? (
-                  <a href={url} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline break-all">{url}</a>
-                ) : (
-                  <p className="text-sm text-ink dark:text-slate-200">—</p>
-                );
-              })()}
-            </div> */}
-            <div>
-              <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Source</p>
-              <p className="text-sm text-ink dark:text-slate-200">{lead.source || '—'}</p>
-            </div>
             <div className="sm:col-span-2">
               <p className="text-[10px] text-ink-3 uppercase tracking-wider mb-1">Notes</p>
               <LeadNotesView value={lead.notes} fallback={{ date: lead.createdAt, author: lead.createdBy?.name }} />
@@ -1420,6 +1445,16 @@ export default function LeadDetailPage() {
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Company Name <span className="text-rose-500">*</span></label>
+              <input
+                className="input"
+                value={editData.companyName ?? ''}
+                maxLength={200}
+                onChange={(e) => setEditData((d: any) => ({ ...d, companyName: e.target.value }))}
+                placeholder="Company name"
+              />
+            </div>
             <div>
               <label className="label">Status</label>
               <Select
@@ -1464,7 +1499,7 @@ export default function LeadDetailPage() {
               />
             </div> */}
             <div>
-              <label className="label">Designation of Contact Name</label>
+              <label className="label">Contact Designation</label>
               <input
                 className="input"
                 value={editData.contactTitle || ''}
@@ -1473,15 +1508,11 @@ export default function LeadDetailPage() {
               />
             </div>
             <div>
-              <label className="label">Lead type</label>
+              <label className="label">Lead Type</label>
               <Select
                 className="input"
                 title="Product or Service type"
-                value={
-                  // match the stored type case-insensitively ('Services' / 'service' / 'position' …)
-                  (leadTypeOptions as any[]).find((o: any) => normalizeLeadType(o.value) && normalizeLeadType(o.value) === normalizeLeadType(editData.leadType))?.value.toLowerCase()
-                  ?? (editData.leadType || '')
-                }
+                value={matchLeadTypeOption(editData.leadType)?.value.toLowerCase() ?? (editData.leadType || '').toLowerCase()}
                 onChange={(e) => setEditData((d: any) => ({ ...d, leadType: e.target.value }))}
               >
                 <option value="">— Select —</option>
@@ -1510,7 +1541,7 @@ export default function LeadDetailPage() {
                 value={editData.source || ''}
                 onChange={(e) => setEditData((d: any) => ({ ...d, source: e.target.value }))}
               >
-                <option value="">—</option>
+                <option value="">— Select —</option>
                 {(() => {
                   const items: any[] = Array.isArray(sourceOptionsRaw) ? sourceOptionsRaw : [];
                   const vals: string[] = items

@@ -471,6 +471,81 @@ class LeadsService {
   /**
    * Update lead with permission checks
    */
+  /**
+   * After a lead's company is renamed, replace the old name in the places that keep
+   * their own text copy of it. Screens that read the lead through a relation
+   * (lists, opportunity "Linked Lead", activity lead name) update by themselves.
+   *  - this lead's opportunity titles / names (often generated from the company name)
+   *  - this lead's Activity Timeline descriptions ("Lead created: …")
+   *  - notifications about this lead and its opportunities
+   *  - the linked Account, when it carries the same name
+   */
+  async propagateCompanyRename(leadId, oldName, newName, accountId) {
+    // Replace the whole name only — never inside a longer word ("Pro" must not touch "Professional")
+    const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wholeName = new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'gu');
+    const swap = (text) => {
+      if (typeof text !== 'string' || !text.includes(oldName)) return null;
+      const next = text.replace(wholeName, () => newName);
+      return next === text ? null : next;
+    };
+    try {
+      const opps = await prisma.opportunity.findMany({
+        where: { leadId },
+        select: { id: true, title: true, opportunityName: true },
+      });
+      const oppIds = opps.map((o) => o.id);
+      const writes = [];
+
+      for (const o of opps) {
+        const data = {};
+        const t = swap(o.title); if (t !== null) data.title = t;
+        const n = swap(o.opportunityName); if (n !== null) data.opportunityName = n;
+        if (Object.keys(data).length) writes.push(prisma.opportunity.update({ where: { id: o.id }, data }));
+      }
+
+      const acts = await prisma.activityLog.findMany({
+        where: { OR: [{ leadId }, ...(oppIds.length ? [{ opportunityId: { in: oppIds } }] : [])], description: { contains: oldName } },
+        select: { id: true, description: true },
+      });
+      for (const a of acts) {
+        // Keep rename history ("Company name (old → new)") exactly as it was recorded
+        if (/Company name \(/.test(a.description)) continue;
+        const d = swap(a.description); if (d === null) continue; // old name only inside a longer word
+        writes.push(prisma.activityLog.update({ where: { id: a.id }, data: { description: d } }));
+      }
+
+      const notifs = await prisma.notification.findMany({
+        where: {
+          OR: [
+            { entityType: 'Lead', entityId: leadId },
+            ...(oppIds.length ? [{ entityType: 'Opportunity', entityId: { in: oppIds } }] : []),
+          ],
+        },
+        select: { id: true, title: true, message: true },
+      });
+      for (const nt of notifs) {
+        const data = {};
+        const m = swap(nt.message); if (m !== null) data.message = m;
+        const t = swap(nt.title); if (t !== null) data.title = t;
+        if (Object.keys(data).length) writes.push(prisma.notification.update({ where: { id: nt.id }, data }));
+      }
+
+      if (accountId) {
+        const account = await prisma.account.findUnique({ where: { id: accountId }, select: { companyName: true } });
+        if (account && account.companyName === oldName) {
+          writes.push(prisma.account.update({ where: { id: accountId }, data: { companyName: newName } }));
+        }
+      }
+
+      if (writes.length) await prisma.$transaction(writes);
+      logger.info('Lead company renamed', { leadId, oldName, newName, updated: writes.length });
+    } catch (err) {
+      // The rename itself is saved; a failed propagation is logged, not fatal
+      logger.warn('Company rename propagation failed (non-fatal)', { leadId, error: err.message });
+    }
+  }
+
   async updateLead(leadId, data, user) {
     const accessCheck = await this.checkLeadAccess(leadId, user);
     
@@ -510,6 +585,13 @@ class LeadsService {
     if (data.status === 'disqualified' && !data.disqualificationReason?.trim()) {
       return { success: false, message: 'Disqualification reason is required when disqualifying a lead', statusCode: 400 };
     }
+    if ('companyName' in data) {
+      const name = typeof data.companyName === 'string' ? data.companyName.trim() : '';
+      if (name.length < 2) {
+        return { success: false, message: 'Company name is required (at least 2 characters)', statusCode: 400 };
+      }
+      updateData.companyName = name;
+    }
     if (data.requirementDescription && data.requirementDescription.length > 2000) {
       return { success: false, message: 'Requirement description must be 2000 characters or less', statusCode: 400 };
     }
@@ -527,7 +609,7 @@ class LeadsService {
 
     const previousLead = await prisma.lead.findUnique({
       where: { id: leadId },
-      select: { assignedToId: true, companyName: true, status: true, followUpDate: true, temperature: true },
+      select: { assignedToId: true, companyName: true, status: true, followUpDate: true, temperature: true, accountId: true },
     });
 
     const lead = await prisma.lead.update({
@@ -555,6 +637,11 @@ class LeadsService {
         oldValue: previousLead[fieldName] != null ? String(previousLead[fieldName]) : null,
         newValue: updateData[fieldName] != null ? String(updateData[fieldName]) : null,
       });
+    }
+
+    // ── Company renamed: update every stored copy of the old name ────────────
+    if ('companyName' in updateData && previousLead.companyName && previousLead.companyName !== updateData.companyName) {
+      await this.propagateCompanyRename(leadId, previousLead.companyName, updateData.companyName, previousLead.accountId);
     }
 
     // ── Reassignment: open opportunities move with the lead ──────────────────

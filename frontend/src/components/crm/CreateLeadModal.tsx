@@ -650,7 +650,7 @@ export function CreateLeadModal({ isOpen, onClose }: CreateLeadModalProps) {
               <FieldError message={errors.contactName?.message} />
             </div>
             <div>
-              <FieldLabel>Designation of Contact Name</FieldLabel>
+              <FieldLabel>Contact Designation</FieldLabel>
               <IconField icon={BadgeCheck}>
                 <input type="text" {...register("contactTitle")} className="input pl-10" placeholder="e.g. VP of Engineering" />
               </IconField>
