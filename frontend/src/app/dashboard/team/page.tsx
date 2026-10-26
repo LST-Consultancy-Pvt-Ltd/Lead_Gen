@@ -84,7 +84,10 @@ export default function TeamPage() {
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => teamApi.update(id, { isActive }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['team'] }),
+    onSuccess: () => {
+      // Owner/assignee dropdowns elsewhere cache the team list under their own keys
+      ['team', 'users-filter', 'users', 'team-members'].forEach(k => qc.invalidateQueries({ queryKey: [k] }));
+    },
   });
 
   const members: any[] = data?.items ?? [];

@@ -87,12 +87,13 @@ export function pluralize(count: number, singular: string, plural: string): stri
 /**
  * Users a person may assign leads to / filter by owner.
  * Admins: everyone. Managers: themselves + members of their own team (managerId = manager).
+ * Disabled users (isActive === false) are always excluded.
  */
-export function assignableUsers<T extends { id: string; role?: string; managerId?: string | null }>(
+export function assignableUsers<T extends { id: string; role?: string; managerId?: string | null; isActive?: boolean }>(
   users: T[] | undefined | null,
   me: { id: string; role: string } | null | undefined,
 ): T[] {
-  const list = Array.isArray(users) ? users : [];
+  const list = (Array.isArray(users) ? users : []).filter((u) => u.isActive !== false);
   if (!me) return [];
   if (me.role === 'manager') return list.filter((u) => u.id === me.id || u.managerId === me.id);
   return list;
