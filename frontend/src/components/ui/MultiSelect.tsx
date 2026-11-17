@@ -5,7 +5,7 @@
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check } from 'lucide-react';
+import { Check, Minus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export type MultiSelectOption = { value: string; label: string };
@@ -88,6 +88,9 @@ export function MultiSelect({
     else if (e.key === 'Escape' || e.key === 'Tab') { setOpen(false); }
   }
 
+  const allValues = Array.from(new Set(options.map((o) => o.value)));
+  const allSelected = allValues.length > 0 && allValues.every((v) => value.includes(v));
+  const someSelected = !allSelected && allValues.some((v) => value.includes(v));
   const selectedLabels = options.filter((o) => value.includes(o.value)).map((o) => o.label);
   const label = selectedLabels.length === 0
     ? placeholder
@@ -138,15 +141,32 @@ export function MultiSelect({
             ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }),
           }}
         >
-          {value.length > 0 && (
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onChange([])}
-              className="w-full text-left px-3 py-1.5 mb-1 rounded-lg text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10"
-            >
-              Clear selection
-            </button>
+          {options.length > 0 && (
+            <>
+              <div
+                role="option"
+                aria-selected={allSelected}
+                onMouseEnter={() => setActive(-1)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onChange(allSelected ? [] : allValues)}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-semibold cursor-pointer select-none transition-colors text-ink-2 dark:text-slate-200 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+              >
+                <span
+                  className={cn(
+                    'flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors',
+                    allSelected
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : someSelected
+                        ? 'bg-blue-600/15 border-blue-600 text-blue-600 dark:text-blue-400'
+                        : 'border-slate-300 dark:border-slate-600',
+                  )}
+                >
+                  {allSelected ? <Check size={11} strokeWidth={3} /> : someSelected ? <Minus size={11} strokeWidth={3} /> : null}
+                </span>
+                <span className="flex-1 min-w-0 truncate">Select All</span>
+              </div>
+              <div className="my-1 h-px bg-line dark:bg-white/[0.06]" />
+            </>
           )}
           {options.length === 0 && (
             <p className="px-3 py-2 text-xs text-slate-400">No options</p>

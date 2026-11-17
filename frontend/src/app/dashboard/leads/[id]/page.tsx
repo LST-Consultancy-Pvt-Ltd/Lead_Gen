@@ -1213,6 +1213,62 @@ export default function LeadDetailPage() {
     updateMutation.mutate({ ...editData, companyName });
   }
 
+  function startEditLead() {
+    if (!lead) return;
+    setEditData({
+      companyName: lead.companyName || '',
+      status: lead.status,
+      followUpDate: lead.followUpDate ? lead.followUpDate.split('T')[0] : '',
+      disqualificationReason: lead.disqualificationReason || '',
+      contactName: lead.contactName || '',
+      contactEmail: lead.contactEmail || '',
+      contactPhone: lead.contactPhone || '',
+      contactTitle: lead.contactTitle || '',
+      notes: lead.notes || '',
+      source: lead.source || '',
+      leadType: lead.leadType || '',
+      sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
+      keyword: lead.keyword || '',
+    });
+    setIsEditing(true);
+  }
+
+  function cancelEditLead() {
+    setIsEditing(false);
+    setEditData({});
+  }
+
+  /* NetSuite-style record action bar — compact square-ish buttons sitting
+     directly on the page, rendered identically at the top and the bottom of
+     the record so they are never stranded mid-page. Styles are local to this
+     bar so the app-wide .btn-primary / .btn-ghost are left untouched. */
+  const recBtn = 'inline-flex items-center justify-center gap-1.5 h-[30px] px-4 rounded-md text-[13px] font-semibold leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-canvas disabled:opacity-50 disabled:cursor-not-allowed';
+  const recBtnPrimary = `${recBtn} bg-blue-600 text-white border border-blue-600 shadow-sm hover:bg-blue-700 hover:border-blue-700`;
+  const recBtnSecondary = `${recBtn} bg-white dark:bg-white/[0.06] text-ink-2 border border-line shadow-sm dark:shadow-none hover:bg-slate-50 dark:hover:bg-white/[0.1] hover:text-ink`;
+
+  function renderRecordActions(position: 'top' | 'bottom') {
+    if (!canEditThisLead) return null;
+    return (
+      <div className={'flex flex-wrap items-center gap-2' + (position === 'top' ? '' : ' pt-1')}>
+        {isEditing ? (
+          <>
+            <button className={recBtnPrimary} onClick={handleSaveEdit} disabled={updateMutation.isPending}>
+              {updateMutation.isPending && <Loader2 size={13} className="animate-spin" />}
+              Save
+            </button>
+            <button className={recBtnSecondary} onClick={cancelEditLead}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button className={recBtnPrimary} onClick={startEditLead}>
+            Edit
+          </button>
+        )}
+      </div>
+    );
+  }
+
   if (isLoading) return (
     <div className="space-y-5 animate-pulse" aria-busy="true" aria-label="Loading lead">
       <div className="h-9 w-32 rounded-xl bg-slate-200/80 dark:bg-white/[0.05]" />
@@ -1238,10 +1294,14 @@ export default function LeadDetailPage() {
 
   return (
     <div className="space-y-5 w-full">
-      <Link href="/dashboard/leads"
-        className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-sm font-medium text-ink-2 bg-white dark:bg-white/[0.04] border border-line shadow-sm dark:shadow-none hover:text-blue-600 hover:border-blue-300 dark:hover:text-blue-400 dark:hover:border-blue-500/40 transition-colors">
-        <ArrowLeft size={15} /> Back to Leads
-      </Link>
+      {/* ── Record action bar (top) ─────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href="/dashboard/leads"
+          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-sm font-medium text-ink-2 bg-white dark:bg-white/[0.04] border border-line shadow-sm dark:shadow-none hover:text-blue-600 hover:border-blue-300 dark:hover:text-blue-400 dark:hover:border-blue-500/40 transition-colors">
+          <ArrowLeft size={15} /> Back to Leads
+        </Link>
+        {renderRecordActions('top')}
+      </div>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-6 sm:p-7 shadow-xl shadow-indigo-500/20">
@@ -1326,31 +1386,6 @@ export default function LeadDetailPage() {
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="section-title flex items-center gap-2.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500/10 text-blue-600 dark:text-blue-400"><IcDetails size={15} /></span>Lead Details</h2>
-            {canEditThisLead && (
-              <button
-                className="btn-ghost text-xs py-1 px-2"
-                onClick={() => {
-                  setIsEditing(true);
-                  setEditData({
-                    companyName: lead.companyName || '',
-                    status: lead.status,
-                    followUpDate: lead.followUpDate ? lead.followUpDate.split('T')[0] : '',
-                    disqualificationReason: lead.disqualificationReason || '',
-                    contactName: lead.contactName || '',
-                    contactEmail: lead.contactEmail || '',
-                    contactPhone: lead.contactPhone || '',
-                    contactTitle: lead.contactTitle || '',
-                    notes: lead.notes || '',
-                    source: lead.source || '',
-                    leadType: lead.leadType || '',
-                    sourceUrl: lead.sourceUrl || (lead.website ? (lead.website.startsWith('http') ? lead.website : `https://${lead.website}`) : '') || '',
-                    keyword: lead.keyword || '',
-                  });
-                }}
-              >
-                <Edit2 size={13} /> Edit
-              </button>
-            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -1443,9 +1478,6 @@ export default function LeadDetailPage() {
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="section-title flex items-center gap-2.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"><IcEdit size={15} /></span>Edit Lead</h2>
-            <button className="btn-ghost text-xs py-1 px-2" onClick={() => setIsEditing(false)}>
-              <X size={13} /> Cancel
-            </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -1608,17 +1640,6 @@ export default function LeadDetailPage() {
                 />
               </div>
             )}
-          </div>
-          <div className="flex gap-2 mt-4">
-            <button
-              className="btn-primary"
-              onClick={handleSaveEdit}
-              disabled={updateMutation.isPending}
-            >
-              {updateMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              Save Changes
-            </button>
-            <button className="btn-ghost" onClick={() => setIsEditing(false)}>Cancel</button>
           </div>
         </div>
       )}
@@ -2286,6 +2307,9 @@ export default function LeadDetailPage() {
           <div className="card p-5">
             <ActivitiesList leadId={id} />
           </div>
+
+      {/* ── Record action bar (bottom) ───────────────────────────────────── */}
+      {renderRecordActions('bottom')}
 
       {/* ── Opportunity Delete Confirmation Modal ──────────────────────────── */}
       {mounted && oppDeleteConfirmId && createPortal(
