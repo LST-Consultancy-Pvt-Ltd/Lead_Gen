@@ -54,6 +54,7 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import toast from "react-hot-toast";
 import { Select } from '../../../components/ui/Select';
+import { InputMultiSelect } from '../../../components/ui/MultiSelect';
 
 // == Types ==
 type ActivityFormData = {
@@ -262,6 +263,17 @@ const ACTIVITY_TYPES = [
   { value: "linkedin", label: "LinkedIn" },
   { value: "note", label: "Note" },
 ];
+
+// Date-range buckets for the activity log. They are nested (today ⊂ week ⊂
+// month), so picking several is the union — i.e. the widest one selected.
+const DATE_RANGES = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+];
+const DATE_RANGE_LABELS: Record<string, string> = Object.fromEntries(
+  DATE_RANGES.map((d) => [d.value, d.label]),
+);
 
 // == Helpers ==
 /** Stored actions use both "follow-up" and "follow_up"; the UI uses "follow_up". */
@@ -1312,11 +1324,14 @@ export default function ActivitiesPage() {
   const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
-  const [loggedByFilter, setLoggedByFilter] = useState("");
-  const [linkedToFilterId, setLinkedToFilterId] = useState("");
-  const [linkedToFilterName, setLinkedToFilterName] = useState("");
+  // Every filter is multi-select: an empty array means "all"
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<string[]>([]);
+  const [loggedByFilter, setLoggedByFilter] = useState<string[]>([]);
+  const [linkedToFilterIds, setLinkedToFilterIds] = useState<string[]>([]);
+  // id → company name, so chips and the trigger can label a lead that is not in
+  // the currently loaded (searched / paginated) page of the dropdown
+  const [linkedToFilterNames, setLinkedToFilterNames] = useState<Record<string, string>>({});
   const [linkedToFilterQuery, setLinkedToFilterQuery] = useState("");
   const [debouncedLTFQ, setDebouncedLTFQ] = useState("");
   const [showLinkedFilter, setShowLinkedFilter] = useState(false);
@@ -1453,20 +1468,26 @@ export default function ActivitiesPage() {
   // List query
   const listParams: any = { page, limit, ...baseParams };
   if (debouncedSearch) listParams.search = debouncedSearch;
-  if (typeFilter) listParams.type = typeFilter;
-  if (loggedByFilter) listParams.executiveId = loggedByFilter;
-  if (linkedToFilterId) listParams.leadId = linkedToFilterId;
-  if (dateFilter) {
+  if (typeFilter.length) listParams.type = typeFilter.join(",");
+  if (loggedByFilter.length) listParams.executiveId = loggedByFilter.join(",");
+  if (linkedToFilterIds.length) listParams.leadId = linkedToFilterIds.join(",");
+  if (dateFilter.length) {
     const now = new Date();
     // Calendar days in the viewer's timezone (toISOString would give the UTC day,
     // which is "yesterday" in IST between midnight and 05:30)
-    if (dateFilter === "today") {
-      listParams.dateFrom = localDateKey(now);
-      listParams.dateTo = localDateKey(now);
-    } else if (dateFilter === "week") {
-      listParams.dateFrom = shiftKey(localDateKey(now), -now.getDay());
-    } else if (dateFilter === "month") {
-      listParams.dateFrom = localDateKey(new Date(now.getFullYear(), now.getMonth(), 1));
+    const today = localDateKey(now);
+    const startOf: Record<string, string> = {
+      today,
+      week: shiftKey(today, -now.getDay()),
+      month: localDateKey(new Date(now.getFullYear(), now.getMonth(), 1)),
+    };
+    // The ranges are nested (today ⊂ week ⊂ month) and all run up to now, so
+    // picking several means the union: start at the earliest of them.
+    const starts = dateFilter.map((d) => startOf[d]).filter(Boolean).sort();
+    if (starts.length) {
+      listParams.dateFrom = starts[0];
+      // Only "Today" on its own closes the range at today
+      if (dateFilter.length === 1 && dateFilter[0] === "today") listParams.dateTo = today;
     }
   }
 
@@ -1629,21 +1650,34 @@ export default function ActivitiesPage() {
 
   function clearFilters() {
     setSearchText("");
-    setTypeFilter("");
-    setDateFilter("");
-    setLoggedByFilter("");
-    setLinkedToFilterId("");
-    setLinkedToFilterName("");
+    setTypeFilter([]);
+    setDateFilter([]);
+    setLoggedByFilter([]);
+    clearLeadFilter();
+    setPage(1);
+  }
+
+  function clearLeadFilter() {
+    setLinkedToFilterIds([]);
+    setLinkedToFilterNames({});
     setLinkedToFilterQuery("");
+  }
+
+  // Add / remove one lead from the multi-select, remembering its name
+  function toggleLeadFilter(lead: { id: string; companyName?: string }) {
+    setLinkedToFilterIds((prev) =>
+      prev.includes(lead.id) ? prev.filter((x) => x !== lead.id) : [...prev, lead.id],
+    );
+    setLinkedToFilterNames((prev) => ({ ...prev, [lead.id]: lead.companyName || "Lead" }));
     setPage(1);
   }
 
   const hasActiveFilters = !!(
     searchText ||
-    typeFilter ||
-    dateFilter ||
-    loggedByFilter ||
-    linkedToFilterId
+    typeFilter.length ||
+    dateFilter.length ||
+    loggedByFilter.length ||
+    linkedToFilterIds.length
   );
   const linkedToError = errors.leadId?.message as string | undefined;
 
@@ -1775,37 +1809,40 @@ export default function ActivitiesPage() {
       label: "Search: “" + searchText + "”",
       onRemove: () => { setSearchText(""); setPage(1); },
     });
-  if (typeFilter)
+  // One chip per selected value, so any single pick can be removed on its own
+  typeFilter.forEach((t) =>
     activeFilterChips.push({
-      key: "type",
-      label: "Type: " + getTypeMeta(typeFilter).label,
-      onRemove: () => { setTypeFilter(""); setPage(1); },
-    });
-  if (dateFilter)
+      key: "type-" + t,
+      label: "Type: " + getTypeMeta(t).label,
+      onRemove: () => { setTypeFilter((p) => p.filter((x) => x !== t)); setPage(1); },
+    }),
+  );
+  dateFilter.forEach((d) =>
     activeFilterChips.push({
-      key: "date",
-      label: { today: "Today", week: "This week", month: "This month" }[dateFilter] ?? dateFilter,
-      onRemove: () => { setDateFilter(""); setPage(1); },
-    });
-  if (loggedByFilter)
+      key: "date-" + d,
+      label: DATE_RANGE_LABELS[d] ?? d,
+      onRemove: () => { setDateFilter((p) => p.filter((x) => x !== d)); setPage(1); },
+    }),
+  );
+  loggedByFilter.forEach((id) =>
     activeFilterChips.push({
-      key: "exec",
+      key: "exec-" + id,
       label:
         "Executive: " +
-        (teamMembers.find((m: any) => m.id === loggedByFilter)?.name ?? "Selected"),
-      onRemove: () => { setLoggedByFilter(""); setPage(1); },
-    });
-  if (linkedToFilterId)
+        (teamMembers.find((m: any) => m.id === id)?.name ?? "Selected"),
+      onRemove: () => { setLoggedByFilter((p) => p.filter((x) => x !== id)); setPage(1); },
+    }),
+  );
+  linkedToFilterIds.forEach((id) =>
     activeFilterChips.push({
-      key: "linked",
-      label: "Lead: " + (linkedToFilterName || "Selected"),
+      key: "linked-" + id,
+      label: "Lead: " + (linkedToFilterNames[id] || "Selected"),
       onRemove: () => {
-        setLinkedToFilterId("");
-        setLinkedToFilterName("");
-        setLinkedToFilterQuery("");
+        setLinkedToFilterIds((p) => p.filter((x) => x !== id));
         setPage(1);
       },
-    });
+    }),
+  );
 
   const pageSize = pagination?.limit ?? limit;
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -2003,63 +2040,50 @@ export default function ActivitiesPage() {
 
               {/* Exec filter — manager and admin */}
               {!isSalesUser && teamMembers.length > 0 && (
-                <Select
-                  className="input h-10 py-0 text-sm w-[calc(50%-4px)] sm:w-44"
+                <InputMultiSelect
+                  className="w-[calc(50%-4px)] sm:w-44"
                   title="Filter by executive"
-                  aria-label="Filter by executive"
+                  placeholder="All executives"
+                  noun="executives"
                   value={loggedByFilter}
-                  onChange={(e) => {
-                    setLoggedByFilter(e.target.value);
+                  onChange={(v) => {
+                    setLoggedByFilter(v);
                     setPage(1);
                   }}
-                >
-                  <option value="">All executives</option>
-                  {teamMembers.map((m: any) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </Select>
+                  options={teamMembers.map((m: any) => ({ value: m.id, label: m.name }))}
+                />
               )}
 
               {/* Type filter — manager and admin dropdown */}
               {!isSalesUser && (
-                <Select
-                  className="input h-10 py-0 text-sm w-[calc(50%-4px)] sm:w-40"
+                <InputMultiSelect
+                  className="w-[calc(50%-4px)] sm:w-40"
                   title="Filter by type"
-                  aria-label="Filter by type"
+                  placeholder="All types"
+                  noun="types"
                   value={typeFilter}
-                  onChange={(e) => {
-                    setTypeFilter(e.target.value);
+                  onChange={(v) => {
+                    setTypeFilter(v);
                     setPage(1);
                   }}
-                >
-                  <option value="">All types</option>
-                  {ACTIVITY_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </Select>
+                  options={ACTIVITY_TYPES}
+                />
               )}
 
               {/* Date range — manager and admin */}
               {!isSalesUser && (
-                <Select
-                  className="input h-10 py-0 text-sm w-[calc(50%-4px)] sm:w-36"
+                <InputMultiSelect
+                  className="w-[calc(50%-4px)] sm:w-36"
                   title="Date range"
-                  aria-label="Date range"
+                  placeholder="All time"
+                  noun="ranges"
                   value={dateFilter}
-                  onChange={(e) => {
-                    setDateFilter(e.target.value);
+                  onChange={(v) => {
+                    setDateFilter(v);
                     setPage(1);
                   }}
-                >
-                  <option value="">All time</option>
-                  <option value="today">Today</option>
-                  <option value="week">This week</option>
-                  <option value="month">This month</option>
-                </Select>
+                  options={DATE_RANGES}
+                />
               )}
 
               {/* Linked-to filter — admin only */}
@@ -2071,15 +2095,29 @@ export default function ActivitiesPage() {
                     aria-expanded={showLinkedFilter}
                     className={cn(
                       "input h-10 py-0 text-sm flex items-center gap-2 text-left cursor-pointer",
-                      linkedToFilterId ? "text-blue-700 dark:text-blue-300 border-blue-500/40" : "text-ink-3",
+                      linkedToFilterIds.length ? "text-blue-700 dark:text-blue-300 border-blue-500/40" : "text-ink-3",
                     )}
                     onClick={() => setShowLinkedFilter((v) => !v)}
+                    title={
+                      linkedToFilterIds.length > 1
+                        ? linkedToFilterIds.map((id) => linkedToFilterNames[id] || "Lead").join(", ")
+                        : "Filter by lead"
+                    }
                   >
                     <Building2 size={14} className="flex-shrink-0 opacity-70" />
                     <span className="truncate flex-1 min-w-0">
-                      {linkedToFilterName || "All leads"}
+                      {linkedToFilterIds.length === 0
+                        ? "All leads"
+                        : linkedToFilterIds.length === 1
+                          ? linkedToFilterNames[linkedToFilterIds[0]] || "1 lead"
+                          : linkedToFilterIds.length + " leads"}
                     </span>
-                    {linkedToFilterId ? (
+                    {linkedToFilterIds.length > 1 && (
+                      <span className="flex-shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-blue-600 text-white text-[11px] font-semibold flex items-center justify-center">
+                        {linkedToFilterIds.length}
+                      </span>
+                    )}
+                    {linkedToFilterIds.length ? (
                       <X
                         size={13}
                         role="button"
@@ -2087,9 +2125,7 @@ export default function ActivitiesPage() {
                         className="text-ink-3 hover:text-rose-500 flex-shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setLinkedToFilterId("");
-                          setLinkedToFilterName("");
-                          setLinkedToFilterQuery("");
+                          clearLeadFilter();
                           setPage(1);
                         }}
                       />
@@ -2098,7 +2134,7 @@ export default function ActivitiesPage() {
                     )}
                   </button>
                   {showLinkedFilter && (
-                    <div className="absolute top-full right-0 sm:left-0 sm:right-auto mt-1.5 w-[min(18rem,calc(100vw-2rem))] bg-surface border border-line rounded-xl shadow-2xl z-40 p-1.5 animate-fade-in">
+                    <div className="absolute top-full right-0 left-auto mt-1.5 w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] bg-surface border border-line rounded-xl shadow-2xl z-40 p-1.5 animate-fade-in">
                       <div className="relative">
                         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" />
                         <input
@@ -2110,9 +2146,22 @@ export default function ActivitiesPage() {
                           onChange={(e) => setLinkedToFilterQuery(e.target.value)}
                         />
                       </div>
+                      {linkedToFilterIds.length > 0 && (
+                        <div className="flex items-center justify-between gap-2 px-2.5 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                          <span>{linkedToFilterIds.length} selected</span>
+                          <button
+                            type="button"
+                            className="normal-case tracking-normal text-[11px] font-semibold text-ink-3 hover:text-rose-600 dark:hover:text-rose-400"
+                            onClick={() => { clearLeadFilter(); setPage(1); }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
                       <div
                         className="mt-1.5 max-h-60 overflow-y-auto"
                         role="listbox"
+                        aria-multiselectable="true"
                         onScroll={(e) => {
                           const el = e.currentTarget;
                           if (
@@ -2124,8 +2173,9 @@ export default function ActivitiesPage() {
                           }
                         }}
                       >
+                        {/* Picking a lead toggles it and leaves the panel open */}
                         {flLeadsAll.map((l: any) => {
-                          const sel = l.id === linkedToFilterId;
+                          const sel = linkedToFilterIds.includes(l.id);
                           return (
                             <button
                               key={l.id}
@@ -2133,20 +2183,24 @@ export default function ActivitiesPage() {
                               role="option"
                               aria-selected={sel}
                               className={cn(
-                                "w-full flex items-center gap-2 text-left px-2.5 py-2 text-sm rounded-lg transition-colors",
+                                "w-full flex items-center gap-2.5 text-left px-2.5 py-2 text-sm rounded-lg transition-colors",
                                 sel
                                   ? "bg-blue-500/10 text-blue-700 dark:text-blue-300 font-medium"
                                   : "text-ink-2 hover:bg-sunken dark:hover:bg-white/[0.05]",
                               )}
-                              onClick={() => {
-                                setLinkedToFilterId(l.id);
-                                setLinkedToFilterName(l.companyName);
-                                setShowLinkedFilter(false);
-                                setPage(1);
-                              }}
+                              onClick={() => toggleLeadFilter(l)}
                             >
+                              <span
+                                className={cn(
+                                  "flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                                  sel
+                                    ? "bg-blue-600 border-blue-600 text-white"
+                                    : "border-slate-300 dark:border-slate-600",
+                                )}
+                              >
+                                {sel && <Check size={11} strokeWidth={3} />}
+                              </span>
                               <span className="truncate flex-1">{l.companyName}</span>
-                              {sel && <Check size={14} className="flex-shrink-0" />}
                             </button>
                           );
                         })}
@@ -2172,7 +2226,8 @@ export default function ActivitiesPage() {
             {isSalesUser && (
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
                 {[{ value: "", label: "All types" }, ...ACTIVITY_TYPES].map((t) => {
-                  const active = typeFilter === t.value;
+                  // "All types" is active only when nothing is picked; the rest toggle
+                  const active = t.value ? typeFilter.includes(t.value) : typeFilter.length === 0;
                   const TIcon = t.value ? getTypeMeta(t.value).icon : SlidersHorizontal;
                   return (
                     <button
@@ -2180,7 +2235,13 @@ export default function ActivitiesPage() {
                       type="button"
                       aria-pressed={active}
                       onClick={() => {
-                        setTypeFilter(t.value);
+                        setTypeFilter((prev) =>
+                          !t.value
+                            ? []
+                            : prev.includes(t.value)
+                              ? prev.filter((x) => x !== t.value)
+                              : [...prev, t.value],
+                        );
                         setPage(1);
                       }}
                       className={cn(

@@ -13,6 +13,19 @@ const activityController = require('../controllers/activityController');
 
 const VALID_TYPES = ['call', 'email', 'meeting', 'demo', 'follow-up', 'follow_up', 'whatsapp', 'telegram', 'note', 'linkedin', 'sms', 'other'];
 
+// The activity-log filters are multi-select: each arrives as a single value or a
+// comma-separated list. These validators check every item in that list.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const csvItems = (value) =>
+  (Array.isArray(value) ? value : String(value).split(','))
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+const csvOf = (check, message) => (value) => {
+  const items = csvItems(value);
+  if (!items.length || !items.every(check)) throw new Error(message);
+  return true;
+};
+
 // Validation rules
 const createActivityValidation = [
   // action/type � at least one required
@@ -106,16 +119,16 @@ const getLeadActivitiesValidation = [
 const getActivitiesValidation = [
   query('page').optional().isInt({ min: 1 }).withMessage('page must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: 1000 }).withMessage('limit must be between 1 and 1000'),
-  query('type').optional().isIn(['call', 'email', 'meeting', 'demo', 'follow-up', 'follow_up', 'whatsapp', 'telegram', 'note', 'linkedin', 'sms', 'other'])
-    .withMessage('Invalid activity type'),
+  query('type').optional()
+    .custom(csvOf((v) => VALID_TYPES.includes(v.toLowerCase().replace(' ', '_')), 'Invalid activity type')),
   query('search').optional().isLength({ min: 2, max: 200 }).withMessage('search must be 2�200 characters'),
   query('dateFrom').optional().isISO8601().withMessage('dateFrom must be a valid ISO date'),
   query('dateTo').optional().isISO8601().withMessage('dateTo must be a valid ISO date'),
-  query('leadId').optional().isUUID().withMessage('leadId must be a valid UUID'),
+  query('leadId').optional().custom(csvOf((v) => UUID_RE.test(v), 'leadId must be a valid UUID')),
   query('opportunityId').optional().isUUID().withMessage('opportunityId must be a valid UUID'),
   query('linkedId').optional().isUUID().withMessage('linkedId must be a valid UUID'),
   query('linkedType').optional().isIn(['lead', 'opportunity']).withMessage("linkedType must be 'lead' or 'opportunity'"),
-  query('executiveId').optional().isUUID().withMessage('executiveId must be a valid UUID'),
+  query('executiveId').optional().custom(csvOf((v) => UUID_RE.test(v), 'executiveId must be a valid UUID')),
   query('overdue').optional().isIn(['true', 'false']).withMessage("overdue must be 'true' or 'false'"),
 ];
 

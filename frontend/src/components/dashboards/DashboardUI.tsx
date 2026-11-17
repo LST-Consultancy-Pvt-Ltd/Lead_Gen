@@ -3,8 +3,9 @@
 // Presentational building blocks shared by the Admin / Manager / Executive
 // dashboards. No data fetching or business logic lives here.
 
+import Link from 'next/link';
 import { cn } from '../../lib/utils';
-import { ChevronDown } from 'lucide-react';
+import { ArrowUpRight, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
 import type { LucideIcon } from 'lucide-react';
@@ -171,11 +172,26 @@ export function DashboardHeader({
 
 // ── KPI card ────────────────────────────────────────────────────────────────
 export function KpiCard({
-  icon: Icon, tone = 'blue', label, value, children,
-}: { icon: LucideIcon; tone?: Tone; label: string; value: React.ReactNode; children?: React.ReactNode }) {
+  icon: Icon, tone = 'blue', label, value, href, children,
+}: {
+  icon: LucideIcon; tone?: Tone; label: string; value: React.ReactNode;
+  /** Makes the whole card a link to the records behind the number. */
+  href?: string;
+  children?: React.ReactNode;
+}) {
   const t = TONES[tone];
+  // A link when it leads somewhere, a plain div otherwise — so a card with
+  // nothing to open never reads as clickable.
+  const Shell: any = href ? Link : 'div';
   return (
-    <div className={cn('card relative overflow-hidden p-5 min-h-[132px] flex flex-col transition-all duration-200 hover:-translate-y-px hover:shadow-lg', t.ring)}>
+    <Shell
+      {...(href ? { href } : {})}
+      className={cn(
+        'card relative overflow-hidden p-5 min-h-[132px] flex flex-col transition-all duration-200 hover:-translate-y-px hover:shadow-lg',
+        href && 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40',
+        t.ring,
+      )}
+    >
       {/* colour wash + glow */}
       <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', t.tint)} />
       <div className={cn('pointer-events-none absolute -right-10 -top-10 w-32 h-32 rounded-full blur-3xl opacity-20 dark:opacity-25', t.orb)} />
@@ -191,7 +207,13 @@ export function KpiCard({
         {value}
       </p>
       {children && <div className="relative mt-auto pt-3 text-xs text-ink-3">{children}</div>}
-    </div>
+      {href && (
+        <ArrowUpRight
+          size={15}
+          className="pointer-events-none absolute right-5 bottom-5 text-ink-3 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0"
+        />
+      )}
+    </Shell>
   );
 }
 
@@ -235,18 +257,30 @@ export function CountPill({ children, tone = 'rose' }: { children: React.ReactNo
 
 // ── Horizontal bar row ──────────────────────────────────────────────────────
 export function BarRow({
-  label, count, pct, tone, barColor,
-}: { label: string; count: React.ReactNode; pct: number; tone?: Tone; barColor?: string }) {
+  label, count, pct, tone, barColor, href,
+}: {
+  label: string; count: React.ReactNode; pct: number; tone?: Tone; barColor?: string;
+  /** Makes the row a link to the records it counts. */
+  href?: string;
+}) {
   const grad = tone ? TONES[tone].bar : '';
   const style = barColor ? { backgroundImage: `linear-gradient(90deg, ${barColor}, ${barColor}99)` } : undefined;
+  const Shell: any = href ? Link : 'div';
   return (
-    <div>
-      <div className="flex items-center justify-between text-[13px] mb-2">
-        <span className="flex items-center gap-2 font-medium text-ink-2">
-          <span className={cn('w-2.5 h-2.5 rounded-full bg-gradient-to-r', grad)} style={style} />
-          {label}
+    <Shell
+      {...(href ? { href } : {})}
+      className={cn(
+        'block',
+        href && 'group -mx-1.5 px-1.5 py-1 rounded-lg cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30',
+      )}
+    >
+      <div className="flex items-center justify-between gap-3 text-[13px] mb-2">
+        {/* free-text labels (lead sources) can be long — keep them on one line */}
+        <span className={cn('flex items-center gap-2 min-w-0 font-medium text-ink-2', href && 'group-hover:text-ink')}>
+          <span className={cn('flex-shrink-0 w-2.5 h-2.5 rounded-full bg-gradient-to-r', grad)} style={style} />
+          <span className="truncate" title={label}>{label}</span>
         </span>
-        <span className="font-semibold tabular-nums text-ink">{count}</span>
+        <span className="flex-shrink-0 font-semibold tabular-nums text-ink">{count}</span>
       </div>
       <div className="h-2.5 rounded-full overflow-hidden bg-line dark:bg-[rgba(148,163,184,0.12)]">
         <div
@@ -254,7 +288,7 @@ export function BarRow({
           style={{ width: `${Math.max(0, Math.min(100, pct))}%`, ...style }}
         />
       </div>
-    </div>
+    </Shell>
   );
 }
 

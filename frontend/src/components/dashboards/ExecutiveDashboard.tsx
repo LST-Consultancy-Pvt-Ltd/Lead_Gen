@@ -3,9 +3,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { analyticsApi } from '../../lib/api';
 import { DashboardHeader, DashboardSkeleton, KpiCard, SectionCard, BarRow, EmptyBlock } from './DashboardUI';
+import { FollowUpCalendar } from './FollowUpCalendar';
 import { useDashboardSSE } from '../../hooks/useDashboardRefresh';
 import { useUserRole } from '../../lib/rbac';
-import { TrendingUp, Users, Trophy, Clock, Inbox, CalendarCheck, ArrowUpRight, Briefcase, PieChart } from 'lucide-react';
+import { TrendingUp, Users, Trophy, Clock, Inbox, AlertTriangle, IndianRupee, ArrowUpRight, Briefcase, PieChart } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -44,15 +45,13 @@ const STATUS_BAR_COLORS: Record<string, 'blue' | 'indigo' | 'violet' | 'emerald'
   closed_won: 'emerald',
 };
 
-function timeStr(dateStr: string) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-
-function daysOverdue(dateStr: string) {
-  if (!dateStr) return 0;
-  return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000));
+/** Short Indian-format money, e.g. ₹42.6L / ₹8.9Cr. */
+function formatMoney(value: number) {
+  if (!value) return '₹0';
+  if (value >= 10_000_000) return `₹${(value / 10_000_000).toFixed(1)}Cr`;
+  if (value >= 100_000) return `₹${(value / 100_000).toFixed(1)}L`;
+  if (value >= 1_000) return `₹${(value / 1_000).toFixed(1)}K`;
+  return `₹${Math.round(value)}`;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -99,7 +98,13 @@ export function ExecutiveDashboard() {
   })();
 
   const overdueCount = overdueFollowUps.length;
-  const followUpsTodayCount = followUpsToday.length + overdueCount;
+  const followUpsTodayCount = followUpsToday.length;
+
+  // Open pipeline value across all stages
+  const pipelineValue: number = (data?.openOpportunitiesByStage ?? [])
+    .reduce((sum: number, s: any) => sum + (s.totalValue ?? 0), 0);
+  const openDeals: number = (data?.openOpportunitiesByStage ?? [])
+    .reduce((sum: number, s: any) => sum + (s.count ?? 0), 0);
 
   // myLeads from new backend field
   const myLeads: any[] = Array.isArray(data?.myLeads) ? data.myLeads : [];
@@ -114,37 +119,40 @@ export function ExecutiveDashboard() {
   ];
   const maxStatus = Math.max(...statusRows.map((r) => statusBreakdown[r.key] ?? 0), 1);
 
-  // All follow-ups: overdue first (red), then today (amber/blue)
-  const allFollowUps = [
-    ...overdueFollowUps.map((f) => ({ ...f, _overdue: true })),
-    ...followUpsToday.filter(
-      (f) => !overdueFollowUps.find((o) => o.id === f.id)
-    ).map((f) => ({ ...f, _overdue: false })),
-  ];
-
   return (
     <div className="space-y-6">
       <DashboardHeader title="My Dashboard" />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard icon={Users} tone="blue" label="My leads" value={totalMyLeads}>
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
+        <KpiCard icon={Users} tone="blue" label="My leads" value={totalMyLeads} href="/dashboard/leads">
           <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
             <TrendingUp size={13} /> +{leadsThisWeek}
             <span className="font-normal text-ink-3">this week</span>
           </span>
         </KpiCard>
-        <KpiCard icon={Trophy} tone="emerald" label="Closed / won" value={closedWonCount}>
+        <KpiCard icon={Trophy} tone="emerald" label="Closed / won" value={closedWonCount} href="/dashboard/leads?status=closed_won">
           {closeRate}% close rate
         </KpiCard>
-        <KpiCard icon={Clock} tone={overdueCount > 0 ? 'rose' : 'amber'} label="Follow-ups today" value={followUpsTodayCount}>
+        <KpiCard icon={Clock} tone="amber" label="Follow-ups today" value={followUpsTodayCount} href="/dashboard/leads?followUp=today">
+          Calls, emails and meetings
+        </KpiCard>
+        <KpiCard icon={AlertTriangle} tone={overdueCount > 0 ? 'rose' : 'emerald'} label="Overdue" value={overdueCount} href="/dashboard/leads?followUp=overdue">
           {overdueCount > 0 ? (
-            <span className="font-medium text-rose-600 dark:text-rose-400">{overdueCount} overdue</span>
-          ) : null}
+            <span className="font-medium text-rose-600 dark:text-rose-400">Needs attention today</span>
+          ) : (
+            'All caught up'
+          )}
+        </KpiCard>
+        <KpiCard icon={IndianRupee} tone="violet" label="My pipeline" value={formatMoney(pipelineValue)} href="/dashboard/opportunities">
+          {openDeals} open {openDeals === 1 ? 'opportunity' : 'opportunities'}
         </KpiCard>
       </div>
 
-      {/* Middle Row: My leads list + right column */}
+      {/* Follow-up calendar */}
+      <FollowUpCalendar scopeLabel="My follow-ups" />
+
+      {/* My leads list + status breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         {/* My leads list */}
         <SectionCard title="My leads" icon={Briefcase} tone="blue">
@@ -196,60 +204,11 @@ export function ExecutiveDashboard() {
                     count={count}
                     pct={(count / maxStatus) * 100}
                     tone={STATUS_BAR_COLORS[row.key] ?? 'blue'}
+                    href={`/dashboard/leads?status=${encodeURIComponent(row.key)}`}
                   />
                 );
               })}
             </div>
-          </SectionCard>
-
-          <SectionCard title="Today's follow-ups" icon={CalendarCheck} tone="amber">
-            {allFollowUps.length === 0 ? (
-              <EmptyBlock icon={CalendarCheck} message="No follow-ups scheduled" className="py-5" />
-            ) : (
-              <div className="space-y-2">
-                {allFollowUps.slice(0, 5).map((f: any, i: number) => {
-                  const overdue = f._overdue;
-                  const days = overdue ? daysOverdue(f.followUpDate) : 0;
-                  const timeLabel = overdue
-                    ? `Overdue${days > 0 ? ` · was ${timeStr(f.followUpDate)}` : ''}`
-                    : `Due ${timeStr(f.followUpDate || f.expectedCloseDate)}`;
-                  const accent = overdue ? 'rose' : i % 2 === 0 ? 'amber' : 'blue';
-                  return (
-                    <div
-                      key={f.id || i}
-                      onClick={() => f.id && router.push(`/dashboard/leads/${f.id}`)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && f.id) router.push(`/dashboard/leads/${f.id}`); }}
-                      role={f.id ? 'button' : undefined}
-                      tabIndex={f.id ? 0 : undefined}
-                      className={`relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-xl border border-line bg-white dark:bg-surface-2 overflow-hidden transition-all duration-150 ${
-                        f.id ? 'cursor-pointer hover:-translate-y-px hover:border-slate-300 dark:hover:border-slate-400/20' : ''
-                      }`}
-                    >
-                      <span className={`absolute left-0 top-0 bottom-0 w-[3px] ${
-                        accent === 'rose' ? 'bg-rose-500' : accent === 'amber' ? 'bg-amber-500' : 'bg-blue-500'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-ink truncate">
-                          {f.companyName ?? f.title ?? '—'}
-                        </p>
-                        <p className={`mt-0.5 text-xs ${overdue ? 'text-rose-600 dark:text-rose-400 font-medium' : 'text-ink-3'}`}>
-                          {timeLabel}
-                        </p>
-                      </div>
-                      <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium flex-shrink-0 ${
-                        accent === 'rose'
-                          ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                          : accent === 'amber'
-                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                      }`}>
-                        {overdue ? 'Overdue' : 'Today'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </SectionCard>
         </div>
       </div>

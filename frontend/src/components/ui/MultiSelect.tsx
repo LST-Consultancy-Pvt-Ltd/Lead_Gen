@@ -5,7 +5,7 @@
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Minus } from 'lucide-react';
+import { Check, ChevronDown, Minus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export type MultiSelectOption = { value: string; label: string };
@@ -41,7 +41,11 @@ export function MultiSelect({
     if (!b) return;
     const spaceBelow = window.innerHeight - b.bottom;
     const up = spaceBelow < 280 && b.top > spaceBelow;
-    setPos({ top: up ? b.top - 6 : b.bottom + 6, left: b.left, width: b.width, up });
+    // Keep the menu inside the viewport: a trigger near the right edge would
+    // otherwise push the menu off the page.
+    const menuW = menuRef.current?.offsetWidth || Math.max(b.width, 180);
+    const left = Math.max(8, Math.min(b.left, window.innerWidth - menuW - 8));
+    setPos({ top: up ? b.top - 6 : b.bottom + 6, left, width: b.width, up });
   }, []);
 
   useLayoutEffect(() => {
@@ -206,5 +210,24 @@ export function MultiSelect({
         document.body,
       )}
     </>
+  );
+}
+
+/**
+ * MultiSelect dressed as a standard `.input` filter control (fixed height,
+ * chevron on the right) — the shape used by the page filter bars.
+ */
+export function InputMultiSelect({
+  className,
+  ...props
+}: Omit<MultiSelectProps, 'triggerClassName'> & { className?: string }) {
+  return (
+    <div className={cn('relative inline-flex', className)}>
+      <MultiSelect {...props} triggerClassName="input h-10 py-0 pr-9 text-sm" />
+      <ChevronDown
+        size={15}
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-3"
+      />
+    </div>
   );
 }

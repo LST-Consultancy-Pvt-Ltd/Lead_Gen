@@ -16,6 +16,7 @@ const { scopeLeadWhere, buildLeadScope, buildActivityScope, andScope } = require
 const dashboardEvents = require("../utils/dashboardEvents");
 const { logAudit } = require("../utils/auditLogger");
 const { formatLeadChanges, fieldLabel } = require("../utils/leadChangeSummary");
+const { toList } = require("../utils/leadFilters");
 
 const ADMIN_ROLES = ["org_admin", "super_admin"];
 const CONTACT_ACTIONS = [
@@ -249,11 +250,13 @@ class ActivityService {
         resolvedLinkedType === "opportunity" &&
         resolvedOpportunityId
       ) {
-        // Opportunity doesn't have followUpDate — update lead if linked
-        if (resolvedLeadId) {
-          await prisma.lead.update({
-            where: { id: resolvedLeadId },
-            data: parentUpdate,
+        // The follow-up belongs to the opportunity, not to its parent lead —
+        // otherwise a deal's follow-up shows up on the lead's calendar entry.
+        // Opportunity has no lastContactedDate, so only the date moves.
+        if (resolvedNextActionDate) {
+          await prisma.opportunity.update({
+            where: { id: resolvedOpportunityId },
+            data: { followUpDate: resolvedNextActionDate },
           });
         }
       }
@@ -337,11 +340,11 @@ class ActivityService {
    *
    * Query params:
    *   page, limit          — pagination
-   *   leadId               — filter to a specific lead
+   *   leadId               — one lead id, or a comma-separated list of them
    *   opportunityId        — filter to a specific opportunity
    *   userId               — filter by logger (internal use / my-activities)
-   *   executiveId          — manager/admin: filter by which exec logged it
-   *   type                 — activity type (call|email|meeting|demo|follow-up|whatsapp …)
+   *   executiveId          — manager/admin: which exec logged it; CSV list allowed
+   *   type                 — activity type (call|email|meeting|demo|follow-up|whatsapp …), CSV list allowed
    *   search               — text search across outcome + notes
    *   dateFrom / dateTo    — ISO date range on activityDate
    *   linkedId             — filter to a specific lead OR opportunity ID (any)
@@ -375,8 +378,10 @@ class ActivityService {
 
     // ── Optional filters applied on top of role scope ───────────────────────
 
-    // Filter by specific lead
-    if (leadId) where.leadId = leadId;
+    // Filter by lead — one id or several (multi-select "All leads" filter)
+    const leadIds = toList(leadId);
+    if (leadIds.length === 1) where.leadId = leadIds[0];
+    else if (leadIds.length > 1) where.leadId = { in: leadIds };
 
     // Filter by specific opportunity
     if (opportunityId) where.opportunityId = opportunityId;
@@ -384,8 +389,11 @@ class ActivityService {
     // Filter by logger (used by /my and executiveId)
     if (userId) where.userId = userId;
 
-    // Manager/admin: filter by a specific executive who logged the activity
-    if (executiveId && user.role !== "sales_user") where.userId = executiveId;
+    // Manager/admin: filter by the executive(s) who logged the activity
+    const executiveIds = toList(executiveId);
+    if (executiveIds.length && user.role !== "sales_user") {
+      where.userId = executiveIds.length === 1 ? executiveIds[0] : { in: executiveIds };
+    }
 
     // Filter by linkedId regardless of type (lead OR opportunity)
     if (linkedId && linkedType === "lead") where.leadId = linkedId;
@@ -395,15 +403,22 @@ class ActivityService {
       andClauses.push({ OR: [{ leadId: linkedId }, { opportunityId: linkedId }] });
     }
 
-    // Activity type filter (normalise follow up variants)
-    if (type) {
-      const normalised = type.toLowerCase().replace(" ", "_");
-      // match both 'follow-up' and 'follow_up' stored values
-      if (normalised === "follow_up" || normalised === "follow-up") {
-        where.action = { in: ["follow-up", "follow_up"] };
-      } else {
-        where.action = normalised;
+    // Activity type filter — one type or several (normalise follow up variants)
+    const types = toList(type);
+    if (types.length) {
+      const actions = new Set();
+      for (const t of types) {
+        const normalised = String(t).toLowerCase().replace(" ", "_");
+        // match both 'follow-up' and 'follow_up' stored values
+        if (normalised === "follow_up" || normalised === "follow-up") {
+          actions.add("follow-up");
+          actions.add("follow_up");
+        } else {
+          actions.add(normalised);
+        }
       }
+      const list = [...actions];
+      where.action = list.length === 1 ? list[0] : { in: list };
     }
 
     // Date range on activityDate

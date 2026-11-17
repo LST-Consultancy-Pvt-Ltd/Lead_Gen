@@ -243,6 +243,9 @@ model Lead {
   account       Account?       @relation(fields: [accountId], references: [id])
   importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
   leadContacts  Contact[]
+
+  @@index([organizationId, followUpDate])
+  @@index([assignedToId, followUpDate])
 }
 
 model Campaign {
@@ -412,6 +415,7 @@ model Opportunity {
   salesOwnerId    String?
   wonLostReason   String?
   stageChangedAt  DateTime?
+  followUpDate    DateTime?
 
   organization Organization  @relation(fields: [organizationId], references: [id])
   lead         Lead          @relation(fields: [leadId], references: [id])
@@ -421,6 +425,9 @@ model Opportunity {
   account      Account?      @relation(fields: [accountId], references: [id])
   contact      Contact?      @relation(fields: [contactId], references: [id])
   activityLogs ActivityLog[]
+
+  @@index([organizationId, followUpDate])
+  @@index([assignedToId, followUpDate])
 }
 
 model ImportLog {

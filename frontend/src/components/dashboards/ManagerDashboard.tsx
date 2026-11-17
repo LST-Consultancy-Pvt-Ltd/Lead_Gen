@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { analyticsApi, teamApi } from '../../lib/api';
 import {
   DashboardHeader, DashboardSkeleton, KpiCard, SectionCard, BarRow, PersonAvatar,
+  MultiFilterSelect,
   ChartTooltip, EmptyBlock, CountPill, FilterSelect,
 } from './DashboardUI';
 import { useChartTheme } from '../../hooks/useChartTheme';
@@ -15,7 +16,9 @@ import {
 } from 'recharts';
 import { startOfWeek, startOfMonth, subDays, startOfQuarter, format } from 'date-fns';
 import { TrendingUp, Users, BadgeCheck, Trophy, Clock, Medal, BarChart3, CalendarCheck, UserCheck, CalendarRange, Filter as FunnelIcon, AlertTriangle } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { FollowUpCalendar } from './FollowUpCalendar';
 
 // â”€â”€ Date Range Helper (exported for AdminDashboard compatibility) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function getDateRange(preset: string) {
@@ -60,8 +63,8 @@ export function ManagerDashboard() {
   const ct = useChartTheme();
 
   const [datePreset, setDatePreset] = useState('last_30');
-  const [selectedExecId, setSelectedExecId] = useState('');
-  const params = { ...getDateRange(datePreset), ...(selectedExecId ? { executiveId: selectedExecId } : {}) };
+  const [selectedExecIds, setSelectedExecIds] = useState<string[]>([]);
+  const params = { ...getDateRange(datePreset), ...(selectedExecIds.length ? { executiveId: selectedExecIds.join(',') } : {}) };
 
   // Fetch team members to populate the executive dropdown
   const { data: teamData } = useQuery({
@@ -74,7 +77,7 @@ export function ManagerDashboard() {
     : [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard', 'manager', datePreset, selectedExecId],
+    queryKey: ['dashboard', 'manager', datePreset, selectedExecIds],
     queryFn: () => analyticsApi.getManagerDashboard(params).then((r) => r.data?.data ?? r.data ?? {}),
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -164,16 +167,13 @@ export function ManagerDashboard() {
       {/* Header */}
       <DashboardHeader title="Team Dashboard" subtitle={DATE_PRESET_LABELS[datePreset]}>
         {executives.length > 0 && (
-          <FilterSelect icon={UserCheck} tone="emerald"
-            value={selectedExecId}
-            onChange={(e) => setSelectedExecId(e.target.value)}
-            aria-label="Filter by executive"
-          >
-            <option value="">All executives</option>
-            {executives.map((exec: any) => (
-              <option key={exec.id} value={exec.id}>{exec.name}</option>
-            ))}
-          </FilterSelect>
+          <MultiFilterSelect icon={UserCheck} tone="emerald"
+            title="Filter by executive"
+            placeholder="All executives" noun="executives"
+            value={selectedExecIds}
+            onChange={setSelectedExecIds}
+            options={executives.map((exec: any) => ({ value: exec.id, label: exec.name }))}
+          />
         )}
         <FilterSelect icon={CalendarRange} tone="blue"
           value={datePreset}
@@ -189,23 +189,31 @@ export function ManagerDashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={Users} tone="blue" label="Team leads" value={teamLeadsTotal.toLocaleString()}>
+        <KpiCard icon={Users} tone="blue" label="Team leads" value={teamLeadsTotal.toLocaleString()} href="/dashboard/leads">
           {DATE_PRESET_LABELS[datePreset]}
         </KpiCard>
-        <KpiCard icon={BadgeCheck} tone="violet" label="Qualified" value={qualifiedCount}>
+        <KpiCard icon={BadgeCheck} tone="violet" label="Qualified" value={qualifiedCount} href="/dashboard/leads?status=qualified">
           {qualRate}% qualification rate
         </KpiCard>
-        <KpiCard icon={Trophy} tone="emerald" label="Closed / won" value={closedWonCount}>
+        <KpiCard icon={Trophy} tone="emerald" label="Closed / won" value={closedWonCount} href="/dashboard/leads?status=closed_won">
           <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
             <TrendingUp size={13} /> {DATE_PRESET_LABELS[datePreset]}
           </span>
         </KpiCard>
-        <KpiCard icon={Clock} tone={pendingFollowUps > 0 ? 'rose' : 'amber'} label="Overdue follow-ups" value={pendingFollowUps}>
+        <KpiCard icon={Clock} tone={pendingFollowUps > 0 ? 'rose' : 'amber'} label="Overdue follow-ups" value={pendingFollowUps} href="/dashboard/leads?followUp=overdue">
           {pendingFollowUps > 0 ? (
             <span className="font-medium text-rose-600 dark:text-rose-400">{pendingFollowUps} need attention</span>
           ) : null}
         </KpiCard>
       </div>
+
+      {/* Follow-up calendar */}
+      <FollowUpCalendar
+        scopeLabel={`Team follow-ups${executives.length ? ` · ${executives.length} exec${executives.length === 1 ? '' : 's'}` : ''}`}
+        assignees={executives.map((e: any) => ({ id: e.id, name: e.name || e.email }))}
+        showOwnerBreakdown
+        ownerBreakdownTitle="Execs at risk"
+      />
 
       {/* Middle Row: Pipeline Funnel + Exec Leaderboard */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -218,6 +226,11 @@ export function ManagerDashboard() {
                 count={stage.count.toLocaleString()}
                 pct={(stage.count / funnelMax) * 100}
                 barColor={stage.color}
+                href={
+                  stage.key === 'new'
+                    ? '/dashboard/leads'
+                    : `/dashboard/leads?status=${encodeURIComponent(stage.key)}`
+                }
               />
             ))}
           </div>
@@ -229,7 +242,11 @@ export function ManagerDashboard() {
           ) : (
             <div className="-mx-2 space-y-1">
               {leaderboard.map((exec, i) => (
-                <div key={exec.id} className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-gradient-to-r hover:from-amber-50 hover:to-transparent dark:hover:from-amber-500/[0.08] transition-colors duration-150">
+                <Link
+                  key={exec.id}
+                  href={`/dashboard/leads?owner=${encodeURIComponent(exec.id)}`}
+                  className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-gradient-to-r hover:from-amber-50 hover:to-transparent dark:hover:from-amber-500/[0.08] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30"
+                >
                   <span className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold tabular-nums flex-shrink-0 ${RANK_STYLE[i] ?? 'bg-slate-400/10 text-slate-500'}`}>
                     #{i + 1}
                   </span>
@@ -240,7 +257,7 @@ export function ManagerDashboard() {
                       {exec.leads} leads &middot; {exec.closed} closed
                     </p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

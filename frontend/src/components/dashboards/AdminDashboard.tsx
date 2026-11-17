@@ -9,48 +9,27 @@ import {
   KpiCard,
   SectionCard,
   BarRow,
-  PersonAvatar,
-  ChartTooltip,
   EmptyBlock,
   FilterSelect,
-  chartTick,
-  chartGridStroke,
-  chartCursor,
+  MultiFilterSelect,
 } from "./DashboardUI";
-import { useChartTheme } from "../../hooks/useChartTheme";
 import { useDashboardSSE } from "../../hooks/useDashboardRefresh";
 import { useUserRole } from "../../lib/rbac";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ResponsiveContainer,
-} from "recharts";
 import {
   TrendingUp,
   TrendingDown,
   Users,
   UserCheck,
   CalendarRange,
-  Percent,
   PieChart,
-  BarChart3,
   Activity,
   Briefcase,
+  AlertTriangle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { FollowUpCalendar } from "./FollowUpCalendar";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-const ROLE_LABELS: Record<string, string> = {
-  sales_user: "Lead exec",
-  manager: "Sales manager",
-  org_admin: "Admin",
-  super_admin: "Super admin",
-};
 
 const LEAD_TYPE_LABELS: Record<string, string> = {
   position_discovery: "Position disc.",
@@ -92,10 +71,9 @@ export function AdminDashboard() {
   const role = useUserRole();
   useDashboardSSE(role);
   const router = useRouter();
-  const ct = useChartTheme();
 
-  const [selectedManagerId, setSelectedManagerId] = useState<string>("");
-  const [selectedExecId, setSelectedExecId] = useState<string>("");
+  const [selectedManagerIds, setSelectedManagerIds] = useState<string[]>([]);
+  const [selectedExecIds, setSelectedExecIds] = useState<string[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("month");
 
   // Compute dateFrom / dateTo from the selected period
@@ -127,12 +105,12 @@ export function AdminDashboard() {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ["dashboard", "ceo", selectedManagerId, selectedExecId, selectedPeriod],
+    queryKey: ["dashboard", "ceo", selectedManagerIds, selectedExecIds, selectedPeriod],
     queryFn: () => {
       const { dateFrom, dateTo } = getPeriodRange(selectedPeriod);
       const params: Record<string, string> = { dateFrom, dateTo, period: selectedPeriod };
-      if (selectedManagerId) params.managerId = selectedManagerId;
-      if (selectedExecId) params.executiveId = selectedExecId;
+      if (selectedManagerIds.length) params.managerId = selectedManagerIds.join(",");
+      if (selectedExecIds.length) params.executiveId = selectedExecIds.join(",");
       return analyticsApi
         .getCEODashboard(params)
         .then((r) => r.data?.data ?? r.data ?? {});
@@ -151,64 +129,47 @@ export function AdminDashboard() {
   });
 
   if (isLoading) {
-    return <DashboardSkeleton kpis={4} />;
+    return <DashboardSkeleton kpis={3} />;
   }
 
   // ── KPI derivations ──────────────────────────────────────────
   const execList = Array.isArray(data?.leadsByExecutive)
     ? data.leadsByExecutive
     : [];
-  const convList = Array.isArray(data?.conversionRateByExecutive)
-    ? data.conversionRateByExecutive
-    : [];
   const totalLeads =
     data?.kpis?.totalLeads ??
     execList.reduce((s: number, e: any) => s + (e.count ?? 0), 0);
-  const activeUsers = data?.admin?.totalActiveUsers ?? 0;
   const leadsThisWeek = data?.kpis?.leadsPeriod ?? data?.kpis?.leadsThisWeek ?? 0;
-  const avgConvRate =
-    convList.length > 0
-      ? (
-          convList.reduce(
-            (s: number, e: any) => s + Number(e.rate ?? 0),
-            0
-          ) / convList.length
-        ).toFixed(1)
-      : "0.0";
 
   // ── Lead source breakdown ────────────────────────────────────
-  const sourceBreakdown: { type: string; count: number }[] =
-    data?.kpis?.leadSourceBreakdown ?? [];
+  const sourceBreakdown: { type: string; count: number }[] = [
+    ...(data?.kpis?.leadSourceBreakdown ?? []),
+  ].sort((a, b) => b.count - a.count);
   const maxSource = Math.max(...sourceBreakdown.map((s) => s.count), 1);
 
-  // ── Leads over time ──────────────────────────────────────────
-  const leadsOverTime: { month: string; count: number }[] = Array.isArray(
-    data?.leadsOverTime
-  )
-    ? data.leadsOverTime
-    : [];
-
-  // ── Team overview ────────────────────────────────────────────
+  // ── Team list (drives the filters and the calendar) ──────────
   const teamUsers: any[] = Array.isArray(teamList) ? teamList : [];
-  const managerCount = teamUsers.filter((u) => u.role === "manager").length;
-  const execCount = teamUsers.filter((u) => u.role === "sales_user").length;
+
+  // ── Follow-ups ───────────────────────────────────────────────
+  const overdueFollowUps: any[] = (() => {
+    const raw = data?.overdueFollowUps;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter((f: any) => f.entityType !== 'opportunity');
+    return raw.leads ?? [];
+  })();
+
+  // Calendar owner filter — everyone the admin can see
+  const calendarAssignees = teamUsers
+    .filter((u) => u.role === "sales_user" || u.role === "manager")
+    .map((u) => ({ id: u.id, name: u.name || u.email }));
 
   // ── Filter dropdowns ─────────────────────────────────────────
   const managers = teamUsers.filter((u) => u.role === "manager");
-  const executives = selectedManagerId
+  const executives = selectedManagerIds.length
     ? teamUsers.filter(
-        (u) => u.role === "sales_user" && u.managerId === selectedManagerId
+        (u) => u.role === "sales_user" && selectedManagerIds.includes(u.managerId)
       )
     : [];
-
-  // ── Team panel: scope to selection ───────────────────────────
-  const displayedTeamUsers = selectedExecId
-    ? teamUsers.filter((u) => u.id === selectedExecId)
-    : selectedManagerId
-    ? teamUsers.filter(
-        (u) => u.id === selectedManagerId || u.managerId === selectedManagerId
-      )
-    : teamUsers;
 
   // ── Recent activity ──────────────────────────────────────────
   const auditLogs: any[] = Array.isArray(data?.admin?.recentAuditLogs)
@@ -244,44 +205,39 @@ export function AdminDashboard() {
           <option value="quarter">This quarter</option>
         </FilterSelect>
 
-        {/* Manager dropdown */}
-        <FilterSelect icon={Briefcase} tone="violet"
+        {/* Manager filter */}
+        <MultiFilterSelect icon={Briefcase} tone="violet"
           title="Filter by sales manager"
-          value={selectedManagerId}
-          onChange={(e) => {
-            setSelectedManagerId(e.target.value);
-            setSelectedExecId("");
+          placeholder="All sales managers" noun="managers"
+          value={selectedManagerIds}
+          onChange={(v) => {
+            setSelectedManagerIds(v);
+            // Execs are scoped to the chosen managers — drop any that no
+            // longer belong to one, or the API answers 403.
+            setSelectedExecIds((prev) =>
+              prev.filter((id) =>
+                teamUsers.some((u: any) => u.id === id && v.includes(u.managerId))
+              )
+            );
           }}
-        >
-          <option value="">All sales managers</option>
-          {managers.map((m: any) => (
-            <option key={m.id} value={m.id}>
-              {m.name || m.email}
-            </option>
-          ))}
-        </FilterSelect>
+          options={managers.map((m: any) => ({ value: m.id, label: m.name || m.email }))}
+        />
 
-        {/* Executive dropdown — disabled until manager is selected */}
-        <FilterSelect icon={UserCheck} tone="emerald"
-          title={selectedManagerId ? "Filter by executive" : "Select a manager first"}
-          value={selectedExecId}
-          onChange={(e) => setSelectedExecId(e.target.value)}
-          disabled={!selectedManagerId}
-        >
-          <option value="">
-            {selectedManagerId ? "All executives" : "Select manager first"}
-          </option>
-          {executives.map((e: any) => (
-            <option key={e.id} value={e.id}>
-              {e.name || e.email}
-            </option>
-          ))}
-        </FilterSelect>
+        {/* Executive filter — disabled until a manager is picked */}
+        <MultiFilterSelect icon={UserCheck} tone="emerald"
+          title={selectedManagerIds.length ? "Filter by executive" : "Select a manager first"}
+          placeholder={selectedManagerIds.length ? "All executives" : "Select manager first"}
+          noun="executives"
+          value={selectedExecIds}
+          onChange={setSelectedExecIds}
+          disabled={!selectedManagerIds.length}
+          options={executives.map((e: any) => ({ value: e.id, label: e.name || e.email }))}
+        />
       </DashboardHeader>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={Users} tone="blue" label="Total leads" value={totalLeads.toLocaleString()}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard icon={Users} tone="blue" label="Total leads" value={totalLeads.toLocaleString()} href="/dashboard/leads">
           {monthGrowth !== null ? (
             <span className={`inline-flex items-center gap-1 font-medium ${Number(monthGrowth) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
               {Number(monthGrowth) >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
@@ -292,24 +248,35 @@ export function AdminDashboard() {
             "All time total"
           )}
         </KpiCard>
-        <KpiCard icon={UserCheck} tone="indigo" label="Active users" value={activeUsers}>
-          {managerCount} sales mgrs · {execCount} execs
-        </KpiCard>
-        <KpiCard icon={CalendarRange} tone="violet" label={periodLabel} value={leadsThisWeek}>
+        <KpiCard icon={CalendarRange} tone="violet" label={periodLabel} value={leadsThisWeek} href="/dashboard/leads">
           {periodHint}
         </KpiCard>
-        <KpiCard icon={Percent} tone="emerald" label="Conversion rate" value={`${avgConvRate}%`}>
-          {convList.length} exec{convList.length !== 1 ? "s" : ""} tracked
+        <KpiCard
+          icon={AlertTriangle}
+          tone={overdueFollowUps.length > 0 ? "rose" : "emerald"}
+          label="Overdue follow-ups"
+          value={overdueFollowUps.length}
+          href="/dashboard/leads?followUp=overdue"
+        >
+          {overdueFollowUps.length > 0 ? "Org-wide, across all teams" : "All teams caught up"}
         </KpiCard>
       </div>
 
-      {/* Middle Row: Lead source breakdown + Leads over time */}
+      {/* Follow-up calendar */}
+      <FollowUpCalendar
+        scopeLabel="All teams"
+        assignees={calendarAssignees}
+        showOwnerBreakdown
+        ownerBreakdownTitle="Overdue by owner"
+      />
+
+      {/* Lead source breakdown + Recent activity, side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SectionCard title="Lead source breakdown" icon={PieChart} tone="violet">
+        <SectionCard title="Lead source breakdown" subtitle="All leads" icon={PieChart} tone="violet">
           {sourceBreakdown.length === 0 ? (
             <EmptyBlock icon={PieChart} message="No data" />
           ) : (
-            <div className="overflow-y-auto max-h-[200px] pr-1 space-y-5">
+            <div className="overflow-y-auto max-h-[360px] pr-1 space-y-4">
               {sourceBreakdown.map((s) => (
                 <BarRow
                   key={s.type}
@@ -317,69 +284,8 @@ export function AdminDashboard() {
                   count={s.count.toLocaleString()}
                   pct={(s.count / maxSource) * 100}
                   tone={LEAD_TYPE_COLORS[s.type] ?? "blue"}
+                  href={`/dashboard/leads?source=${encodeURIComponent(s.type)}`}
                 />
-              ))}
-            </div>
-          )}
-        </SectionCard>
-
-        <SectionCard title="Leads over time" icon={BarChart3} tone="blue">
-          {leadsOverTime.length === 0 ? (
-            <EmptyBlock icon={BarChart3} message="No data" />
-          ) : (
-            <div className="mt-auto">
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart
-                  data={leadsOverTime}
-                  margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="adminLeadsBar" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={ct.series[1]} />
-                      <stop offset="100%" stopColor={ct.series[0]} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid vertical={false} stroke={ct.grid} />
-                  <XAxis dataKey="month" tick={ct.tick} axisLine={false} tickLine={false} />
-                  <YAxis tick={ct.tick} axisLine={false} tickLine={false} />
-                  <Tooltip cursor={ct.cursor} content={<ChartTooltip />} />
-                  <Bar dataKey="count" fill="url(#adminLeadsBar)" radius={[6, 6, 0, 0]} maxBarSize={36} animationDuration={500} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </SectionCard>
-      </div>
-
-      {/* Lower Row: Team overview + Recent activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SectionCard title="Team overview" icon={Users} tone="emerald">
-          {displayedTeamUsers.length === 0 ? (
-            <EmptyBlock icon={Users} message="No team data" />
-          ) : (
-            <div className="overflow-y-auto max-h-[220px] -mx-2 pr-1">
-              {displayedTeamUsers.map((user: any) => (
-                <div key={user.id} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-gradient-to-r hover:from-emerald-50 hover:to-transparent dark:hover:from-emerald-500/[0.08] transition-colors duration-150">
-                  <PersonAvatar name={user.name || user.email || "U"} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-ink truncate">
-                      {user.name || user.email}
-                    </p>
-                    <p className="text-xs text-ink-3">
-                      {ROLE_LABELS[user.role] ?? user.role}
-                    </p>
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                      user.isActive
-                        ? "px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20"
-                        : "px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-1 ring-rose-500/20"
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? "bg-emerald-500" : "bg-rose-500"}`} />
-                    {user.isActive ? "Active" : "Inactive"}
-                  </span>
-                </div>
               ))}
             </div>
           )}
@@ -389,7 +295,7 @@ export function AdminDashboard() {
           {auditLogs.length === 0 ? (
             <EmptyBlock icon={Activity} message="No recent activity" />
           ) : (
-            <div className="overflow-y-auto max-h-[220px] pr-1">
+            <div className="overflow-y-auto max-h-[360px] pr-1">
               <ol className="relative">
                 {auditLogs.map((log: any, i: number) => (
                   <li key={log.id || i} className="relative flex gap-3 pb-4 last:pb-0">

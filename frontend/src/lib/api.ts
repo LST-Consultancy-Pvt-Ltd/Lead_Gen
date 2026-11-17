@@ -326,6 +326,7 @@ export const analyticsApi = {
   getManagerDashboard: (params?: any) => api.get('/analytics/dashboard/manager', { params }),
   getSalesDashboard: (params?: any) => api.get('/analytics/dashboard/sales', { params }),
   getDashboard: (params?: any) => api.get('/analytics/dashboard', { params }),
+  getFollowUpCalendar: (params?: any) => api.get('/analytics/follow-ups/calendar', { params }),
 };
 
 export const teamApi = {

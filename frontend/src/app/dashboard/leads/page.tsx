@@ -44,11 +44,35 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const [followUpFilter, setFollowUpFilter] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+
+  // Deep links from the dashboard, e.g. /dashboard/leads?followUp=overdue&owner=<id>
+  // or ?source=LinkedIn. Read on mount rather than with useSearchParams so the
+  // page needs no Suspense boundary.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const list = (key: string) =>
+      (q.get(key) ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+
+    const buckets = list('followUp').filter((v) => FOLLOW_UP_OPTIONS.some((o) => o.value === v));
+    if (buckets.length) setFollowUpFilter(buckets);
+
+    // Owner ids are checked against the team list once it loads, not here —
+    // an id the viewer may not see is already refused by the API.
+    const owner = list('owner');
+    if (owner.length) setOwnerFilter(owner);
+
+    const source = list('source');
+    if (source.length) setSourceFilter(source);
+
+    const status = list('status');
+    if (status.length) setStatusFilter(status);
+  }, []);
   useEffect(() => setMounted(true), []);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [assignOpen, setAssignOpen] = useState(false);
@@ -99,6 +123,7 @@ export default function LeadsPage() {
     search: search || undefined,
     status: statusFilter.length ? statusFilter.join(',') : undefined,
     ...followUpParams(followUpFilter),
+    source: sourceFilter.length ? sourceFilter.join(',') : undefined,
     sortBy,
     sortDir,
   };
@@ -478,9 +503,21 @@ export default function LeadsPage() {
         <MultiFilterSelect icon={CircleDot} tone="violet" className="w-52" title="Filter by status"
           placeholder="All Status" noun="statuses" value={statusFilter}
           onChange={v => { setStatusFilter(v); setPage(1); }}
-          options={(Array.isArray(leadStatusOptions) ? leadStatusOptions : [])
-            .filter((opt: any) => opt.isActive !== false)
-            .map((opt: any) => ({ value: opt.value, label: opt.value }))}
+          options={(() => {
+            const configured = (Array.isArray(leadStatusOptions) ? leadStatusOptions : [])
+              .filter((opt: any) => opt.isActive !== false)
+              .map((opt: any) => opt.value)
+              .filter((v: any) => typeof v === 'string' && v.trim());
+            const seen = new Set<string>();
+            return [...configured, ...statusFilter]
+              .filter((v) => {
+                const k = v.toLowerCase();
+                if (seen.has(k)) return false;
+                seen.add(k);
+                return true;
+              })
+              .map((v) => ({ value: v, label: v }));
+          })()}
         />
         <RoleGuard permission="canViewAllLeads">
           <MultiFilterSelect icon={UserCircle} tone="emerald" className="w-52" title="Filter by owner"
@@ -492,6 +529,20 @@ export default function LeadsPage() {
             ]}
           />
         </RoleGuard>
+        <MultiFilterSelect icon={Tag} tone="blue" className="w-52" title="Filter by source"
+          placeholder="All Sources" noun="sources" value={sourceFilter}
+          onChange={v => { setSourceFilter(v); setPage(1); }}
+          options={(() => {
+            const items: any[] = Array.isArray(leadSourceOptions) ? leadSourceOptions : [];
+            const configured = items
+              .map((i: any) => (typeof i === 'string' ? i : i?.value))
+              .filter((v: any) => typeof v === 'string' && v.trim());
+            return [...new Set(['manual', ...configured, ...sourceFilter])].map((v) => ({
+              value: v,
+              label: v === 'manual' ? 'Manual entry' : v,
+            }));
+          })()}
+        />
         <MultiFilterSelect icon={CalendarDays} tone="amber" className="w-52" title="Filter by next follow-up"
           placeholder="Follow-Up" noun="follow-ups" value={followUpFilter}
           onChange={v => { setFollowUpFilter(v); setPage(1); }}

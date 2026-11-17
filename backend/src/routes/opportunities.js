@@ -42,6 +42,7 @@ const updateValidation = [
   body('closeProbability').optional().isInt({ min: 0, max: 100 }),
   body('probability').optional().isInt({ min: 0, max: 100 }),
   body('expectedCloseDate').optional().isISO8601(),
+  body('followUpDate').optional({ nullable: true }).isISO8601().withMessage('followUpDate must be a valid ISO date'),
   body('assignedToId').optional().isUUID(),
   body('contactId').optional().isUUID(),
   body('wonLostReason').optional().trim().isLength({ max: 1000 }),

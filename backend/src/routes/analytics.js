@@ -23,6 +23,9 @@ router.get('/dashboard/ceo', requireAdmin, ctrl.getCEODashboard);
 // Dynamic dashboard — returns widgets based on the caller's role automatically
 router.get('/dashboard', ctrl.getDashboard);
 
+// Follow-up calendar — role-scoped, every item tagged entityType + entityId
+router.get('/follow-ups/calendar', ctrl.getFollowUpCalendar);
+
 // SSE stream — real-time push notifications when dashboard data changes
 router.get('/dashboard/stream', ctrl.getDashboardStream);
 

@@ -61,6 +61,25 @@ async function _buildScope(user) {
 
 // ─── Widget helpers (accept scoped WHERE fragments) ─────────────
 
+/**
+ * Follow-up rows go to the UI tagged with the record they belong to, so a
+ * click opens the right page. Without entityType a lead and an opportunity
+ * are indistinguishable once both lists are merged.
+ */
+function _tagLead(l) {
+  return { ...l, entityType: 'lead', entityId: l.id };
+}
+
+function _tagOpp(o) {
+  return {
+    ...o,
+    entityType: 'opportunity',
+    entityId: o.id,
+    // Display name the follow-up widgets read
+    companyName: o.opportunityName || o.title || o.lead?.companyName || null,
+  };
+}
+
 async function _wLeadsToday(leadWhere) {
   const today = _today();
   return prisma.lead.count({
@@ -85,12 +104,14 @@ async function _wFollowUpsDueToday(leadWhere, oppWhere) {
       select: { id: true, companyName: true, contactName: true, followUpDate: true, status: true, temperature: true },
     }),
     prisma.opportunity.findMany({
-      where: { ...oppWhere, expectedCloseDate: { gte: today, lt: tomorrow }, stage: { notIn: CLOSED_OPP_STAGES } },
-      select: { id: true, title: true, stage: true, dealValue: true, expectedCloseDate: true,
+      where: { ...oppWhere, followUpDate: { gte: today, lt: tomorrow }, stage: { notIn: CLOSED_OPP_STAGES } },
+      select: { id: true, title: true, opportunityName: true, stage: true, dealValue: true,
+        followUpDate: true, expectedCloseDate: true,
+        lead: { select: { id: true, companyName: true } },
         assignedTo: { select: { id: true, name: true } } },
     }),
   ]);
-  return { leads, opportunities };
+  return { leads: leads.map(_tagLead), opportunities: opportunities.map(_tagOpp) };
 }
 
 async function _wOverdueFollowUps(leadWhere, oppWhere) {
@@ -104,14 +125,16 @@ async function _wOverdueFollowUps(leadWhere, oppWhere) {
       take: 50,
     }),
     prisma.opportunity.findMany({
-      where: { ...oppWhere, expectedCloseDate: { lt: today }, stage: { notIn: CLOSED_OPP_STAGES } },
-      orderBy: { expectedCloseDate: 'asc' },
-      select: { id: true, title: true, stage: true, dealValue: true, expectedCloseDate: true,
+      where: { ...oppWhere, followUpDate: { lt: today }, stage: { notIn: CLOSED_OPP_STAGES } },
+      orderBy: { followUpDate: 'asc' },
+      select: { id: true, title: true, opportunityName: true, stage: true, dealValue: true,
+        followUpDate: true, expectedCloseDate: true,
+        lead: { select: { id: true, companyName: true } },
         assignedTo: { select: { id: true, name: true } } },
       take: 50,
     }),
   ]);
-  return { leads, opportunities };
+  return { leads: leads.map(_tagLead), opportunities: opportunities.map(_tagOpp) };
 }
 
 async function _wOpenOpportunitiesByStage(oppWhere) {
@@ -520,18 +543,18 @@ async function getManagerDashboard(req, res) {
     const { from, to } = _parseDateRange(req.query);
     const staleDays = parseInt(req.query.staleDays, 10) || 7;
 
-    // Optional executive filter — must be a member of the manager's team
+    // Optional executive filter — one or more, each a member of the team
     let userIds = allUserIds;
     let leadWhere = baseLead;
     let oppWhere = baseOpp;
-    if (req.query.executiveId) {
-      const execId = req.query.executiveId;
-      if (!allUserIds.includes(execId)) {
+    const execIds = _csvParam(req.query.executiveId);
+    if (execIds.length) {
+      if (execIds.some((id) => !allUserIds.includes(id))) {
         return error(res, 'Executive not in your team', 403);
       }
-      userIds = [execId];
-      leadWhere = { ...baseLead, assignedToId: execId };
-      oppWhere = { ...baseOpp, assignedToId: execId };
+      userIds = execIds;
+      leadWhere = { ...baseLead, assignedToId: { in: execIds } };
+      oppWhere = { ...baseOpp, assignedToId: { in: execIds } };
     }
 
     const [
@@ -599,25 +622,25 @@ async function getCEODashboard(req, res) {
     let leadWhere = baseLeadWhere;
     let oppWhere = baseOppWhere;
 
-    if (req.query.managerId) {
-      const mgrId = req.query.managerId;
+    const managerIds = _csvParam(req.query.managerId);
+    if (managerIds.length) {
       const teamMembers = await prisma.user.findMany({
-        where: { managerId: mgrId, organizationId: orgId },
+        where: { managerId: { in: managerIds }, organizationId: orgId },
         select: { id: true },
       });
-      const execIds = teamMembers.map((m) => m.id);
-      userIds = [mgrId, ...execIds];
+      const teamIds = teamMembers.map((m) => m.id);
+      userIds = [...new Set([...managerIds, ...teamIds])];
       leadWhere = { organizationId: orgId, assignedToId: { in: userIds } };
       oppWhere = { organizationId: orgId, assignedToId: { in: userIds } };
 
-      if (req.query.executiveId) {
-        const execId = req.query.executiveId;
-        if (!execIds.includes(execId)) {
+      const execIds = _csvParam(req.query.executiveId);
+      if (execIds.length) {
+        if (execIds.some((id) => !teamIds.includes(id))) {
           return error(res, "Executive not in this manager's team", 403);
         }
-        userIds = [execId];
-        leadWhere = { organizationId: orgId, assignedToId: execId };
-        oppWhere = { organizationId: orgId, assignedToId: execId };
+        userIds = execIds;
+        leadWhere = { organizationId: orgId, assignedToId: { in: execIds } };
+        oppWhere = { organizationId: orgId, assignedToId: { in: execIds } };
       }
     }
 
@@ -661,8 +684,14 @@ async function getCEODashboard(req, res) {
       prisma.lead.count({ where: leadWhere }),
       // period-scoped count — changes with the period dropdown
       prisma.lead.count({ where: leadWhereScoped }),
-      // lead source breakdown scoped to the selected period
-      prisma.lead.groupBy({ by: ['source'], where: leadWhereScoped, _count: { _all: true } }),
+      // lead source breakdown over every lead in scope, so it adds up to the
+      // "Total leads" KPI rather than to whatever the period dropdown says
+      prisma.lead.groupBy({
+        by: ['source'],
+        where: leadWhere,
+        _count: { _all: true },
+        orderBy: { _count: { source: 'desc' } },
+      }),
     ]);
 
     // ── leadsOverTime: granularity depends on the selected period ────────────
@@ -886,4 +915,213 @@ function getDashboardStream(req, res) {
   });
 }
 
-module.exports = { getOverview, getLeadsByMonth, getLeadsByStatus, getTopSources, getTeamPerformance, getMyAnalytics, getCEODashboard, getManagerDashboard, getSalesDashboard, getDashboard, getDashboardStream };
+// ─── Follow-up Calendar ─────────────────────────────────────────
+
+const CAL_ENTITY_TYPES = ['lead', 'opportunity'];
+const CAL_STATUSES = ['overdue', 'today', 'upcoming'];
+const CAL_MAX_RANGE_DAYS = 400;
+
+function _endOfDay(d) {
+  const e = new Date(d);
+  e.setHours(23, 59, 59, 999);
+  return e;
+}
+
+function _bucket(date, today, tomorrow) {
+  const d = new Date(date);
+  if (d < today) return 'overdue';
+  if (d < tomorrow) return 'today';
+  return 'upcoming';
+}
+
+/**
+ * GET /api/analytics/follow-ups/calendar
+ *
+ * Query: from, to (ISO dates — default: current month)
+ *        entityType = lead | opportunity   (default: both)
+ *        assignedToId                      (manager/admin, inside own scope)
+ *        status = overdue | today | upcoming
+ *
+ * Returns every follow-up inside the window, plus the caller's full overdue
+ * backlog (which mostly falls outside the window) for the side list.
+ *
+ * Every item carries entityType + entityId so the UI opens the right record.
+ * Never navigate by company name — a lead and an opportunity can share one.
+ */
+/** "a,b" | "a" | ["a","b"] | undefined → ["a","b"]. Blanks and dupes dropped. */
+function _csvParam(raw) {
+  if (raw == null) return [];
+  const parts = Array.isArray(raw) ? raw : String(raw).split(',');
+  return [...new Set(parts.map((v) => String(v).trim()).filter(Boolean))];
+}
+
+async function getFollowUpCalendar(req, res) {
+  try {
+    const { ADMIN_ROLES } = require('../middleware/rbac');
+    const { orgId, userIds, leadWhere, oppWhere } = await _buildScope(req.user);
+    const today = _today();
+    const tomorrow = _tomorrow(today);
+
+    // ── Window (defaults to the calendar month we're in) ──────────────────
+    const from = req.query.from
+      ? new Date(req.query.from)
+      : new Date(today.getFullYear(), today.getMonth(), 1);
+    const to = req.query.to
+      ? new Date(req.query.to)
+      : new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+      return error(res, 'from/to must be valid dates', 400);
+    }
+    const rangeEnd = _endOfDay(to);
+    if (rangeEnd < from) return error(res, '"to" must not be before "from"', 400);
+    if ((rangeEnd - from) / 86_400_000 > CAL_MAX_RANGE_DAYS) {
+      return error(res, `Date range must be ${CAL_MAX_RANGE_DAYS} days or less`, 400);
+    }
+
+    // ── Filters ───────────────────────────────────────────────────────────
+    const entityType = req.query.entityType;
+    if (entityType && !CAL_ENTITY_TYPES.includes(entityType)) {
+      return error(res, "entityType must be 'lead' or 'opportunity'", 400);
+    }
+    const statusFilter = _csvParam(req.query.status);
+    const badStatus = statusFilter.find((v) => !CAL_STATUSES.includes(v));
+    if (badStatus) {
+      return error(res, `status must be one of: ${CAL_STATUSES.join(', ')}`, 400);
+    }
+
+    let assignedFilter = {};
+    const assignedIds = _csvParam(req.query.assignedToId);
+    if (assignedIds.length) {
+      // A manager may only ask about their own reports; admins see the org.
+      const allowed =
+        ADMIN_ROLES.includes(req.user.role) || assignedIds.every((id) => userIds.includes(id));
+      if (!allowed) return error(res, 'Not allowed to view those users\' follow-ups', 403);
+      assignedFilter = { assignedToId: { in: assignedIds } };
+    }
+
+    const wantLeads = entityType !== 'opportunity';
+    const wantOpps = entityType !== 'lead';
+
+    const leadBase = { ...leadWhere, ...assignedFilter, status: { notIn: CLOSED_LEAD_STATUSES } };
+    const oppBase = { ...oppWhere, ...assignedFilter, stage: { notIn: CLOSED_OPP_STAGES } };
+
+    const leadSelect = {
+      id: true, companyName: true, contactName: true, status: true,
+      temperature: true, followUpDate: true, source: true,
+      assignedTo: { select: { id: true, name: true } },
+    };
+    const oppSelect = {
+      id: true, title: true, opportunityName: true, stage: true, dealValue: true,
+      followUpDate: true, expectedCloseDate: true, leadId: true,
+      lead: { select: { id: true, companyName: true } },
+      assignedTo: { select: { id: true, name: true } },
+    };
+
+    const [rangeLeads, rangeOpps, overdueLeads, overdueOpps] = await Promise.all([
+      wantLeads
+        ? prisma.lead.findMany({
+            where: { ...leadBase, followUpDate: { gte: from, lte: rangeEnd } },
+            select: leadSelect, orderBy: { followUpDate: 'asc' }, take: 500,
+          })
+        : [],
+      wantOpps
+        ? prisma.opportunity.findMany({
+            where: { ...oppBase, followUpDate: { gte: from, lte: rangeEnd } },
+            select: oppSelect, orderBy: { followUpDate: 'asc' }, take: 500,
+          })
+        : [],
+      wantLeads
+        ? prisma.lead.findMany({
+            where: { ...leadBase, followUpDate: { lt: today } },
+            select: leadSelect, orderBy: { followUpDate: 'asc' }, take: 100,
+          })
+        : [],
+      wantOpps
+        ? prisma.opportunity.findMany({
+            where: { ...oppBase, followUpDate: { lt: today } },
+            select: oppSelect, orderBy: { followUpDate: 'asc' }, take: 100,
+          })
+        : [],
+    ]);
+
+    // ── Activity type per record (Call / Email / Meeting …) ───────────────
+    const leadIds = [...new Set([...rangeLeads, ...overdueLeads].map((l) => l.id))];
+    const oppIds = [...new Set([...rangeOpps, ...overdueOpps].map((o) => o.id))];
+    const orClauses = [
+      ...(leadIds.length ? [{ leadId: { in: leadIds }, opportunityId: null }] : []),
+      ...(oppIds.length ? [{ opportunityId: { in: oppIds } }] : []),
+    ];
+    const actions = orClauses.length
+      ? await prisma.activityLog.findMany({
+          where: { organizationId: orgId, nextActionDate: { not: null }, OR: orClauses },
+          select: { leadId: true, opportunityId: true, action: true },
+          orderBy: { createdAt: 'desc' },
+          take: 2000,
+        })
+      : [];
+    const actionByLead = new Map();
+    const actionByOpp = new Map();
+    for (const a of actions) {
+      if (a.opportunityId) {
+        if (!actionByOpp.has(a.opportunityId)) actionByOpp.set(a.opportunityId, a.action);
+      } else if (a.leadId && !actionByLead.has(a.leadId)) {
+        actionByLead.set(a.leadId, a.action);
+      }
+    }
+
+    const mapLead = (l) => ({
+      id: `lead:${l.id}`,
+      entityType: 'lead',
+      entityId: l.id,
+      title: l.companyName || 'Untitled lead',
+      subtitle: l.contactName || null,
+      followUpDate: l.followUpDate,
+      activityType: actionByLead.get(l.id) || 'follow_up',
+      status: _bucket(l.followUpDate, today, tomorrow),
+      recordStatus: l.status,
+      temperature: l.temperature,
+      source: l.source,
+      assignedTo: l.assignedTo,
+    });
+
+    const mapOpp = (o) => ({
+      id: `opportunity:${o.id}`,
+      entityType: 'opportunity',
+      entityId: o.id,
+      title: o.opportunityName || o.title || o.lead?.companyName || 'Untitled opportunity',
+      subtitle: o.lead?.companyName || null,
+      followUpDate: o.followUpDate,
+      activityType: actionByOpp.get(o.id) || 'follow_up',
+      status: _bucket(o.followUpDate, today, tomorrow),
+      recordStatus: o.stage,
+      dealValue: o.dealValue,
+      expectedCloseDate: o.expectedCloseDate,
+      assignedTo: o.assignedTo,
+    });
+
+    const byDate = (a, b) => new Date(a.followUpDate) - new Date(b.followUpDate);
+    let items = [...rangeLeads.map(mapLead), ...rangeOpps.map(mapOpp)].sort(byDate);
+    const overdue = [...overdueLeads.map(mapLead), ...overdueOpps.map(mapOpp)].sort(byDate);
+
+    const counts = {
+      overdue: overdue.length,
+      today: items.filter((i) => i.status === 'today').length,
+      upcoming: items.filter((i) => i.status === 'upcoming').length,
+      inRange: items.length,
+    };
+
+    if (statusFilter.length) items = items.filter((i) => statusFilter.includes(i.status));
+
+    return success(res, {
+      range: { from: from.toISOString(), to: rangeEnd.toISOString() },
+      items,
+      overdue,
+      counts,
+    });
+  } catch (err) {
+    console.error('[getFollowUpCalendar]', err);
+    return error(res, 'Failed to fetch follow-up calendar', 500);
+  }
+}
+
+module.exports = { getOverview, getLeadsByMonth, getLeadsByStatus, getTopSources, getTeamPerformance, getMyAnalytics, getCEODashboard, getManagerDashboard, getSalesDashboard, getDashboard, getDashboardStream, getFollowUpCalendar };

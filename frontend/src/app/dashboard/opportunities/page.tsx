@@ -21,6 +21,7 @@ import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { Select } from '../../../components/ui/Select';
+import { InputMultiSelect } from '../../../components/ui/MultiSelect';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,15 @@ const stageUI = (id: string) => STAGE_UI[normalizeStage(id)] ?? STAGE_UI.qualifi
 const LOST_CATEGORIES = ['Pricing', 'Competition', 'No Budget', 'Not a Fit', 'Timing', 'Other'];
 
 const STUCK_DAYS_THRESHOLD = 14;
+
+// Close-date buckets for the board filter. They overlap, so the filter is a
+// multi-select and a deal matching any selected bucket is kept.
+const CLOSE_DATE_FILTERS = [
+  { value: 'overdue',    label: 'Close date passed' },
+  { value: 'this_month', label: 'Closing this month' },
+  { value: 'next_30',    label: 'Closing in 30 days' },
+  { value: 'none',       label: 'No close date' },
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -845,8 +855,8 @@ function OpportunitiesBoard() {
 
   // Board filters (client-side, over the loaded pipeline)
   const [search,      setSearch]      = useState('');
-  const [closeFilter, setCloseFilter] = useState('');
-  const [stuckOnly,   setStuckOnly]   = useState(false);
+  // Multi-select: empty means every close date
+  const [closeFilter, setCloseFilter] = useState<string[]>([]);
 
   // Drag & drop between stages
   const [draggingId,    setDraggingId]    = useState<string | null>(null);
@@ -949,14 +959,19 @@ function OpportunitiesBoard() {
   const filtered = opportunities.filter((o: any) => {
     if (query && ![o.opportunityName, o.title, o.lead?.companyName, o.lead?.contactName, o.contact?.name]
       .some((v) => (v || '').toLowerCase().includes(query))) return false;
-    if (stuckOnly && !isStuckOpp(o)) return false;
-    if (closeFilter) {
+    if (closeFilter.length) {
       const key    = o.expectedCloseDate ? toDateInput(o.expectedCloseDate) : '';
       const isOpen = !['closed_won', 'closed_lost'].includes(normalizeStage(o.stage));
-      if (closeFilter === 'none' && key) return false;
-      if (closeFilter === 'overdue' && !(isOpen && key && key < todayKey)) return false;
-      if (closeFilter === 'this_month' && !(key && key.slice(0, 7) === todayKey.slice(0, 7))) return false;
-      if (closeFilter === 'next_30' && !(key && key >= todayKey && key <= in30Key)) return false;
+      // The buckets overlap (a deal can be both overdue and closing this month),
+      // so several picks mean "in any of them".
+      const inBucket = (f: string) => {
+        if (f === 'none')       return !key;
+        if (f === 'overdue')    return isOpen && !!key && key < todayKey;
+        if (f === 'this_month') return !!key && key.slice(0, 7) === todayKey.slice(0, 7);
+        if (f === 'next_30')    return !!key && key >= todayKey && key <= in30Key;
+        return true;
+      };
+      if (!closeFilter.some(inBucket)) return false;
     }
     return true;
   });
@@ -1086,8 +1101,8 @@ function OpportunitiesBoard() {
   const share = (x: { value: number; count: number }) =>
     totalValue > 0 ? x.value / totalValue : totalCount > 0 ? x.count / totalCount : 0;
 
-  const hasFilters = !!(search.trim() || closeFilter || stuckOnly);
-  const clearFilters = () => { setSearch(''); setCloseFilter(''); setStuckOnly(false); };
+  const hasFilters = !!(search.trim() || closeFilter.length);
+  const clearFilters = () => { setSearch(''); setCloseFilter([]); };
   const scrollToColumn = (id: string) =>
     document.getElementById(`col-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
 
@@ -1212,21 +1227,15 @@ function OpportunitiesBoard() {
             </button>
           )}
         </div>
-        <Select className="input h-10 py-0 text-sm w-[calc(50%-4px)] lg:w-48" aria-label="Expected close date"
-          value={closeFilter} onChange={(e) => setCloseFilter(e.target.value)}>
-          <option value="">All close dates</option>
-          <option value="overdue">Close date passed</option>
-          <option value="this_month">Closing this month</option>
-          <option value="next_30">Closing in 30 days</option>
-          <option value="none">No close date</option>
-        </Select>
-        <button type="button" aria-pressed={stuckOnly} onClick={() => setStuckOnly((v) => !v)}
-          className={`h-10 px-3.5 rounded-xl border text-sm font-medium inline-flex items-center justify-center gap-1.5 w-[calc(50%-4px)] lg:w-auto transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${stuckOnly
-            ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300'
-            : 'bg-surface border-line text-ink-2 hover:text-ink hover:border-slate-300 dark:hover:border-white/20'}`}>
-          <AlertTriangle size={14} /> Stuck only
-          {stuckCount > 0 && <span className="text-[11px] tabular-nums opacity-80">({stuckCount})</span>}
-        </button>
+        <InputMultiSelect
+          className="w-[calc(50%-4px)] lg:w-48"
+          title="Expected close date"
+          placeholder="All close dates"
+          noun="close dates"
+          value={closeFilter}
+          onChange={setCloseFilter}
+          options={CLOSE_DATE_FILTERS}
+        />
         {!hasFilters && opportunities.length > 0 && viewMode === 'board' && (
           <p className="hidden 2xl:flex items-center gap-1.5 ml-auto text-xs text-ink-3">
             <GripVertical size={13} /> Drag cards between stages to update them

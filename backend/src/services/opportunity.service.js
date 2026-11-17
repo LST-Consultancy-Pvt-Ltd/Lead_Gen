@@ -199,6 +199,11 @@ class OpportunityService {
     if (updateData.expectedCloseDate) {
       updateData.expectedCloseDate = new Date(updateData.expectedCloseDate);
     }
+    if (updateData.followUpDate) {
+      updateData.followUpDate = new Date(updateData.followUpDate);
+    } else if (updateData.followUpDate === null || updateData.followUpDate === '') {
+      updateData.followUpDate = null;
+    }
 
     // Auto-update probability when stage changes (unless explicitly provided)
     if (updateData.stage && updateData.probability == null) {

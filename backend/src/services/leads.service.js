@@ -101,9 +101,13 @@ class LeadsService {
     // Filters that need their own OR (owner, follow-up) go here so they can't clash with search
     const and = [];
 
-    // Status filter — one value or a comma-separated list
+    // Status filter — one value or a comma-separated list. Matched case
+    // insensitively: leads are stored lowercase ("new") while the configured
+    // dropdown and the dashboards spell the same status differently.
     const statuses = toList(status);
-    if (statuses.length) where.status = { in: statuses };
+    if (statuses.length) {
+      and.push({ OR: statuses.map((v) => ({ status: { equals: v, mode: 'insensitive' } })) });
+    }
 
     // Intent level filter
     if (intent) where.intentLevel = intent;
@@ -126,6 +130,20 @@ class LeadsService {
     // Follow-up date filter — one bucket or a comma-separated list
     const followUp = followUpWhere(toList(queryParams.followUp), { tzOffset: queryParams.tzOffset });
     if (followUp) and.push(followUp);
+
+    // Lead source filter — one value or a comma-separated list. The dashboard's
+    // source breakdown counts leads with no source as "manual", so that bucket
+    // has to match a null or blank source here as well.
+    const sources = toList(queryParams.source);
+    if (sources.length) {
+      const named = sources.filter((v) => v !== 'manual');
+      const or = named.length ? [{ source: { in: named } }] : [];
+      if (sources.includes('manual')) {
+        or.push({ source: null }, { source: '' }, { source: 'manual' });
+      }
+      and.push({ OR: or });
+    }
+
     if (and.length) where.AND = and;
 
     // Search across multiple fields
