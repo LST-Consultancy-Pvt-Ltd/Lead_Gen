@@ -242,6 +242,11 @@ export const leadsApi = {
   sendOutreach: (id: string, data: any) => api.post(`/leads/${id}/send-outreach`, data),
   export: (params?: any) => api.get('/leads/export', { params, responseType: 'blob' }),
   quota: () => api.get('/leads/quota'),
+  // One request for the whole selection, single lead or many. Validates the
+  // assignee once and reports which ids it could not touch, instead of the
+  // caller firing one PATCH per lead and guessing at partial failures.
+  bulkAssign: (leadIds: string[], assignedToId: string) =>
+    api.post('/leads/bulk-assign', { leadIds, assignedToId }),
 };
 
 export const activitiesApi = {

@@ -76,8 +76,26 @@ export function MultiSelect({
     menuRef.current?.querySelector<HTMLElement>(`[data-idx="${active}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [open, active]);
 
+  // An empty selection means "no filter", i.e. every row is shown — so the menu
+  // draws that state with all boxes ticked, and a click unticks that one box
+  // ("all except X"). Ticking everything again collapses back to [] = all.
+  //
+  // Unticking the last box can't be reported upwards ([] already means all), so
+  // it is held as a local "cleared" state: the boxes stay empty while the list
+  // behind the menu keeps showing everything, and the next tick selects just
+  // that option. It resets when the menu closes.
+  const allValues = Array.from(new Set(options.map((o) => o.value)));
+  const [cleared, setCleared] = useState(false);
+  const noneChosen = value.length === 0 && !cleared;
+
+  useEffect(() => { if (!open) setCleared(false); }, [open]);
+
   function toggle(v: string) {
-    onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+    const base = noneChosen ? allValues : value;
+    const next = base.includes(v) ? base.filter((x) => x !== v) : [...base, v];
+    if (next.length === 0) { setCleared(true); onChange([]); return; }
+    setCleared(false);
+    onChange(allValues.every((x) => next.includes(x)) ? [] : next);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
@@ -85,15 +103,16 @@ export function MultiSelect({
       if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); setActive(0); setOpen(true); }
       return;
     }
+    // Escape/Tab must still close an empty menu (options can be empty while a
+    // team or dropdown list is still loading).
+    if (e.key === 'Escape' || e.key === 'Tab') { setOpen(false); return; }
     if (!options.length) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => (a + 1) % options.length); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => (a - 1 + options.length) % options.length); }
     else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (options[active]) toggle(options[active].value); }
-    else if (e.key === 'Escape' || e.key === 'Tab') { setOpen(false); }
   }
 
-  const allValues = Array.from(new Set(options.map((o) => o.value)));
-  const allSelected = allValues.length > 0 && allValues.every((v) => value.includes(v));
+  const allSelected = allValues.length > 0 && (noneChosen || allValues.every((v) => value.includes(v)));
   const someSelected = !allSelected && allValues.some((v) => value.includes(v));
   const selectedLabels = options.filter((o) => value.includes(o.value)).map((o) => o.label);
   const label = selectedLabels.length === 0
@@ -152,7 +171,7 @@ export function MultiSelect({
                 aria-selected={allSelected}
                 onMouseEnter={() => setActive(-1)}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onChange(allSelected ? [] : allValues)}
+                onClick={() => { setCleared(allSelected); onChange([]); }}
                 className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-semibold cursor-pointer select-none transition-colors text-ink-2 dark:text-slate-200 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
               >
                 <span
@@ -177,12 +196,13 @@ export function MultiSelect({
           )}
           {options.map((o, i) => {
             const isSel = value.includes(o.value);
+            const isChecked = noneChosen || isSel;
             return (
               <div
                 key={`${o.value}-${i}`}
                 data-idx={i}
                 role="option"
-                aria-selected={isSel}
+                aria-selected={isChecked}
                 onMouseEnter={() => setActive(i)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => toggle(o.value)}
@@ -197,10 +217,10 @@ export function MultiSelect({
                 <span
                   className={cn(
                     'flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors',
-                    isSel ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 dark:border-slate-600',
+                    isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 dark:border-slate-600',
                   )}
                 >
-                  {isSel && <Check size={11} strokeWidth={3} />}
+                  {isChecked && <Check size={11} strokeWidth={3} />}
                 </span>
                 <span className="flex-1 min-w-0 truncate">{o.label}</span>
               </div>

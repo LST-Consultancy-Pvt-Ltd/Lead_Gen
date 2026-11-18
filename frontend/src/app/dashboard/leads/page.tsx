@@ -188,20 +188,48 @@ export default function LeadsPage() {
   });
 
   const assignMutation = useMutation({
+    // One request for the whole selection, whether that is a single lead or
+    // fifty. It used to be one PATCH per lead wrapped in Promise.all, which
+    // rejected on the first failure — so a batch where most leads were assigned
+    // still reported "Failed to assign leads" and the user could not tell which
+    // ones still needed assigning. The endpoint validates the assignee once and
+    // returns the ids it could not touch.
     mutationFn: async (userId: string) => {
-      await Promise.all(
-        Array.from(selectedLeads).map(id => leadsApi.update(id, { assignedToId: userId }))
-      );
+      const ids = Array.from(selectedLeads);
+      const res = await leadsApi.bulkAssign(ids, userId);
+      const data = res.data?.data ?? res.data ?? {};
+      const assigned: string[] = data.assigned ?? [];
+      const notFound: string[] = data.notFound ?? ids.filter(id => !assigned.includes(id));
+      return { assigned, notFound, assignedTo: data.assignedTo };
     },
-    onSuccess: () => {
+    onSuccess: ({ assigned, notFound, assignedTo }) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      toast.success(`${selectedLeads.size} lead${selectedLeads.size > 1 ? 's' : ''} assigned successfully`);
+
+      if (assigned.length > 0) {
+        toast.success(
+          `${pluralize(assigned.length, 'lead', 'leads')} assigned${assignedTo?.name ? ` to ${assignedTo.name}` : ''}`,
+        );
+      }
+
+      if (notFound.length > 0) {
+        // Keep just the leads that were not assigned selected, so the dialog
+        // stays open on exactly what still needs attention.
+        toast.error(`${pluralize(notFound.length, 'lead', 'leads')} could not be assigned`);
+        setSelectedLeads(new Set(notFound));
+        return;
+      }
+
       setSelectedLeads(new Set());
       setAssignOpen(false);
       setAssignToId('');
     },
-    onError: () => toast.error('Failed to assign leads'),
+    // A rejected request means nothing was assigned. 403s are already surfaced
+    // by the axios interceptor, so don't toast those twice.
+    onError: (err: any) => {
+      if (err?.response?.status === 403) return;
+      toast.error(err?.response?.data?.message ?? 'Failed to assign leads');
+    },
   });
 
   async function handleExport() {

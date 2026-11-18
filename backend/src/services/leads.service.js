@@ -571,7 +571,31 @@ class LeadsService {
         where: { id: data.assignedToId },
         select: { id: true, organizationId: true, managerId: true, isActive: true },
       });
-      if (!canAssignLeadTo(user, target)) delete updateData.assignedToId;
+      if (!canAssignLeadTo(user, target)) {
+        // An update whose only requested change is the owner IS an assignment
+        // (that is exactly what the Assign dialog sends), so refusing it
+        // silently is a lie: the API used to answer "Lead updated successfully"
+        // while the lead stayed with its old owner, which is why assigning
+        // appeared to do nothing. Report it instead.
+        //
+        // An edit form that merely carries assignedToId along is not an
+        // assignment request. There the field is still dropped and the rest of
+        // the edit is saved, so an ordinary edit is never lost over an owner
+        // the user may not even have touched.
+        const changesOwner = data.assignedToId !== accessCheck.lead.assignedToId;
+        const otherFields = Object.keys(updateData).filter((k) => k !== 'assignedToId');
+
+        if (changesOwner && otherFields.length === 0) {
+          return {
+            success: false,
+            statusCode: 403,
+            message: !target || target.isActive === false
+              ? 'That user is no longer active, so the lead cannot be assigned to them'
+              : 'You do not have permission to assign leads to that user',
+          };
+        }
+        delete updateData.assignedToId;
+      }
     }
 
     // ── Spec validations ──────────────────────────────────────────────────────
@@ -671,9 +695,14 @@ class LeadsService {
         // Activity Timeline entry (the lead's own fields are not touched)
         await activityService.logLeadAssigned(leadId, user, updateData.assignedToId, oldOwner?.name || null);
 
-        // Email notification
+        // Email notification — deliberately NOT awaited. SMTP opens a fresh
+        // connection per message and its own timeouts run to 30-60s, which is
+        // at or past the browser's 30s request timeout: awaiting it made the
+        // assignment look like it had failed even though the lead was already
+        // reassigned, and a retry then "worked" only because an unchanged owner
+        // sends no second email. The send still logs its own failures.
         if (assignee) {
-          await sendLeadAssignmentEmail({
+          sendLeadAssignmentEmail({
             assigneeName: assignee.name,
             assigneeEmail: assignee.email,
             assignerName: user.name,
@@ -682,7 +711,7 @@ class LeadsService {
             leadSource: lead.source,
             followUpDate: lead.followUpDate,
             dashboardLink: `${process.env.FRONTEND_URL}/dashboard/leads/${lead.id}`,
-          });
+          }).catch((e) => logger.warn('Lead assignment email failed (non-fatal)', { error: e.message, leadId }));
         }
 
         // In-app notifications
@@ -793,7 +822,11 @@ class LeadsService {
     // Only leads inside the caller's scope can be touched
     const leads = await prisma.lead.findMany({
       where: scopeLeadWhere(user, { id: { in: leadIds } }),
-      select: { id: true, companyName: true, assignedToId: true },
+      select: {
+        id: true, companyName: true, assignedToId: true,
+        // carried only so the assignment email can be rendered below
+        contactName: true, source: true, followUpDate: true,
+      },
     });
 
     const foundIds = new Set(leads.map((l) => l.id));
@@ -860,9 +893,39 @@ class LeadsService {
 
     await Promise.allSettled(auditAndNotifPromises);
 
+    // ── Assignment emails ───────────────────────────────────────────────────
+    // Single-lead assignment through PATCH sends one of these, so assigning the
+    // same lead from the Assign dialog has to send it too. Detached from the
+    // response (SMTP can take tens of seconds) and sent one after another, so a
+    // 50-lead batch never opens 50 SMTP connections at once.
+    const changed = leads.filter((l) => l.assignedToId !== assignedToId);
+    if (changed.length && target.email) {
+      (async () => {
+        for (const lead of changed) {
+          try {
+            await sendLeadAssignmentEmail({
+              assigneeName: target.name,
+              assigneeEmail: target.email,
+              assignerName: user.name,
+              leadCompanyName: lead.companyName,
+              leadContactName: lead.contactName,
+              leadSource: lead.source,
+              followUpDate: lead.followUpDate,
+              dashboardLink: `${process.env.FRONTEND_URL}/dashboard/leads/${lead.id}`,
+            });
+          } catch (e) {
+            logger.warn('Lead assignment email failed (non-fatal)', { error: e.message, leadId: lead.id });
+          }
+        }
+      })();
+    }
+
     return {
       success: true,
+      // every in-scope lead that now has this owner (unchanged contract)
       assigned: leads.map((l) => l.id),
+      // the subset whose owner actually changed
+      reassigned: changed.map((l) => l.id),
       notFound: notFoundIds,
       assignedTo: target,
     };
