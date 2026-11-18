@@ -19,18 +19,20 @@ GitHub Actions (ubuntu-latest)
         │  opens an SSH session with a deploy key
         ▼
 VPS: cd <dir>
-     PREV=$(git rev-parse HEAD)        # remember where we were
+     git stash           # any uncommitted edits to TRACKED files
      git fetch && git reset --hard origin/<branch>
-     ./scripts/deploy.sh "$PREV"       # the freshly pulled script
+     ./scripts/deploy.sh # the freshly pulled script
         │
         ▼
-     for each stack whose source changed:
+     baseline = .last-deployed (the last SUCCESSFUL deploy)
+     for each stack changed since that baseline:
          docker compose build
          docker compose up -d
          poll its health URL until it answers (or fail the job)
+     write HEAD to .last-deployed    # only if everything above passed
 ```
 
-Three design choices worth understanding before you adapt it:
+Five design choices worth understanding before you adapt it:
 
 **`git reset --hard`, not `git pull`.** A deploy checkout should be a mirror of
 the remote, not a working copy. A pull breaks whenever someone has edited a
@@ -48,6 +50,27 @@ deploy logic takes effect on the push that contains it, not the one after.
 container proves nothing — a container that crash-loops on a bad migration
 still "starts". The script polls a real health endpoint and dumps container
 logs into the run output if it never answers.
+
+**Uncommitted server-side edits are stashed, not discarded.** The flip side of
+a hard reset is that it silently reverts hand-edits to tracked files. On a
+long-lived server those edits are sometimes load-bearing — a compose file
+pinned to a different database image, say — and losing one mid-deploy takes
+production down. The job stashes them first (`--untracked-files=no`, so `.env`
+and `docker-compose.override.yml` are never touched) and prints them as a
+warning annotation, so the change is recoverable with `git stash list` and
+visible in the run log.
+
+The real lesson is the one underneath: **anything a server genuinely needs to
+keep should be untracked** — an override file, not an edit to a tracked one.
+Stashing is a safety net for mistakes, not a place to keep config.
+
+**Progress is tracked in `.last-deployed`, not inferred from `HEAD`.** The
+reset happens before the build, so after a failed deploy `HEAD` already equals
+the target commit. A retry that used `HEAD` as its baseline would diff a commit
+against itself, skip every stack and report a green deploy that deployed
+nothing. The baseline is written only once every stack is healthy, so a retry
+re-attempts the same range. Keep the file untracked (gitignored) so the reset
+cannot remove it.
 
 ---
 
@@ -121,6 +144,33 @@ grep -E 'COMPOSE_PROJECT_NAME|_PORT|POSTGRES_DB' <env1>/*/.env <env2>/*/.env
 A workflow only runs if it exists on the branch being pushed. Merge the CI
 commit into each mapped branch before expecting pushes to deploy.
 
+### 3.5 Pre-flight on a server that's been running by hand
+
+Automating an existing manually-managed server is where this goes wrong. Before
+the first automated deploy, in **every** checkout:
+
+```bash
+git status                       # uncommitted edits to TRACKED files?
+git log origin/<branch>..HEAD    # commits that exist only here?
+git diff origin/<branch> -- '*docker-compose*' Dockerfile
+```
+
+Anything that shows up is config the server needs and git is about to overwrite.
+Move it into an untracked `docker-compose.override.yml` **first**, or commit it.
+Checking only for local *commits* is not enough — an uncommitted one-line edit
+to a compose file is just as load-bearing and much easier to miss.
+
+Also record what the live containers actually are, since the compose file may
+no longer describe them:
+
+```bash
+docker compose ps --format '{{.Service}}\t{{.Image}}'
+```
+
+If a running image differs from the compose file (`postgres:18-alpine` vs a
+committed `postgres:16-alpine`), the first deploy will recreate that container
+with the wrong image. For a database, that means a crash-loop — see §8.
+
 ---
 
 ## 4. `.github/workflows/deploy.yml`
@@ -169,11 +219,25 @@ jobs:
           script: |
             set -euo pipefail
             cd "${{ steps.target.outputs.dir }}"
-            PREV_SHA="$(git rev-parse HEAD)"
+            echo "Current: $(git rev-parse HEAD)"
+
+            # Preserve hand-edits to tracked files instead of losing them.
+            # --untracked-files=no leaves .env / override files alone.
+            DIRTY="$(git status --porcelain --untracked-files=no)"
+            if [ -n "$DIRTY" ]; then
+              echo "::warning::Uncommitted changes to tracked files found on the server; stashing before reset"
+              echo "$DIRTY"
+              git stash push -m "auto-deploy $(date -u +%FT%TZ)" \
+                || echo "::warning::stash failed (unmerged paths?); reset will discard these"
+            fi
+
             git fetch --prune origin
             git reset --hard "origin/${{ github.ref_name }}"
+
+            # No baseline argument: the script reads .last-deployed. Passing
+            # HEAD here would be wrong on a retry, where the reset already ran.
             chmod +x scripts/deploy.sh
-            ./scripts/deploy.sh "$PREV_SHA"
+            ./scripts/deploy.sh
 ```
 
 ---
@@ -187,9 +251,20 @@ block is project-specific.
 #!/usr/bin/env bash
 set -euo pipefail
 
-PREV_SHA="${1:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+# Baseline: .last-deployed (last SUCCESSFUL deploy) > $1 > rebuild everything.
+STATE_FILE="$ROOT/.last-deployed"
+PREV_SHA="${1:-}"
+if [ -s "$STATE_FILE" ]; then
+  PREV_SHA="$(cat "$STATE_FILE")"
+  echo "Last successful deploy: $PREV_SHA"
+elif [ -n "$PREV_SHA" ]; then
+  echo "Baseline from argument: $PREV_SHA"
+else
+  echo "No baseline recorded -- rebuilding every stack"
+fi
 
 # CONFIG: "<dir>|<env file>|<port var>|<default port>|<health path>"
 STACKS=(
@@ -234,6 +309,10 @@ for spec in "${STACKS[@]}"; do
 done
 
 [ "$DID_ANYTHING" -eq 1 ] && docker image prune -f >/dev/null
+
+# Only now does this commit count as deployed. A failure above leaves the old
+# value, so the next run retries the same range instead of assuming success.
+git rev-parse HEAD > "$STATE_FILE"
 log "Deploy complete: $(git rev-parse --short HEAD)"
 ```
 
@@ -242,6 +321,12 @@ that fails as `\r: command not found`:
 
 ```
 *.sh text eol=lf
+```
+
+And gitignore the state file, so it isn't reported as a dirty tracked file:
+
+```
+.last-deployed
 ```
 
 Commit the script executable: `git add --chmod=+x scripts/deploy.sh`
@@ -268,8 +353,12 @@ but better than nothing.
 
 ## 7. Behaviour notes
 
-- **Only changed stacks rebuild.** A frontend-only push won't restart the API.
-- **First run after a long gap** rebuilds everything, since the diff is large.
+- **Only changed stacks rebuild**, measured against `.last-deployed`. A
+  frontend-only push won't restart the API.
+- **The first run on a server rebuilds everything**, since no baseline exists.
+- **A failed deploy leaves the checkout at the new commit** but the containers
+  on the old image. The app keeps serving the old code; nothing is half-applied
+  except any database migration that already ran. Fix the cause and re-run.
 - **Database migrations** run wherever your image already runs them (e.g. a
   Dockerfile `CMD` of `migrate && start`). Nothing in this pipeline runs them
   separately — and nothing reviews them. `migrate deploy` applies whatever is
@@ -291,7 +380,8 @@ but better than nothing.
 | Health check times out | App genuinely failed to boot. Read the logs the script dumped — usually a failed migration or a missing env var. |
 | Port already in use | Two environments sharing a port. See §3.3. |
 | Two environments share a database | Same compose project name. See §3.3. |
-| Deploy "succeeds" but nothing changed | The stack's directory had no changes in that push — by design. |
+| Deploy "succeeds" but nothing changed | The stack's directory had no changes since `.last-deployed` — by design. Delete `.last-deployed` to force a full rebuild. |
+| A database container crash-loops right after a deploy, logging `initdb: error: directory ... exists but is not empty` | The reset reverted a hand-edited compose file, so the container is now a **different major version** than the one that wrote the volume — or expects the cluster at a different path. (Postgres 18 stores data at `<volume>/18/docker`; 16 and earlier at the volume root.) The data is intact; the container just can't find or read it. Inspect with `docker run --rm -v <volume>:/d alpine find /d -maxdepth 4 -name PG_VERSION -exec sh -c 'echo {} = $(cat {})' \;`, then pin the right image and `PGDATA` in an untracked `docker-compose.override.yml`. Never `down -v`. |
 
 ---
 

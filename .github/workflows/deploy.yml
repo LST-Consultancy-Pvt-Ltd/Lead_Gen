@@ -57,6 +57,20 @@ jobs:
             PREV_SHA="$(git rev-parse HEAD)"
             echo "Current: $PREV_SHA"
 
+            # A hard reset silently discards uncommitted edits to TRACKED
+            # files. That once reverted a hand-edited docker-compose.yml on
+            # production and crash-looped its database. Stash them instead, so
+            # they are recoverable (`git stash list`) and visible here.
+            # --untracked-files=no keeps .env and docker-compose.override.yml
+            # out of it -- those must stay exactly where they are.
+            DIRTY="$(git status --porcelain --untracked-files=no)"
+            if [ -n "$DIRTY" ]; then
+              echo "::warning::Uncommitted changes to tracked files found on the server; stashing before reset"
+              echo "$DIRTY"
+              git stash push -m "auto-deploy $(date -u +%FT%TZ)" \
+                || echo "::warning::stash failed (unmerged paths?); reset will discard these"
+            fi
+
             # Hard reset to the pushed commit. Tracked files are replaced
             # outright, which is why local edits (e.g. backend/.gitignore) can
             # never block a deploy. Untracked files -- .env,
@@ -66,5 +80,8 @@ jobs:
             git reset --hard "origin/${{ github.ref_name }}"
             echo "Deploying: $(git rev-parse HEAD)"
 
+            # No baseline argument on purpose: the script reads .last-deployed.
+            # Passing $PREV_SHA here would be wrong on a retry, where the reset
+            # already ran and HEAD equals the target.
             chmod +x scripts/deploy.sh
-            ./scripts/deploy.sh "$PREV_SHA"
+            ./scripts/deploy.sh

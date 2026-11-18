@@ -10,9 +10,29 @@
 # See CI_CD.md for the full picture and for reusing this in another project.
 set -euo pipefail
 
-PREV_SHA="${1:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+# Baseline for "what changed", in priority order:
+#   1. .last-deployed  - the last SUCCESSFUL deploy. Untracked, so a hard reset
+#                        cannot remove it, and only written once every stack is
+#                        healthy.
+#   2. $1              - an explicit baseline, for manual use.
+#   3. nothing         - rebuild every stack.
+# The workflow passes no argument by design. After a deploy that reset the
+# checkout but then failed, HEAD already equals the target, so a baseline of
+# HEAD would diff a commit against itself, skip every stack and report a false
+# green on the retry.
+STATE_FILE="$ROOT/.last-deployed"
+PREV_SHA="${1:-}"
+if [ -s "$STATE_FILE" ]; then
+  PREV_SHA="$(cat "$STATE_FILE")"
+  echo "Last successful deploy: $PREV_SHA"
+elif [ -n "$PREV_SHA" ]; then
+  echo "Baseline from argument: $PREV_SHA"
+else
+  echo "No baseline recorded -- rebuilding every stack"
+fi
 
 # CONFIG: one line per compose project --
 #   "<dir>|<env file>|<port var>|<default port>|<health path>"
@@ -79,5 +99,10 @@ if [ "$DID_ANYTHING" -eq 1 ]; then
 else
   log "Nothing to rebuild for this push"
 fi
+
+# Only now, with every stack built and healthy, does this commit count as
+# deployed. A failure above leaves the old value, so the next run retries the
+# same range instead of assuming success.
+git rev-parse HEAD > "$STATE_FILE"
 
 log "Deploy complete: $(git rev-parse --short HEAD)"
