@@ -8,7 +8,7 @@
  * navigation is never driven by the title.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -18,8 +18,8 @@ import {
 } from 'date-fns';
 import {
   AlertTriangle, ArrowUpRight, CalendarDays, CalendarCheck, CalendarSearch,
-  CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Mail, Phone,
-  Presentation, Users,
+  Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Mail,
+  Phone, Presentation, Users, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -240,13 +240,13 @@ export function FollowUpCalendar({
     setPickerOpen((o) => !o);
   };
 
-  // The month and year controls move the calendar behind the popover as well,
-  // so closing without picking a date still lands on the month you chose.
+  // Browsing inside the popover only moves the popover's own grid. The calendar
+  // behind it — and the selected day — stay put until a date is actually picked,
+  // so stepping through months to look around never changes what is shown.
   const showMonth = (year: number, month: number) => {
     const first = new Date(year, month, 1);
     setPickerYear(first.getFullYear());
     setPickerMonth(first.getMonth());
-    setAnchor(first);
   };
 
   const pickDate = (d: Date) => {
@@ -624,6 +624,16 @@ function EntryCard({
   const isLead = item.entityType === 'lead';
   const overdueDays = item.status === 'overdue' ? daysBetween(item.followUpDate) : 0;
 
+  // The date box is a draft until it is confirmed. Stepping the month or day
+  // with the picker's arrows must never reschedule anything on its own — the
+  // tick button (or Enter) is what commits, and Escape puts the date back.
+  const scheduled = format(new Date(item.followUpDate), 'yyyy-MM-dd');
+  const [draft, setDraft] = useState(scheduled);
+  useEffect(() => setDraft(scheduled), [scheduled]);
+
+  const dirty = !!draft && draft !== scheduled;
+  const commit = () => { if (dirty && !busy) onReschedule(draft); };
+
   return (
     <div className="relative rounded-xl border border-line bg-white dark:bg-surface-2 p-3 pl-4 overflow-hidden">
       <span className={cn('absolute left-0 top-0 bottom-0 w-[3px]', s.rail)} />
@@ -659,17 +669,51 @@ function EntryCard({
           Open {isLead ? 'Lead' : 'Opportunity'} <ArrowUpRight size={12} />
         </button>
 
-        <label className="inline-flex items-center gap-1 h-7 px-2 rounded-lg text-xs font-medium text-ink-2 bg-slate-500/[0.06] hover:bg-slate-500/10 border border-line cursor-pointer transition-colors duration-150">
+        <label
+          className={cn(
+            'inline-flex items-center gap-1 h-7 px-2 rounded-lg text-xs font-medium text-ink-2 border cursor-pointer transition-colors duration-150',
+            dirty
+              ? 'bg-indigo-500/[0.08] border-indigo-400/50 dark:border-indigo-500/40'
+              : 'bg-slate-500/[0.06] hover:bg-slate-500/10 border-line',
+          )}
+        >
           <Clock size={12} />
           <span className="sr-only">Reschedule {item.title}</span>
           <input
             type="date"
             disabled={busy}
-            defaultValue={format(new Date(item.followUpDate), 'yyyy-MM-dd')}
-            onChange={(e) => e.target.value && onReschedule(e.target.value)}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') setDraft(scheduled);
+            }}
             className="bg-transparent outline-none text-xs w-[92px] text-ink-2"
           />
         </label>
+
+        {dirty && (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={commit}
+              title="Save new follow-up date"
+              className="inline-flex items-center gap-1 h-7 px-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 transition-colors duration-150"
+            >
+              <Check size={12} /> Save
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setDraft(scheduled)}
+              title="Cancel"
+              className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-line text-ink-3 hover:text-ink hover:border-slate-300 dark:hover:border-slate-400/20 transition-colors duration-150"
+            >
+              <X size={12} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
