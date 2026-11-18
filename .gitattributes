@@ -1,0 +1,2 @@
+# Shell scripts run on Linux (VPS deploys) - always store and check out with LF.
+*.sh text eol=lf
