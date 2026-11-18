@@ -1,0 +1,70 @@
+# Auto-deploy to the Hostinger VPS on push.
+#
+#   test        -> TEST_DIR        (test environment)
+#   main_backup -> MAIN_BACKUP_DIR (production environment)
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   VPS_HOST     - server IP or hostname
+#   VPS_USER     - ssh user (e.g. root)
+#   VPS_SSH_KEY  - the PRIVATE half of a deploy keypair (full PEM, incl. header/footer)
+#   VPS_PORT     - optional, defaults to 22
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - test
+      - main_backup
+  workflow_dispatch:
+
+# Never let two deploys of the same branch overlap. Queue instead of cancel so
+# an in-flight docker build is not killed half way through.
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TEST_DIR: /root/Lead_Gen_Test
+  MAIN_BACKUP_DIR: /root/Lead_Gen
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Resolve target directory
+        id: target
+        run: |
+          case "${{ github.ref_name }}" in
+            test)        echo "dir=${TEST_DIR}"        >> "$GITHUB_OUTPUT" ;;
+            main_backup) echo "dir=${MAIN_BACKUP_DIR}" >> "$GITHUB_OUTPUT" ;;
+            *) echo "No deploy target for ${{ github.ref_name }}"; exit 1 ;;
+          esac
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 25m
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ steps.target.outputs.dir }}"
+
+            PREV_SHA="$(git rev-parse HEAD)"
+            echo "Current: $PREV_SHA"
+
+            # Hard reset to the pushed commit. Tracked files are replaced
+            # outright, which is why local edits (e.g. backend/.gitignore) can
+            # never block a deploy. Untracked files -- .env,
+            # docker-compose.override.yml -- are left alone. We deliberately do
+            # NOT run `git clean`.
+            git fetch --prune origin
+            git reset --hard "origin/${{ github.ref_name }}"
+            echo "Deploying: $(git rev-parse HEAD)"
+
+            chmod +x scripts/deploy.sh
+            ./scripts/deploy.sh "$PREV_SHA"
