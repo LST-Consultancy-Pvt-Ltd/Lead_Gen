@@ -21,8 +21,22 @@ import toast from 'react-hot-toast';
 import { Select } from '../../../components/ui/Select';
 import { ScrollArrowArea } from '../../../components/ui/ScrollArrowArea';
 
+// Badge colours for the inline status dropdown, keyed by the tone `statusColors`
+// gives a status. Matches the <Badge> palette so an editable status still reads
+// as the same pill it replaced.
+const STATUS_PILL: Record<string, string> = {
+  blue:    'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-400/20',
+  green:   'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-400/20',
+  emerald: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-400/20',
+  teal:    'bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-400/20',
+  amber:   'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-400/20',
+  red:     'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-400/20',
+  purple:  'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-400/20',
+  gray:    'bg-slate-100 dark:bg-white/[0.05] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10',
+};
+
 // Next follow-up buckets, matched against the viewer's own calendar day
-const FOLLOW_UP_OPTIONS = [
+const FOLLOW_UP_OPTIONS = [ 
   { value: 'overdue', label: 'Overdue' },
   { value: 'today', label: 'Today' },
   { value: 'tomorrow', label: 'Tomorrow' },
@@ -77,6 +91,11 @@ export default function LeadsPage() {
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignToId, setAssignToId] = useState('');
+  // Status change, inline from a row or for the whole checkbox selection.
+  // `ids` is what the change will be applied to; the dialog only opens when the
+  // user still has to pick something (the status itself, or the reason that a
+  // disqualification requires).
+  const [statusEdit, setStatusEdit] = useState<{ ids: string[]; value: string; reason: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -231,6 +250,120 @@ export default function LeadsPage() {
       toast.error(err?.response?.data?.message ?? 'Failed to assign leads');
     },
   });
+
+  // Statuses offered in the row dropdown and the bulk dialog. Values are stored
+  // the way the rest of the app stores them (lowercase, underscores), while the
+  // label keeps the casing configured under Settings -> Lead Status.
+  const statusChoices: { value: string; label: string }[] = (() => {
+    const items: any[] = Array.isArray(leadStatusOptions) ? leadStatusOptions : [];
+    const seen = new Set<string>();
+    const out: { value: string; label: string }[] = [];
+    for (const item of items) {
+      const raw = typeof item === 'string' ? item : item?.value;
+      if (typeof raw !== 'string' || !raw.trim()) continue;
+      const value = raw.trim().toLowerCase().replace(/\s+/g, '_');
+      if (seen.has(value)) continue;
+      seen.add(value);
+      out.push({ value, label: raw.trim() });
+    }
+    return out;
+  })();
+
+  // A lead may carry a status that is no longer in the configured list — keep it
+  // in its own dropdown so the row never silently shows a different status.
+  function choicesWith(current?: string | null) {
+    if (!current || statusChoices.some((c) => c.value === current)) return statusChoices;
+    return [...statusChoices, { value: current, label: formatLabel(current) }];
+  }
+
+  function canEditLead(l: any) {
+    return permissions.canEditAllLeads || (permissions.canEditOwnLeads && l.assignedTo?.id === user?.id);
+  }
+
+  // Selection is what makes a bulk status change possible, so the checkbox
+  // column is shown to anyone who can assign, export, or edit leads.
+  const canChangeStatus = permissions.canEditAllLeads || permissions.canEditOwnLeads;
+  const showSelectColumn = permissions.canReassignLead || permissions.canExportData || canChangeStatus;
+
+  // One PATCH per lead (the same endpoint the edit form uses, so every rule —
+  // permissions, the disqualification reason, the timeline entry — still runs),
+  // but settled as a batch: a lead that is refused does not hide the ones that
+  // went through.
+  const statusMutation = useMutation({
+    mutationFn: async ({ ids, status, reason }: { ids: string[]; status: string; reason?: string }) => {
+      const payload: any = { status };
+      if (reason !== undefined) payload.disqualificationReason = reason;
+      const results = await Promise.allSettled(ids.map((id) => leadsApi.update(id, payload)));
+      const failed: string[] = [];
+      let message: string | undefined;
+      let allForbidden = true;
+      results.forEach((r, i) => {
+        if (r.status !== 'rejected') return;
+        failed.push(ids[i]);
+        const err: any = r.reason;
+        if (err?.response?.status !== 403) allForbidden = false;
+        // A 422 answers with a generic "Validation failed" plus the offending
+        // field, so prefer the field's own message.
+        const data = err?.response?.data;
+        message = message ?? data?.errors?.[0]?.msg ?? data?.message;
+      });
+      return { ids, failed, status, message, allForbidden: failed.length > 0 && allForbidden };
+    },
+    onSuccess: ({ ids, failed, status, message, allForbidden }) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+      const changed = ids.length - failed.length;
+      if (changed > 0) {
+        toast.success(`${pluralize(changed, 'lead', 'leads')} moved to ${formatLabel(status)}`);
+      }
+
+      if (failed.length > 0) {
+        // 403s are already surfaced by the axios interceptor — don't toast twice.
+        if (!allForbidden) {
+          toast.error(message ?? `${pluralize(failed.length, 'lead', 'leads')} could not be updated`);
+        }
+        // Keep only what still needs attention selected.
+        if (ids.length > 1) setSelectedLeads(new Set(failed));
+        return;
+      }
+
+      if (ids.length > 1) setSelectedLeads(new Set());
+      setStatusEdit(null);
+    },
+    onError: (err: any) => {
+      if (err?.response?.status === 403) return;
+      toast.error(err?.response?.data?.message ?? 'Failed to update status');
+    },
+  });
+
+  // Disqualifying needs a reason, so that one always goes through the dialog.
+  function requestStatusChange(ids: string[], status: string) {
+    if (!status || ids.length === 0) return;
+    if (status === 'disqualified') {
+      setStatusEdit({ ids, value: status, reason: '' });
+      return;
+    }
+    statusMutation.mutate({ ids, status });
+  }
+
+  function submitStatusEdit() {
+    if (!statusEdit || !statusEdit.value) return;
+    const reason = statusEdit.reason.trim();
+    if (statusEdit.value === 'disqualified') {
+      if (reason.length < 10) {
+        toast.error('Disqualification reason must be at least 10 characters');
+        return;
+      }
+    }
+    statusMutation.mutate({
+      ids: statusEdit.ids,
+      status: statusEdit.value,
+      ...(statusEdit.value === 'disqualified' ? { reason } : {}),
+    });
+  }
+
+  const pendingStatusIds: string[] = statusMutation.isPending ? (statusMutation.variables?.ids ?? []) : [];
 
   async function handleExport() {
     try {
@@ -492,6 +625,17 @@ export default function LeadsPage() {
               {selectedLeads.size > 0 ? `Assign (${selectedLeads.size})` : 'Assign'}
             </button>
           )}
+          {canChangeStatus && (
+            <button
+              className={`inline-flex items-center gap-2 h-10 px-3.5 rounded-xl text-sm font-medium text-white bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20 transition-all ${selectedLeads.size === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => selectedLeads.size > 0 && setStatusEdit({ ids: Array.from(selectedLeads), value: '', reason: '' })}
+              disabled={selectedLeads.size === 0}
+              title={selectedLeads.size === 0 ? 'Select leads to change their status' : `Change status of ${selectedLeads.size} lead(s)`}
+            >
+              <CircleDot size={15} />
+              {selectedLeads.size > 0 ? `Change Status (${selectedLeads.size})` : 'Change Status'}
+            </button>
+          )}
           {total > 0 && (
             <RoleGuard permission="canExportData">
               <button className="inline-flex items-center gap-2 h-10 px-3.5 rounded-xl text-sm font-medium text-white bg-white/10 ring-1 ring-white/20 backdrop-blur hover:bg-white/20 transition-all" onClick={handleExport}>
@@ -618,7 +762,7 @@ export default function LeadsPage() {
             <table className="w-full">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-surface-2">
                 <tr className="border-b border-line">
-                  {(permissions.canReassignLead || permissions.canExportData) && (
+                  {showSelectColumn && (
                     <th className="pl-5 pr-2 py-3.5 w-8">
                       <input
                         type="checkbox"
@@ -704,7 +848,7 @@ export default function LeadsPage() {
               <tbody>
                 {leads.map((l: any) => (
                   <tr key={l.id} className={`group border-b border-slate-100 dark:border-white/[0.04] transition-colors ${selectedLeads.has(l.id) ? 'bg-blue-50/80 dark:bg-blue-500/[0.08]' : 'hover:bg-slate-50 dark:hover:bg-white/[0.02]'}`}>
-                    {(permissions.canReassignLead || permissions.canExportData) && (
+                    {showSelectColumn && (
                       <td className="pl-5 pr-2 py-3.5 w-8">
                         <input
                           type="checkbox"
@@ -766,9 +910,26 @@ export default function LeadsPage() {
                       <ScoreRing score={l.leadScore} size={36} />
                     </td>
                     <td className="px-4 py-3.5">
-                      <Badge color={statusColors[l.status] ?? 'gray'}>
-                        {formatLabel(l.status)}
-                      </Badge>
+                      {canEditLead(l) ? (
+                        <Select
+                          title="Change status"
+                          className={`badge inline-flex w-[118px] justify-between gap-1 px-2 py-0.5 whitespace-nowrap cursor-pointer ${STATUS_PILL[statusColors[l.status]] ?? STATUS_PILL.gray} ${pendingStatusIds.includes(l.id) ? 'opacity-60' : 'hover:brightness-95 dark:hover:brightness-125'}`}
+                          value={l.status ?? ''}
+                          disabled={statusMutation.isPending}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (next && next !== l.status) requestStatusChange([l.id], next);
+                          }}
+                        >
+                          {choicesWith(l.status).map((c) => (
+                            <option key={c.value} value={c.value}>{c.label}</option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <Badge color={statusColors[l.status] ?? 'gray'}>
+                          {formatLabel(l.status)}
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3.5">
                       {(normalizeLeadType(l.leadType) === 'product' || normalizeLeadType(l.subSource) === 'product') ? (
@@ -917,6 +1078,69 @@ export default function LeadsPage() {
                 Assign
               </button>
               <button className="btn-ghost justify-center py-2.5 px-4" onClick={() => setAssignOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Status Modal — bulk selection, or a single row being disqualified */}
+      {statusEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] animate-fade-in" onClick={() => !statusMutation.isPending && setStatusEdit(null)} />
+          <div className="relative bg-white dark:bg-surface border border-line rounded-2xl p-6 pt-7 w-full max-w-sm shadow-2xl overflow-hidden animate-fade-in">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-400" />
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-md shadow-violet-500/30 flex items-center justify-center">
+                  <CircleDot size={18} />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-semibold text-ink">Change Status</h3>
+                  <p className="text-xs text-ink-3 mt-0.5">{pluralize(statusEdit.ids.length, 'lead', 'leads')} selected</p>
+                </div>
+              </div>
+              <button title="Close" onClick={() => setStatusEdit(null)} disabled={statusMutation.isPending} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-white/[0.06] transition-colors disabled:opacity-50">
+                <X size={16} />
+              </button>
+            </div>
+            <div>
+              <label className="label mb-1.5 block">New Status</label>
+              <Select
+                title="Select status"
+                className="input text-sm"
+                value={statusEdit.value}
+                onChange={e => setStatusEdit(prev => (prev ? { ...prev, value: e.target.value } : prev))}
+              >
+                <option value="">Select a status...</option>
+                {statusChoices.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </Select>
+            </div>
+            {statusEdit.value === 'disqualified' && (
+              <div className="mt-4">
+                <label className="label mb-1.5 block">Disqualification Reason</label>
+                <textarea
+                  className="input text-sm min-h-[84px]"
+                  value={statusEdit.reason}
+                  onChange={e => setStatusEdit(prev => (prev ? { ...prev, reason: e.target.value } : prev))}
+                  placeholder={`Explain why ${statusEdit.ids.length > 1 ? 'these leads are' : 'this lead is'} disqualified (min 10 characters)...`}
+                />
+                {statusEdit.ids.length > 1 && (
+                  <p className="text-[11px] text-ink-3 mt-1">The same reason is saved on every selected lead.</p>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button
+                className="btn-primary flex-1 justify-center py-2.5"
+                onClick={submitStatusEdit}
+                disabled={!statusEdit.value || statusMutation.isPending}
+              >
+                {statusMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <CircleDot size={14} />}
+                Update Status
+              </button>
+              <button className="btn-ghost justify-center py-2.5 px-4" onClick={() => setStatusEdit(null)} disabled={statusMutation.isPending}>Cancel</button>
             </div>
           </div>
         </div>
