@@ -818,6 +818,12 @@ export default function LeadsPage() {
                   </th>
                   <th
                     className="px-4 py-3.5 text-left text-[11px] font-semibold text-ink-3 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    onClick={() => handleSort('followUpDate')}
+                  >
+                    Next Follow-up{sortIndicator('followUpDate')}
+                  </th>
+                  <th
+                    className="px-4 py-3.5 text-left text-[11px] font-semibold text-ink-3 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                     onClick={() => handleSort('createdBy')}
                   >
                     Lead Created By{sortIndicator('createdBy')}
@@ -836,12 +842,6 @@ export default function LeadsPage() {
                   </th>
                   <th className="px-4 py-3.5 text-left text-[11px] font-semibold text-ink-3 uppercase tracking-[0.08em] whitespace-nowrap">
                     Origin
-                  </th>
-                  <th
-                    className="px-4 py-3.5 text-left text-[11px] font-semibold text-ink-3 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                    onClick={() => handleSort('followUpDate')}
-                  >
-                    Next Follow-up{sortIndicator('followUpDate')}
                   </th>
                 </tr>
               </thead>
@@ -944,6 +944,21 @@ export default function LeadsPage() {
                       )}
                     </td>
 
+                    {/* Next Follow-up */}
+                    <td className="px-4 py-3.5">
+                      {(() => {
+                        const info = getFollowUpInfo(l.followUpDate);
+                        if (!info) return <span className="text-xs text-slate-300 dark:text-slate-600">—</span>;
+                        return (
+                          <div className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border whitespace-nowrap ${info.bg}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${info.dot} ${info.urgency === 'overdue' ? 'animate-pulse' : ''}`} />
+                            {info.urgency === 'overdue' ? <Clock size={11} className={info.color} /> : <CalendarDays size={11} className={info.color} />}
+                            <span className={info.color}>{info.label}</span>
+                          </div>
+                        );
+                      })()}
+                    </td>
+
                     {/* Lead Created By — the user who created this lead */}
                     <td className="px-4 py-3.5 text-xs font-medium text-ink-2 whitespace-nowrap">
                       {l.createdBy?.name || '—'}
@@ -991,20 +1006,6 @@ export default function LeadsPage() {
                       ) : (
                         <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
                       )}
-                    </td>
-
-                    <td className="px-4 py-3.5">
-                      {(() => {
-                        const info = getFollowUpInfo(l.followUpDate);
-                        if (!info) return <span className="text-xs text-slate-300 dark:text-slate-600">—</span>;
-                        return (
-                          <div className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border whitespace-nowrap ${info.bg}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${info.dot} ${info.urgency === 'overdue' ? 'animate-pulse' : ''}`} />
-                            {info.urgency === 'overdue' ? <Clock size={11} className={info.color} /> : <CalendarDays size={11} className={info.color} />}
-                            <span className={info.color}>{info.label}</span>
-                          </div>
-                        );
-                      })()}
                     </td>
                   </tr>
                 ))}
