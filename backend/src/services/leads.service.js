@@ -8,6 +8,7 @@ const logger = require('../utils/logger');
 const activityService = require('./activity.service');
 const { buildLeadScope, scopeLeadWhere, canAssignLeadTo, canAccessLead, ADMIN_ROLES } = require('../middleware/rbac');
 const { toList, ownerWhere, followUpWhere } = require('../utils/leadFilters');
+const { normalizeStatus, statusWhere } = require('../utils/leadStatus');
 
 // Display names for a set of user ids (used in the assignment note)
 const userNames = async (ids) => {
@@ -102,12 +103,12 @@ class LeadsService {
     const and = [];
 
     // Status filter — one value or a comma-separated list. Matched case
-    // insensitively: leads are stored lowercase ("new") while the configured
-    // dropdown and the dashboards spell the same status differently.
-    const statuses = toList(status);
-    if (statuses.length) {
-      and.push({ OR: statuses.map((v) => ({ status: { equals: v, mode: 'insensitive' } })) });
-    }
+    // insensitively and in every spelling the same logical status may have been
+    // stored under ("proposal_sent" / "proposal sent"), so a lead is never
+    // unreachable because of the format the write path happened to use. Pushed
+    // onto `and` so the OR cannot widen the role scope or the other filters.
+    const statusCond = statusWhere(toList(status));
+    if (statusCond) and.push(statusCond);
 
     // Intent level filter
     if (intent) where.intentLevel = intent;
@@ -377,7 +378,7 @@ class LeadsService {
       organizationId: user.organizationId,
       createdById: user.id,
       assignedToId,
-      status: (data.status || 'new').toLowerCase(),
+      status: normalizeStatus(data.status || 'new'),
       temperature: data.temperature ? data.temperature.toLowerCase() : undefined,
       intentLevel: data.intentLevel ? data.intentLevel.toLowerCase() : undefined,
     };
@@ -563,6 +564,14 @@ class LeadsService {
     }
 
     const updateData = { ...data };
+
+    // Canonicalise the status once, here, so every caller (edit form, row
+    // dropdown, bulk change, API client) stores the same spelling and the
+    // checks below see the canonical value.
+    if ('status' in updateData) {
+      updateData.status = normalizeStatus(updateData.status);
+      data = { ...data, status: updateData.status };
+    }
 
     if (data.assignedToId) {
       // Same assignment rule as reassign: admin → any active org user,

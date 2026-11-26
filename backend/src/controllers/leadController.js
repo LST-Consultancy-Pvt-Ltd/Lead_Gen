@@ -9,6 +9,7 @@ const { sendEmail } = require('../services/emailService');
 const logger = require('../utils/logger');
 const { scopeLeadWhere } = require('../middleware/rbac');
 const { toList, ownerWhere, followUpWhere } = require('../utils/leadFilters');
+const { statusWhere } = require('../utils/leadStatus');
 const XLSX = require('xlsx');
 const { enrichViaSignalHire, enrichViaApollo } = require('../services/leadEnrichmentPipeline');
 const { decrementLeadUsage } = require('../utils/leadQuota');
@@ -448,9 +449,11 @@ async function exportLeads(req, res) {
         ];
       }
       const and = [];
-      const statuses = toList(req.query.status);
-      if (statuses.length) {
-        and.push({ OR: statuses.map((st) => ({ status: { equals: st, mode: 'insensitive' } })) });
+      // Same tolerant matching as the leads list, so an export carries the
+      // same rows the filtered list showed.
+      const statusCond = statusWhere(toList(req.query.status));
+      if (statusCond) {
+        and.push(statusCond);
       }
       // Only non-sales roles can pick whose leads are exported (still within scope)
       if (!isSalesUser) {

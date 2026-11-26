@@ -13,6 +13,7 @@ const { getTeamMemberIds } = require('../middleware/rbac');
 const dashboardEvents = require('../utils/dashboardEvents');
 const { validateExcelFile } = require('../services/excelValidationService');
 const { generateTemplate } = require('../services/excelTemplateService');
+const { normalizeStatus } = require('../utils/leadStatus');
 const { createBulkNotifications } = require('../utils/notificationService');
 const { getReportingLineIds, roleLabel } = require('../utils/reportingLine');
 
@@ -359,8 +360,11 @@ async function importLeadsFromExcel(req, res) {
       where: { organizationId, category: 'lead_status', isActive: true },
       select: { value: true, isDefault: true },
     });
-    const validStatuses = new Set(statusRows.map(r => r.value.toLowerCase()));
-    const defaultStatus = (statusRows.find(r => r.isDefault)?.value ?? statusRows[0]?.value ?? 'new').toLowerCase();
+    // Compared and stored in the canonical form, so a sheet may spell a status
+    // "Proposal Sent", "proposal sent" or "proposal_sent" and still import.
+    const validStatuses = new Set(statusRows.map(r => normalizeStatus(r.value)));
+    const statusLabels = statusRows.map(r => r.value);
+    const defaultStatus = normalizeStatus(statusRows.find(r => r.isDefault)?.value ?? statusRows[0]?.value ?? 'new');
 
     // ── Load valid sources from org's dropdown config ──────────────────────
     const sourceRows = await prisma.dropdownConfig.findMany({
@@ -433,14 +437,14 @@ async function importLeadsFromExcel(req, res) {
       const rowNo = record.__row ?? i + 2;
 
       // ── Status validation against DB ──────────────────────────────────────
-      const rawStatus = String(record['Lead Status'] ?? '').trim().toLowerCase();
+      const rawStatus = normalizeStatus(String(record['Lead Status'] ?? ''));
       if (rawStatus && !validStatuses.has(rawStatus)) {
         excelImportErrors.push({
           row: rowNo,
           field: 'Lead Status',
           invalidValue: record['Lead Status'],
-          validOptions: [...validStatuses].join(', '),
-          error: `Invalid status "${record['Lead Status']}" in row ${rowNo}. Allowed values are: ${[...validStatuses].join(', ')}. Row skipped.`,
+          validOptions: statusLabels.join(', '),
+          error: `Invalid status "${record['Lead Status']}" in row ${rowNo}. Allowed values are: ${statusLabels.join(', ')}. Row skipped.`,
           isStatusError: true,
         });
         continue;
