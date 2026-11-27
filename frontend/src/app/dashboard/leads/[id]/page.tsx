@@ -1295,10 +1295,10 @@ export default function LeadDetailPage() {
   return (
     <div className="space-y-5 w-full">
       {/* ── Record action bar (top) ─────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link href="/dashboard/leads"
-          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-sm font-medium text-ink-2 bg-white dark:bg-white/[0.04] border border-line shadow-sm dark:shadow-none hover:text-blue-600 hover:border-blue-300 dark:hover:text-blue-400 dark:hover:border-blue-500/40 transition-colors">
-          <ArrowLeft size={15} /> Back to Leads
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href="/dashboard/leads" title="Back to Leads" aria-label="Back to Leads"
+          className="inline-flex items-center justify-center w-9 h-9 rounded-xl text-ink-2 bg-white dark:bg-white/[0.04] border border-line shadow-sm dark:shadow-none hover:text-blue-600 hover:border-blue-300 dark:hover:text-blue-400 dark:hover:border-blue-500/40 transition-colors">
+          <ArrowLeft size={15} />
         </Link>
         {renderRecordActions('top')}
       </div>

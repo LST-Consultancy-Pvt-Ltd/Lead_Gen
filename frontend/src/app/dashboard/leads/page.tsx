@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadsApi, usersApi, dropdownsApi, api } from '../../../lib/api';
-import { Badge, Avatar, ScoreRing, Spinner, EmptyState, Pagination } from '../../../components/ui';
+import { Badge, Avatar, /* ScoreRing, */ Spinner, EmptyState, Pagination } from '../../../components/ui';
 import { CreateLeadModal, LEAD_CREATE_DRAFT_ID } from '../../../components/crm/CreateLeadModal';
 import { loadDraft } from '../../../lib/formDraft';
 import { RoleGuard } from '../../../components/common/RoleGuard';
@@ -798,12 +798,14 @@ export default function LeadsPage() {
                       Assign To{sortIndicator('assignedTo')}
                     </th>
                   </RoleGuard>
+                  {/* Score column hidden from UI
                   <th
                     className="px-4 py-3.5 text-left text-[11px] font-semibold text-ink-3 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                     onClick={() => handleSort('leadScore')}
                   >
                     Score{sortIndicator('leadScore')}
                   </th>
+                  */}
                   <th
                     className="px-4 py-3.5 text-left text-[11px] font-semibold text-ink-3 uppercase tracking-[0.08em] whitespace-nowrap cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                     onClick={() => handleSort('status')}
@@ -906,9 +908,11 @@ export default function LeadsPage() {
                         )}
                       </td>
                     </RoleGuard>
+                    {/* Score column hidden from UI
                     <td className="px-4 py-3.5">
                       <ScoreRing score={l.leadScore} size={36} />
                     </td>
+                    */}
                     <td className="px-4 py-3.5">
                       {canEditLead(l) ? (
                         <Select

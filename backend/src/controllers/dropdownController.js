@@ -7,6 +7,7 @@ const prisma = require("../utils/prisma");
 const { success, error } = require("../utils/response");
 const logger = require("../utils/logger");
 const { ADMIN_ROLES } = require("../middleware/rbac");
+const { findDropdownUsage } = require("../utils/dropdownUsage");
 
 // Categories any authenticated user (not just admins) may add/edit/delete values for.
 const OPEN_CATEGORIES = ["location"];
@@ -435,6 +436,30 @@ async function deleteValue(req, res) {
     // Any role may add/edit `location` values, but deleting any value is admin-only
     if (!ADMIN_ROLES.includes(req.user.role)) {
       return error(res, 'Insufficient permissions', 403);
+    }
+
+    // Records still carrying this value would be left pointing at a picklist
+    // entry that no longer exists, so refuse and name them instead.
+    const usage = await findDropdownUsage(req.user.organizationId, existing.category, existing.value);
+    if (usage.inUse) {
+      logger.warn('deleteValue: value still in use', {
+        id: req.params.id, value: existing.value, category: existing.category,
+        entity: usage.entity, count: usage.count,
+      });
+      const noun = usage.count === 1 ? usage.entity : `${usage.entity}s`;
+      return error(
+        res,
+        `"${existing.value}" is still used by ${usage.count} ${noun}. Reassign ${usage.count === 1 ? 'it' : 'them'} before deleting this value.`,
+        409,
+        {
+          inUse: true,
+          value: existing.value,
+          category: existing.category,
+          entity: usage.entity,
+          count: usage.count,
+          records: usage.records,
+        },
+      );
     }
 
     await prisma.dropdownConfig.delete({ where: { id: req.params.id } });
